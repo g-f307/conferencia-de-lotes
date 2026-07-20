@@ -87,3 +87,27 @@ def test_performer_logs_only_username_not_password(caplog):
     log_text = caplog.text
     assert "rebecca.erp" in log_text
     assert "fake-password-for-test" not in log_text
+
+
+def test_performer_stops_when_datapool_returns_empty_item():
+    class EmptyQueue(FakeQueue):
+        def __init__(self):
+            super().__init__([])
+            self.called = False
+
+        def has_next(self):
+            return not self.called
+
+        def next(self):
+            self.called = True
+            return None
+
+    queue = EmptyQueue()
+    performer = LotePerformer(queue, {"L001"}, VaultClient(FakeVaultProvider()))
+
+    result = performer.run()
+
+    assert result.total == 0
+    assert queue.done == []
+    assert queue.business_errors == []
+    assert queue.system_errors == []

@@ -5,6 +5,7 @@ from src.config import Settings
 from src.logging_config import configure_logging
 from src.main import run, save_execution_report
 from src.models import ExecutionResult
+from src.vault_client import VaultClient
 
 
 class FakeAlertGateway:
@@ -13,6 +14,69 @@ class FakeAlertGateway:
 
     def send_error_alert(self, message: str) -> None:
         self.messages.append(message)
+
+
+class FakeMaestroClient:
+    def __init__(self, items):
+        self.items = list(items)
+        self.info_alerts = []
+        self.error_alerts = []
+        self.done = []
+        self.business_errors = []
+        self.system_errors = []
+        self.human_reviews = []
+        self.artifacts = []
+
+    def has_next(self):
+        return bool(self.items)
+
+    def next(self):
+        return self.items.pop(0)
+
+    def mark_done(self, item, result):
+        self.done.append((item, result))
+
+    def mark_business_error(self, item, error):
+        self.business_errors.append((item, error))
+
+    def mark_system_error(self, item, error):
+        self.system_errors.append((item, error))
+
+    def mark_human_review(self, item, review):
+        self.human_reviews.append((item, review))
+
+    def send_start_alert(self):
+        self.info_alerts.append("Iniciando auditoria de acessos")
+
+    def send_error_alert(self, message):
+        self.error_alerts.append(message)
+
+    def post_summary_artifact(self, summary, report_dir=None, artifact_name="resumo_execucao.json"):
+        report_dir.mkdir(parents=True, exist_ok=True)
+        path = report_dir / artifact_name
+        path.write_text(json.dumps(summary), encoding="utf-8")
+        self.artifacts.append((artifact_name, path, summary))
+        return path
+
+
+class FakeVaultProvider:
+    def get_credential(self, label):
+        return {"username": "marcelo.erp", "password": "fake-password"}
+
+
+def lote_item(**overrides):
+    item = {
+        "lote_id": "L001",
+        "produto": "Monitor",
+        "linha": "Linha A",
+        "turno": "Manha",
+        "status": "APROVADO",
+        "responsavel": "Marcelo",
+        "data": "2026-07-20",
+        "observacao": "",
+    }
+    item.update(overrides)
+    return item
 
 
 def settings_for(tmp_path, input_exists=True):
@@ -29,6 +93,32 @@ def test_fail_fast_quando_pasta_de_entrada_nao_existe(tmp_path):
     assert result.status == "FAILED"
     assert "inexistente" in result.message
     assert gateway.messages == [result.message]
+
+
+def test_fail_fast_maestro_habilitado_cria_gateway_para_alerta(monkeypatch, tmp_path):
+    settings = replace(
+        settings_for(tmp_path, input_exists=False),
+        maestro_enabled=True,
+        vault_enabled=True,
+        maestro_server="https://maestro.example",
+        maestro_login="login",
+        maestro_key="key",
+    )
+    created = []
+
+    class Client(FakeAlertGateway):
+        def __init__(self, received_settings):
+            super().__init__()
+            self.received_settings = received_settings
+            created.append(self)
+
+    monkeypatch.setattr("src.main.MaestroClient", Client)
+
+    result = run(settings=settings)
+
+    assert result.status == "FAILED"
+    assert created[0].received_settings == settings
+    assert created[0].messages == [result.message]
 
 
 def test_execucao_local_valida_estrutura(tmp_path):
@@ -69,3 +159,34 @@ def test_configuracao_invalida_falha_antes_do_processamento(tmp_path):
     result = run(settings=settings)
     assert result.status == "FAILED"
     assert "VAULT_ENABLED" in result.message
+
+
+def test_run_consumindo_datapool_e_publicando_resumo(tmp_path):
+    settings = settings_for(tmp_path)
+    client = FakeMaestroClient(
+        [
+            lote_item(),
+            lote_item(lote_id="L999"),
+            lote_item(status="pendente"),
+        ]
+    )
+    vault = VaultClient(FakeVaultProvider())
+
+    result = run(
+        settings=settings,
+        maestro_client=client,
+        vault_client=vault,
+        reference_lotes={"L001"},
+    )
+
+    assert result.status == "PARTIALLY_COMPLETED"
+    assert result.total_items == 3
+    assert result.processed_items == 1
+    assert result.failed_items == 1
+    assert result.ambiguous_items == 1
+    assert client.info_alerts == ["Iniciando auditoria de acessos"]
+    assert len(client.done) == 1
+    assert len(client.business_errors) == 1
+    assert len(client.human_reviews) == 1
+    assert client.artifacts[0][0] == "resumo_execucao.json"
+    assert client.artifacts[0][2]["total_items"] == 3

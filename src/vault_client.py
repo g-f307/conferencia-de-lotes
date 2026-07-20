@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Any, Protocol
 
 
 LOGGER = logging.getLogger(__name__)
@@ -22,6 +22,27 @@ class ErpCredential:
 
 class VaultCredentialError(RuntimeError):
     pass
+
+
+class BotCityVaultProvider:
+    """Provider real apoiado no SDK do BotCity Maestro."""
+
+    def __init__(self, sdk: Any) -> None:
+        self.sdk = sdk
+
+    def get_credential(self, label: str) -> dict[str, str]:
+        try:
+            username = self.sdk.get_credential(label=label, key="username")
+            password = self.sdk.get_credential(label=label, key="password")
+        except AttributeError as exc:
+            raise VaultCredentialError(
+                "SDK do Maestro nao expoe get_credential para acessar o Vault"
+            ) from exc
+
+        return {
+            "username": str(username or ""),
+            "password": str(password or ""),
+        }
 
 
 class VaultClient:

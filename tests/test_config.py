@@ -40,6 +40,14 @@ def test_settings_carrega_maestro_task_id(monkeypatch, tmp_path: Path):
     assert settings.maestro_task_id == "123"
 
 
+def test_settings_carrega_lotes_de_referencia(monkeypatch, tmp_path: Path):
+    monkeypatch.setenv("REFERENCE_LOTES", "L010, L011,,L012")
+
+    settings = Settings.from_env(tmp_path)
+
+    assert settings.reference_lotes == ("L010", "L011", "L012")
+
+
 def test_maestro_ativado_exige_chaves(monkeypatch, tmp_path: Path):
     monkeypatch.setenv("MAESTRO_ENABLED", "true")
     monkeypatch.delenv("MAESTRO_SERVER", raising=False)

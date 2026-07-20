@@ -1,0 +1,17 @@
+lote_id,produto,linha,turno,status,responsavel,data,observacao
+L001,Monitor,Linha A,Manha,OK,Ana Souza,2026-07-20,
+L002,Teclado,Linha B,Tarde,NOK,Bruno Lima,2026-07-20,Falha visual no acabamento
+L001,Mouse,Linha C,Noite,pendente,Camila Rocha,2026-07-20,Aguardando segunda conferencia
+L999,Notebook,Linha A,Manha,APROVADO,Diego Alves,2026-07-20,
+L002,Impressora,Linha B,Tarde,REPROVADO,Eduarda Martins,2026-07-20,
+L001,,Linha C,Noite,APROVADO,Felipe Costa,2026-07-20,
+L002,Scanner,Linha A,Manha,aprovado,Gabriela Nunes,2026-07-21,
+L001,Webcam,Linha B,Tarde,reprovado,Henrique Dias,2026-07-21,Produto com embalagem violada
+L003,Headset,Linha C,Noite,OK,Isabela Freitas,2026-07-21,
+L002,Cadeira,Linha A,Manha,EM ANALISE,Joao Pereira,2026-07-21,Conferencia manual solicitada
+L001,Mesa,Linha B,Tarde,A REVISAR,Karina Melo,2026-07-21,Divergencia no apontamento
+L002,Suporte,Linha C,Noite,cancelado,Lucas Rocha,2026-07-21,
+,Monitor,Linha A,Manha,APROVADO,Mariana Alves,2026-07-21,
+L001,Cabo HDMI,,Tarde,APROVADO,Natalia Costa,2026-07-21,
+L002,Fonte,Linha B,,NOK,Otavio Martins,2026-07-21,Falha eletrica detectada
+L001,Adaptador,Linha C,Noite,NOK,,2026-07-21,Falta etiqueta de qualidade

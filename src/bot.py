@@ -15,7 +15,7 @@ class QueueAdapter(Protocol):
     def has_next(self) -> bool:
         raise NotImplementedError
 
-    def next(self) -> dict[str, object]:
+    def next(self) -> dict[str, object] | None:
         raise NotImplementedError
 
     def mark_done(self, item: dict[str, object], result: dict[str, str]) -> None:
@@ -52,14 +52,19 @@ class LotePerformer:
         self.vault_client = vault_client
 
     def run(self) -> PerformerResult:
-        credential = self.vault_client.get_erp_credential()
-        self._log_erp_user(credential)
-
         result = PerformerResult()
+        credential_logged = False
         while self.queue.has_next():
-            item = self.queue.next()
-            result.total += 1
             try:
+                item = self.queue.next()
+                if item is None:
+                    LOGGER.info("DataPool retornou item vazio; encerrando consumo")
+                    break
+                result.total += 1
+                if not credential_logged:
+                    credential = self.vault_client.get_erp_credential()
+                    self._log_erp_user(credential)
+                    credential_logged = True
                 validated = validate_lote(item, self.reference_lotes)
                 self.queue.mark_done(item, validated)
                 result.success += 1
