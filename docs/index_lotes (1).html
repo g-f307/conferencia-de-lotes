@@ -1,0 +1,2249 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Git & GitHub — Bot de Conferência de Lotes | AX Academy</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Sora:wght@300;400;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0d1117;--bg2:#161b22;--bg3:#1c2128;
+  --surface:#21262d;--surface2:#2d333b;
+  --orange:#f0883e;--orange-l:#ffa657;--orange-xl:#ffd8a8;
+  --green:#3fb950;--green-l:#7ee787;
+  --blue:#58a6ff;--blue-l:#a5d6ff;
+  --purple:#bc8cff;--purple-l:#d8b4fe;
+  --red:#ff7b72;--red-l:#ffa198;
+  --yellow:#e3b341;--yellow-l:#f9c74f;
+  --cyan:#39d353;
+  --white:#e6edf3;--muted:#7d8590;
+  --border:rgba(240,246,252,0.1);--border2:rgba(240,246,252,0.18);
+  --radius:10px;--radius-lg:16px;
+  --mono:'JetBrains Mono',monospace;
+  --sans:'Sora',sans-serif;
+  --body:'Inter',sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--white);font-family:var(--body);font-size:16px;line-height:1.7;min-height:100vh}
+::-webkit-scrollbar{width:5px}
+::-webkit-scrollbar-track{background:var(--bg2)}
+::-webkit-scrollbar-thumb{background:var(--surface2);border-radius:3px}
+/* ── Sidebar ── */
+.sidebar{position:fixed;top:0;left:0;width:256px;height:100vh;background:var(--bg2);border-right:1px solid var(--border);overflow-y:auto;z-index:100;display:flex;flex-direction:column;padding-bottom:2rem}
+.sidebar-logo{padding:1.4rem 1.2rem 1rem;border-bottom:1px solid var(--border)}
+.logo-sub{font-size:.64rem;font-weight:600;color:var(--muted);letter-spacing:.14em;text-transform:uppercase}
+.logo-main{font-family:var(--sans);font-size:1.05rem;font-weight:800;color:var(--orange);margin-top:.2rem;display:flex;align-items:center;gap:.45rem}
+.sidebar-progress{padding:.7rem 1.2rem;border-bottom:1px solid var(--border)}
+.prog-label{font-size:.69rem;color:var(--muted);margin-bottom:.33rem}
+.prog-bar{height:3px;background:var(--surface2);border-radius:2px;overflow:hidden}
+.prog-fill{height:100%;background:linear-gradient(90deg,var(--orange),var(--orange-l));border-radius:2px;width:0%;transition:width .4s ease}
+.nav-sec{padding:.85rem 1.2rem .25rem;font-size:.61rem;font-weight:700;color:var(--muted);letter-spacing:.14em;text-transform:uppercase}
+.nav-item{display:flex;align-items:center;gap:.55rem;padding:.48rem 1.2rem;font-size:.79rem;color:var(--muted);text-decoration:none;border-left:2px solid transparent;transition:all .18s;cursor:pointer}
+.nav-item:hover{color:var(--white);background:var(--surface);border-left-color:var(--orange)}
+.nav-item.active{color:var(--orange);background:rgba(240,136,62,.08);border-left-color:var(--orange);font-weight:600}
+.nav-dot{width:5px;height:5px;border-radius:50%;background:currentColor;flex-shrink:0}
+/* ── Main ── */
+.main{margin-left:256px;min-height:100vh}
+/* ── Hero ── */
+.hero{background:var(--bg2);border-bottom:1px solid var(--border);padding:3rem 3rem 2.6rem;position:relative;overflow:hidden}
+.hero::before{content:'';position:absolute;top:-60px;right:-60px;width:360px;height:360px;background:radial-gradient(circle,rgba(240,136,62,.1) 0%,transparent 70%);pointer-events:none}
+.hero-badge{display:inline-flex;align-items:center;gap:.4rem;background:rgba(240,136,62,.1);border:1px solid rgba(240,136,62,.3);color:var(--orange-l);padding:.27rem .72rem;border-radius:100px;font-size:.69rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-bottom:.85rem}
+.hero h1{font-family:var(--sans);font-size:2.8rem;font-weight:800;line-height:1.1;margin-bottom:.85rem}
+.hero h1 em{font-style:normal;color:var(--orange)}
+.hero p{font-size:.98rem;color:var(--muted);max-width:620px;margin-bottom:1.7rem}
+.hero-stats{display:flex;gap:1.8rem;flex-wrap:wrap}
+.stat{display:flex;flex-direction:column}
+.stat-num{font-family:var(--sans);font-size:1.65rem;font-weight:800;color:var(--orange);line-height:1}
+.stat-label{font-size:.7rem;color:var(--muted);margin-top:.12rem}
+.toc-pills{display:flex;flex-wrap:wrap;gap:.45rem;margin-top:1.35rem}
+.toc-pill{display:flex;align-items:center;gap:.33rem;background:var(--surface);border:1px solid var(--border);color:var(--muted);padding:.32rem .7rem;border-radius:100px;font-size:.73rem;text-decoration:none;transition:all .18s}
+.toc-pill:hover{border-color:rgba(240,136,62,.5);color:var(--orange-l);background:rgba(240,136,62,.08)}
+.toc-pill-n{background:var(--orange);color:#000;width:17px;height:17px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.61rem;font-weight:800;flex-shrink:0}
+/* ── GitHub Flow trail ── */
+.flow-trail{display:flex;align-items:center;flex-wrap:wrap;gap:.3rem;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:.85rem 1.15rem;margin-bottom:1.5rem}
+.ft-item{display:flex;align-items:center;gap:.3rem;font-size:.78rem;font-weight:600;color:var(--muted);white-space:nowrap}
+.ft-item.done{color:var(--green-l)}
+.ft-item.active{color:var(--orange-l)}
+.ft-arrow{color:var(--border2);font-size:.75rem}
+/* ── Section ── */
+.section{padding:2.6rem 3rem;border-bottom:1px solid var(--border)}
+.section:last-child{border-bottom:none}
+.sec-header{display:flex;align-items:flex-start;gap:.9rem;margin-bottom:1.6rem}
+.sec-num{width:42px;height:42px;background:rgba(240,136,62,.1);border:1px solid rgba(240,136,62,.28);border-radius:9px;display:flex;align-items:center;justify-content:center;font-family:var(--sans);font-size:.78rem;font-weight:800;color:var(--orange);flex-shrink:0;margin-top:.08rem}
+.sec-tg h2{font-family:var(--sans);font-size:1.52rem;font-weight:800;line-height:1.2;margin-bottom:.2rem}
+.sec-tg p{font-size:.87rem;color:var(--muted)}
+/* ── Exercise number badge ── */
+.ex-label{display:inline-flex;align-items:center;gap:.4rem;background:rgba(240,136,62,.12);border:1px solid rgba(240,136,62,.3);color:var(--orange-l);padding:.22rem .7rem;border-radius:100px;font-size:.68rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:.7rem}
+/* ── Typography ── */
+h3{font-family:var(--sans);font-size:1.03rem;font-weight:700;color:var(--white);margin:1.6rem 0 .62rem}
+h3:first-child{margin-top:0}
+p{margin-bottom:.82rem;color:rgba(230,237,243,.83)}
+p:last-child{margin-bottom:0}
+strong{color:var(--white);font-weight:600}
+ul.bullet,ol.num{padding-left:1.35rem;margin-bottom:.85rem}
+ul.bullet li,ol.num li{margin-bottom:.3rem;font-size:.92rem;color:rgba(230,237,243,.83)}
+:not(pre)>code{background:var(--surface2);color:var(--orange-l);padding:.13em .38em;border-radius:4px;font-size:.85em;font-family:var(--mono)}
+/* ── Code blocks ── */
+.cb{background:#010409;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin:1.05rem 0}
+.cb-h{background:var(--bg3);padding:.48rem .88rem;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border)}
+.cb-lang{font-family:var(--mono);font-size:.67rem;font-weight:700;color:var(--orange);letter-spacing:.08em;text-transform:uppercase}
+.cb-copy{background:transparent;border:1px solid var(--border);color:var(--muted);padding:.17rem .52rem;border-radius:5px;font-size:.67rem;cursor:pointer;transition:all .18s;font-family:var(--body)}
+.cb-copy:hover{border-color:var(--orange);color:var(--orange)}
+.cb-copy.copied{border-color:var(--green);color:var(--green)}
+pre{padding:1.1rem;overflow-x:auto;font-family:var(--mono);font-size:.79rem;line-height:1.75}
+.tg{color:#79c0ff}.to{color:#ffa657}.tg2{color:#3fb950}.tp{color:#d2a8ff}
+.tr{color:#ff7b72}.tb{color:#58a6ff}.ty{color:#e3b341}.tmut{color:#484f58}
+.tw{color:#e6edf3}.tc{color:#a5d6ff}.tok{color:#7ee787}.tred{color:#ff7b72}
+/* ── Info boxes ── */
+.box{border-radius:var(--radius);padding:1rem 1.18rem;margin:1.05rem 0;display:flex;gap:.82rem}
+.bxi{font-size:1.12rem;flex-shrink:0;margin-top:.04rem}
+.bxc{flex:1}.bxc strong{display:block;font-size:.82rem;font-weight:700;margin-bottom:.26rem}
+.bxc p{font-size:.85rem;margin:0;color:rgba(230,237,243,.77)}
+.box.info{background:rgba(88,166,255,.06);border-left:3px solid var(--blue)}
+.box.tip{background:rgba(63,185,80,.06);border-left:3px solid var(--green)}
+.box.warn{background:rgba(240,136,62,.06);border-left:3px solid var(--orange)}
+.box.danger{background:rgba(255,123,114,.06);border-left:3px solid var(--red)}
+.box.concept{background:rgba(188,140,255,.06);border-left:3px solid var(--purple)}
+.box.objective{background:rgba(57,211,83,.06);border-left:3px solid var(--cyan)}
+.box.info .bxi{color:var(--blue)}.box.tip .bxi{color:var(--green)}
+.box.warn .bxi{color:var(--orange)}.box.danger .bxi{color:var(--red)}
+.box.concept .bxi{color:var(--purple)}.box.objective .bxi{color:var(--cyan)}
+/* ── Cards ── */
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(185px,1fr));gap:.88rem;margin:1.05rem 0}
+.card{background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:1.05rem;transition:border-color .18s}
+.card:hover{border-color:var(--border2)}
+.card-icon{font-size:1.45rem;margin-bottom:.52rem}
+.card h4{font-family:var(--sans);font-size:.86rem;font-weight:700;color:var(--white);margin-bottom:.28rem}
+.card p{font-size:.78rem;color:var(--muted);margin:0;line-height:1.5}
+/* ── Steps ── */
+.steps{margin:1.05rem 0}
+.step{display:flex;gap:.88rem;margin-bottom:1.45rem;position:relative}
+.step::before{content:'';position:absolute;left:17px;top:36px;bottom:-16px;width:1px;background:var(--border)}
+.step:last-child::before{display:none}
+.step-n{width:36px;height:36px;background:var(--surface);border:1px solid rgba(240,136,62,.32);border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--sans);font-size:.75rem;font-weight:800;color:var(--orange);flex-shrink:0}
+.step-b{flex:1;padding-top:.42rem}
+.step-b h4{font-family:var(--sans);font-size:.91rem;font-weight:700;color:var(--white);margin-bottom:.32rem}
+.step-b p{font-size:.84rem;color:var(--muted);margin:0 0 .42rem}
+/* ── Table ── */
+.tbl{width:100%;border-collapse:collapse;margin:1.05rem 0;font-size:.84rem}
+.tbl th{background:var(--surface);padding:.62rem .88rem;text-align:left;font-family:var(--sans);font-size:.74rem;font-weight:700;color:var(--orange);border-bottom:1px solid rgba(240,136,62,.28)}
+.tbl td{padding:.58rem .88rem;border-bottom:1px solid var(--border);color:rgba(230,237,243,.8);vertical-align:top}
+.tbl tr:hover td{background:var(--bg3)}
+.tbl td:first-child{font-family:var(--mono);font-size:.77rem;color:var(--blue-l);white-space:nowrap}
+/* ── Badge ── */
+.badge{display:inline-flex;align-items:center;padding:.15rem .48rem;border-radius:100px;font-size:.67rem;font-weight:700;letter-spacing:.05em}
+.badge-orange{background:rgba(240,136,62,.14);color:var(--orange-l)}
+.badge-green{background:rgba(63,185,80,.14);color:var(--green-l)}
+.badge-blue{background:rgba(88,166,255,.14);color:var(--blue-l)}
+.badge-red{background:rgba(255,123,114,.14);color:var(--red-l)}
+.badge-yellow{background:rgba(227,179,65,.14);color:var(--yellow-l)}
+/* ── Exercise block ── */
+.exercise{background:linear-gradient(135deg,var(--bg3),var(--bg2));border:1px solid var(--border);border-top:3px solid var(--orange);border-radius:var(--radius-lg);padding:1.65rem;margin:1.8rem 0}
+.ex-hdr{display:flex;align-items:center;gap:.7rem;margin-bottom:1.1rem;flex-wrap:wrap}
+.ex-hdr h3{margin:0;font-size:.96rem}
+.ex-badge{background:rgba(240,136,62,.13);border:1px solid rgba(240,136,62,.28);color:var(--orange-l);padding:.18rem .62rem;border-radius:100px;font-size:.65rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase}
+/* ── Two-col ── */
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:1.35rem;margin:1.05rem 0}
+@media(max-width:900px){.two-col{grid-template-columns:1fr}.sidebar{transform:translateX(-100%)}.main{margin-left:0}}
+/* ── Role card ── */
+.role-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:.8rem;margin:1rem 0}
+.role-card{background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:1rem}
+.role-tag{display:inline-flex;align-items:center;padding:.18rem .55rem;border-radius:6px;font-size:.72rem;font-weight:700;margin-bottom:.45rem}
+.rt-lead{background:rgba(240,136,62,.15);color:var(--orange-l)}
+.rt-dev{background:rgba(88,166,255,.15);color:var(--blue-l)}
+.rt-qa{background:rgba(63,185,80,.15);color:var(--green-l)}
+.rt-rev{background:rgba(188,140,255,.15);color:var(--purple-l)}
+.rt-int{background:rgba(227,179,65,.15);color:var(--yellow-l)}
+.rt-doc{background:rgba(255,123,114,.15);color:var(--red-l)}
+.role-card h4{font-family:var(--sans);font-size:.85rem;font-weight:700;color:var(--white);margin-bottom:.3rem}
+.role-card p{font-size:.78rem;color:var(--muted);margin:0;line-height:1.5}
+/* ── Score table ── */
+.score-tbl{width:100%;border-collapse:collapse;margin:1.05rem 0;font-size:.88rem}
+.score-tbl th{background:var(--surface);padding:.65rem .9rem;text-align:left;font-family:var(--sans);font-size:.76rem;font-weight:700;color:var(--orange);border-bottom:1px solid rgba(240,136,62,.28)}
+.score-tbl td{padding:.62rem .9rem;border-bottom:1px solid var(--border);color:rgba(230,237,243,.85);vertical-align:top}
+.score-tbl tr:last-child td{background:rgba(240,136,62,.06);font-weight:700;color:var(--orange-l);border-top:2px solid rgba(240,136,62,.3)}
+.score-tbl td:last-child{text-align:right;font-family:var(--sans);font-weight:700;color:var(--green-l)}
+/* ── Command group ── */
+.cmd-group{background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:1.1rem 1.25rem;margin:.8rem 0}
+.cmd-group h4{font-family:var(--sans);font-size:.82rem;font-weight:700;color:var(--muted);margin-bottom:.6rem;text-transform:uppercase;letter-spacing:.08em}
+.cmd-list{display:flex;flex-direction:column;gap:.3rem}
+.cmd-item{display:flex;align-items:baseline;gap:.7rem}
+.cmd-code{font-family:var(--mono);font-size:.79rem;color:var(--green-l);white-space:nowrap}
+.cmd-desc{font-size:.8rem;color:var(--muted)}
+/* ── Checklist ── */
+.checklist{background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:1.1rem 1.25rem;margin:1rem 0}
+.checklist h4{font-family:var(--sans);font-size:.85rem;font-weight:700;color:var(--white);margin-bottom:.65rem}
+.cl-item{display:flex;align-items:flex-start;gap:.6rem;margin-bottom:.4rem;font-size:.85rem;color:rgba(230,237,243,.8)}
+.cl-box{width:16px;height:16px;border:1.5px solid var(--border2);border-radius:3px;flex-shrink:0;margin-top:.15rem}
+/* ── Kanban ── */
+.kanban{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.75rem;margin:1.1rem 0}
+.k-col{background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+.k-header{padding:.55rem .8rem;font-family:var(--sans);font-size:.76rem;font-weight:700;text-align:center}
+.k-backlog .k-header{background:rgba(125,133,144,.15);color:var(--muted)}
+.k-todo .k-header{background:rgba(88,166,255,.12);color:var(--blue-l)}
+.k-progress .k-header{background:rgba(240,136,62,.12);color:var(--orange-l)}
+.k-review .k-header{background:rgba(188,140,255,.12);color:var(--purple-l)}
+.k-done .k-header{background:rgba(63,185,80,.12);color:var(--green-l)}
+.k-body{padding:.55rem}
+.k-card{background:var(--surface);border-radius:6px;padding:.45rem .6rem;margin-bottom:.4rem;font-size:.76rem;color:rgba(230,237,243,.8);border-left:2px solid var(--border2)}
+.k-card.feature{border-left-color:var(--blue)}
+.k-card.bug{border-left-color:var(--red)}
+.k-card.docs{border-left-color:var(--green)}
+/* ── SVG wrap ── */
+.svg-wrap{background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:1.4rem;margin:1.2rem 0;overflow-x:auto}
+.svg-wrap svg{display:block;max-width:100%;height:auto}
+.svg-caption{text-align:center;font-size:.74rem;color:var(--muted);margin-top:.7rem;font-style:italic}
+/* ── Footer ── */
+.footer{padding:1.7rem 3rem;background:var(--bg2);border-top:1px solid var(--border);text-align:center;font-size:.77rem;color:var(--muted)}
+@keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+.section{animation:fadeUp .42s ease both}
+</style>
+</head>
+<body>
+
+<!-- ══════════ SIDEBAR ══════════ -->
+<nav class="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-sub">AX Academy · Hyperautomation</div>
+    <div class="logo-main"><span>🤖</span> Bot Conferência de Lotes</div>
+  </div>
+  <div class="sidebar-progress">
+    <div class="prog-label" id="progLabel">Progresso: 0%</div>
+    <div class="prog-bar"><div class="prog-fill" id="progFill"></div></div>
+  </div>
+  <div class="nav-sec">Fundamentos</div>
+  <a class="nav-item" href="#s01"><span class="nav-dot"></span>GitHub Flow</a>
+  <a class="nav-item" href="#s02"><span class="nav-dot"></span>Comandos Essenciais</a>
+  <div class="nav-sec">Exercícios Práticos</div>
+  <a class="nav-item" href="#s03"><span class="nav-dot"></span>Ex 1 — Issues</a>
+  <a class="nav-item" href="#s04"><span class="nav-dot"></span>Ex 2 — Branches</a>
+  <a class="nav-item" href="#s05"><span class="nav-dot"></span>Ex 3 — Pull Requests</a>
+  <a class="nav-item" href="#s06"><span class="nav-dot"></span>Ex 4 — Code Review</a>
+  <a class="nav-item" href="#s07"><span class="nav-dot"></span>Ex 5 — Solicitando Ajustes</a>
+  <a class="nav-item" href="#s08"><span class="nav-dot"></span>Ex 6 — Merge</a>
+  <a class="nav-item" href="#s09"><span class="nav-dot"></span>Ex 7 — Proteção da main</a>
+  <a class="nav-item" href="#s10"><span class="nav-dot"></span>Ex 8 — Conflitos</a>
+  <a class="nav-item" href="#s11"><span class="nav-dot"></span>Ex 9 — Branch Desatualizada</a>
+  <a class="nav-item" href="#s12"><span class="nav-dot"></span>Ex 10 — Fork</a>
+  <a class="nav-item" href="#s13"><span class="nav-dot"></span>Ex 11 — PR no VS Code</a>
+  <a class="nav-item" href="#s14"><span class="nav-dot"></span>Ex 12 — Checklist de PR</a>
+  <a class="nav-item" href="#s15"><span class="nav-dot"></span>Ex 13 — Mensagens de Commit</a>
+  <a class="nav-item" href="#s16"><span class="nav-dot"></span>Ex 14 — Issues com Labels</a>
+  <a class="nav-item" href="#s17"><span class="nav-dot"></span>Ex 15 — GitHub Projects</a>
+  <div class="nav-sec">Dinâmicas</div>
+  <a class="nav-item" href="#s18"><span class="nav-dot"></span>Simulação: Equipe Real</a>
+  <div class="nav-sec">Projeto Final</div>
+  <a class="nav-item" href="#s19"><span class="nav-dot"></span>Bot Conferência de Lotes</a>
+  <a class="nav-item" href="#s20"><span class="nav-dot"></span>Avaliação</a>
+</nav>
+
+<!-- ══════════ MAIN ══════════ -->
+<main class="main">
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-badge">🤖 Git &amp; GitHub · Bot Conferência de Lotes</div>
+  <h1>GitHub Flow<br><em>Construindo o Bot</em></h1>
+  <p>15 exercícios progressivos aplicados ao bot de conferência de lotes da LG Electronics. Do primeiro <code>git clone</code> ao merge em produção — cada exercício avança a construção real do projeto documentado no PDD.</p>
+  <div class="hero-stats">
+    <div class="stat"><span class="stat-num">15</span><span class="stat-label">Exercícios</span></div>
+    <div class="stat"><span class="stat-num">1</span><span class="stat-label">Dinâmica de equipe</span></div>
+    <div class="stat"><span class="stat-num">1</span><span class="stat-label">Projeto final</span></div>
+    <div class="stat"><span class="stat-num">10</span><span class="stat-label">Pontos na avaliação</span></div>
+  </div>
+  <div class="toc-pills">
+    <a class="toc-pill" href="#s01"><span class="toc-pill-n">↗</span>GitHub Flow</a>
+    <a class="toc-pill" href="#s02"><span class="toc-pill-n">⌨</span>Comandos</a>
+    <a class="toc-pill" href="#s03"><span class="toc-pill-n">1</span>Issues</a>
+    <a class="toc-pill" href="#s04"><span class="toc-pill-n">2</span>Branches</a>
+    <a class="toc-pill" href="#s05"><span class="toc-pill-n">3</span>Pull Requests</a>
+    <a class="toc-pill" href="#s06"><span class="toc-pill-n">4</span>Review</a>
+    <a class="toc-pill" href="#s07"><span class="toc-pill-n">5</span>Ajustes</a>
+    <a class="toc-pill" href="#s08"><span class="toc-pill-n">6</span>Merge</a>
+    <a class="toc-pill" href="#s09"><span class="toc-pill-n">7</span>Proteção</a>
+    <a class="toc-pill" href="#s10"><span class="toc-pill-n">8</span>Conflitos</a>
+    <a class="toc-pill" href="#s11"><span class="toc-pill-n">9</span>Atualizar</a>
+    <a class="toc-pill" href="#s12"><span class="toc-pill-n">10</span>Fork</a>
+    <a class="toc-pill" href="#s13"><span class="toc-pill-n">11</span>VS Code</a>
+    <a class="toc-pill" href="#s14"><span class="toc-pill-n">12</span>Checklist</a>
+    <a class="toc-pill" href="#s15"><span class="toc-pill-n">13</span>Commits</a>
+    <a class="toc-pill" href="#s16"><span class="toc-pill-n">14</span>Labels</a>
+    <a class="toc-pill" href="#s17"><span class="toc-pill-n">15</span>Kanban</a>
+    <a class="toc-pill" href="#s18"><span class="toc-pill-n">★</span>Dinâmica</a>
+    <a class="toc-pill" href="#s19"><span class="toc-pill-n">🏆</span>Projeto</a>
+    <a class="toc-pill" href="#s20"><span class="toc-pill-n">📊</span>Avaliação</a>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     S01 — GITHUB FLOW
+══════════════════════════════════════════ -->
+<section class="section" id="s01">
+  <div class="sec-header">
+    <div class="sec-num">↗</div>
+    <div class="sec-tg"><h2>O GitHub Flow</h2><p>O primeiro fluxo profissional — simples e poderoso</p></div>
+  </div>
+
+  <p>O <strong>GitHub Flow</strong> é o fluxo de trabalho recomendado para iniciantes e para projetos com entrega contínua. É simples o suficiente para aprender em uma aula e profissional o suficiente para usar em empresas reais.</p>
+
+  <!-- SVG: GitHub Flow circular -->
+  <div class="svg-wrap">
+    <svg viewBox="0 0 760 300" xmlns="http://www.w3.org/2000/svg" font-family="Inter,sans-serif">
+      <defs>
+        <marker id="af" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0,8 3,0 6" fill="#f0883e"/></marker>
+      </defs>
+      <!-- Central label -->
+      <circle cx="380" cy="150" r="50" fill="rgba(240,136,62,0.08)" stroke="rgba(240,136,62,0.3)" stroke-width="1.5"/>
+      <text x="380" y="145" text-anchor="middle" font-size="13" font-weight="800" fill="#ffa657" font-family="Sora,sans-serif">GitHub</text>
+      <text x="380" y="162" text-anchor="middle" font-size="13" font-weight="800" fill="#ffa657" font-family="Sora,sans-serif">Flow</text>
+
+      <!-- Step 1 - Issue -->
+      <rect x="20" y="15" width="130" height="54" rx="9" fill="#21262d" stroke="#3fb950" stroke-width="1.8"/>
+      <text x="85" y="37" text-anchor="middle" font-size="11" font-weight="700" fill="#7ee787" font-family="Sora,sans-serif">1. Issue</text>
+      <text x="85" y="55" text-anchor="middle" font-size="9" fill="#7d8590">criar a tarefa</text>
+      <line x1="150" y1="42" x2="328" y2="118" stroke="#f0883e" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#af)"/>
+
+      <!-- Step 2 - Branch -->
+      <rect x="20" y="120" width="130" height="54" rx="9" fill="#21262d" stroke="#58a6ff" stroke-width="1.8"/>
+      <text x="85" y="142" text-anchor="middle" font-size="11" font-weight="700" fill="#a5d6ff" font-family="Sora,sans-serif">2. Branch</text>
+      <text x="85" y="160" text-anchor="middle" font-size="9" fill="#7d8590">feature/nome</text>
+      <line x1="150" y1="147" x2="328" y2="147" stroke="#f0883e" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#af)"/>
+
+      <!-- Step 3 - Commits -->
+      <rect x="20" y="225" width="130" height="54" rx="9" fill="#21262d" stroke="#f0883e" stroke-width="1.8"/>
+      <text x="85" y="247" text-anchor="middle" font-size="11" font-weight="700" fill="#ffa657" font-family="Sora,sans-serif">3. Commits</text>
+      <text x="85" y="265" text-anchor="middle" font-size="9" fill="#7d8590">pequenos e claros</text>
+      <line x1="150" y1="252" x2="328" y2="178" stroke="#f0883e" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#af)"/>
+
+      <!-- Step 4 - Push -->
+      <rect x="610" y="15" width="130" height="54" rx="9" fill="#21262d" stroke="#ffa657" stroke-width="1.8"/>
+      <text x="675" y="37" text-anchor="middle" font-size="11" font-weight="700" fill="#ffa657" font-family="Sora,sans-serif">4. Push</text>
+      <text x="675" y="55" text-anchor="middle" font-size="9" fill="#7d8590">branch no GitHub</text>
+      <line x1="432" y1="118" x2="608" y2="42" stroke="#f0883e" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#af)"/>
+
+      <!-- Step 5 - Pull Request -->
+      <rect x="610" y="120" width="130" height="54" rx="9" fill="#21262d" stroke="#d2a8ff" stroke-width="1.8"/>
+      <text x="675" y="140" text-anchor="middle" font-size="11" font-weight="700" fill="#d8b4fe" font-family="Sora,sans-serif">5. Pull Request</text>
+      <text x="675" y="158" text-anchor="middle" font-size="9" fill="#7d8590">pedir revisão</text>
+      <line x1="432" y1="147" x2="608" y2="147" stroke="#f0883e" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#af)"/>
+
+      <!-- Step 6 - Review + Merge -->
+      <rect x="545" y="225" width="205" height="54" rx="9" fill="#21262d" stroke="#7ee787" stroke-width="1.8"/>
+      <text x="647" y="247" text-anchor="middle" font-size="11" font-weight="700" fill="#7ee787" font-family="Sora,sans-serif">6. Review → Merge</text>
+      <text x="647" y="265" text-anchor="middle" font-size="9" fill="#7d8590">aprovar e integrar</text>
+      <line x1="432" y1="178" x2="543" y2="252" stroke="#f0883e" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#af)"/>
+
+      <!-- Extra: delete branch -->
+      <rect x="280" y="258" width="196" height="34" rx="7" fill="rgba(125,133,144,.1)" stroke="rgba(125,133,144,.2)" stroke-width="1"/>
+      <text x="378" y="278" text-anchor="middle" font-size="9.5" fill="#7d8590">7. Deletar branch — ambiente limpo</text>
+    </svg>
+    <p class="svg-caption">O GitHub Flow em 7 passos — cada tarefa começa com uma Issue e termina com um Merge</p>
+  </div>
+
+  <h3>Por que começar pelo GitHub Flow e não pelo Git Flow?</h3>
+  <div class="two-col">
+    <div class="box tip" style="margin-top:0">
+      <span class="bxi">✅</span>
+      <div class="bxc">
+        <strong>GitHub Flow — para iniciantes e CD</strong>
+        <p>Apenas <code>main</code> + branches de feature. Simples, fácil de ensinar, usado amplamente em startups e open source. Uma regra: a main é sempre deployável.</p>
+      </div>
+    </div>
+    <div class="box warn" style="margin-top:0">
+      <span class="bxi">⚠️</span>
+      <div class="bxc">
+        <strong>Git Flow — para contextos avançados</strong>
+        <p>Branches <code>develop</code>, <code>release</code>, <code>hotfix</code>... Mais estruturado, porém mais complexo. Ensinar depois que o aluno já domina o GitHub Flow.</p>
+      </div>
+    </div>
+  </div>
+
+  <h3>A regra de ouro do GitHub Flow</h3>
+  <div class="box concept">
+    <span class="bxi">🧠</span>
+    <div class="bxc">
+      <strong>Tudo que está na main pode ser deployado a qualquer momento</strong>
+      <p>Nenhum código vai direto para a main. Toda mudança vem via branch + Pull Request + revisão. Isso garante que a main sempre esteja estável e pronta para produção.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════
+     S02 — COMANDOS ESSENCIAIS
+══════════════════════════════════════════ -->
+<section class="section" id="s02">
+  <div class="sec-header">
+    <div class="sec-num">⌨</div>
+    <div class="sec-tg"><h2>Comandos Essenciais</h2><p>O vocabulário mínimo para participar do GitHub Flow</p></div>
+  </div>
+
+  <div class="two-col">
+    <div>
+      <div class="cmd-group">
+        <h4>🔰 Fase 1 — Fundamentos</h4>
+        <div class="cmd-list">
+          <div class="cmd-item"><code class="cmd-code">git clone URL</code><span class="cmd-desc">copiar repositório do GitHub</span></div>
+          <div class="cmd-item"><code class="cmd-code">git status</code><span class="cmd-desc">ver estado atual dos arquivos</span></div>
+          <div class="cmd-item"><code class="cmd-code">git add .</code><span class="cmd-desc">preparar todos os arquivos</span></div>
+          <div class="cmd-item"><code class="cmd-code">git commit -m "msg"</code><span class="cmd-desc">salvar com mensagem</span></div>
+          <div class="cmd-item"><code class="cmd-code">git push -u origin branch</code><span class="cmd-desc">enviar branch ao GitHub</span></div>
+          <div class="cmd-item"><code class="cmd-code">git pull</code><span class="cmd-desc">baixar atualizações</span></div>
+          <div class="cmd-item"><code class="cmd-code">git log --oneline</code><span class="cmd-desc">histórico compacto</span></div>
+        </div>
+      </div>
+      <div class="cmd-group">
+        <h4>🌿 Fase 2 — Branches</h4>
+        <div class="cmd-list">
+          <div class="cmd-item"><code class="cmd-code">git switch -c feature/nome</code><span class="cmd-desc">criar e entrar na branch</span></div>
+          <div class="cmd-item"><code class="cmd-code">git switch main</code><span class="cmd-desc">voltar para a main</span></div>
+          <div class="cmd-item"><code class="cmd-code">git branch</code><span class="cmd-desc">listar branches locais</span></div>
+          <div class="cmd-item"><code class="cmd-code">git branch -a</code><span class="cmd-desc">listar todas (locais + remotas)</span></div>
+          <div class="cmd-item"><code class="cmd-code">git merge main</code><span class="cmd-desc">trazer atualizações da main</span></div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="cmd-group">
+        <h4>🔍 Fase 3 — Inspeção</h4>
+        <div class="cmd-list">
+          <div class="cmd-item"><code class="cmd-code">git fetch</code><span class="cmd-desc">buscar sem integrar</span></div>
+          <div class="cmd-item"><code class="cmd-code">git diff</code><span class="cmd-desc">ver o que mudou</span></div>
+          <div class="cmd-item"><code class="cmd-code">git diff --staged</code><span class="cmd-desc">ver o que está staged</span></div>
+          <div class="cmd-item"><code class="cmd-code">git restore arquivo</code><span class="cmd-desc">descartar mudanças locais</span></div>
+          <div class="cmd-item"><code class="cmd-code">git restore --staged arq</code><span class="cmd-desc">remover do staging</span></div>
+        </div>
+      </div>
+      <div class="cmd-group">
+        <h4>🚨 Fase 4 — Situações especiais</h4>
+        <div class="cmd-list">
+          <div class="cmd-item"><code class="cmd-code">git stash</code><span class="cmd-desc">guardar trabalho temporário</span></div>
+          <div class="cmd-item"><code class="cmd-code">git stash pop</code><span class="cmd-desc">restaurar trabalho guardado</span></div>
+          <div class="cmd-item"><code class="cmd-code">git revert HEAD</code><span class="cmd-desc">desfazer último commit (seguro)</span></div>
+          <div class="cmd-item"><code class="cmd-code">git reflog</code><span class="cmd-desc">histórico completo de movimentos</span></div>
+          <div class="cmd-item"><code class="cmd-code">git log --oneline --graph</code><span class="cmd-desc">grafo visual de branches</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="box tip">
+    <span class="bxi">📌</span>
+    <div class="bxc">
+      <strong>Execute esses comandos antes de qualquer coisa</strong>
+      <p>Configure o Git uma vez por máquina: <code>git config --global user.name "Seu Nome"</code> e <code>git config --global user.email "email@exemplo.com"</code>. Sem isso, seus commits não terão identidade.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════
+     S03 — EXERCÍCIO 1: ISSUES
+══════════════════════════════════════════ -->
+<section class="section" id="s03">
+  <div class="sec-header">
+    <div class="sec-num">01</div>
+    <div class="sec-tg"><h2>Exercício 1 — Trabalhando com Issues</h2><p>Toda alteração começa com uma justificativa</p></div>
+  </div>
+
+  <div class="flow-trail">
+    <span class="ft-item active">📋 Issue</span><span class="ft-arrow">›</span>
+    <span class="ft-item">🌿 Branch</span><span class="ft-arrow">›</span>
+    <span class="ft-item">💾 Commits</span><span class="ft-arrow">›</span>
+    <span class="ft-item">⬆ Push</span><span class="ft-arrow">›</span>
+    <span class="ft-item">🔀 PR</span><span class="ft-arrow">›</span>
+    <span class="ft-item">👁 Review</span><span class="ft-arrow">›</span>
+    <span class="ft-item">✅ Merge</span><span class="ft-arrow">›</span>
+    <span class="ft-item">🗑 Deletar</span>
+  </div>
+
+  <div class="box objective">
+    <span class="bxi">🎯</span>
+    <div class="bxc">
+      <strong>Objetivo</strong>
+      <p>Entender que uma branch nunca nasce "do nada". Cada branch está ligada a uma tarefa, melhoria ou correção rastreada por uma Issue.</p>
+    </div>
+  </div>
+
+  <div class="exercise">
+    <div class="ex-hdr">
+      <span class="ex-badge">Exercício 1</span>
+      <h3>🧪 Criando o repositório e as Issues da sprint</h3>
+    </div>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-n">1</div>
+        <div class="step-b">
+          <h4>Criar o repositório no GitHub</h4>
+          <p>Um membro cria o repositório <strong>conferencia-lotes-qualidade</strong> no GitHub (<strong>privado</strong>) e convida os colegas como collaborators em Settings → Collaborators. Repositório privado é obrigatório — propriedade intelectual da LG (Convênio 005/2025).</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-n">2</div>
+        <div class="step-b">
+          <h4>Criar as Issues iniciais</h4>
+          <p>Vá em Issues → New Issue e crie as 5 tarefas abaixo. Cada aluno deve escolher uma:</p>
+          <div class="cb">
+            <div class="cb-h"><span class="cb-lang">issues a criar no github</span><button class="cb-copy" onclick="cc(this)">Copiar</button></div>
+            <pre><span class="tmut">Issue #1:  "Implementar RN01–RN02: estrutura e campos obrigatórios"  → label: feature</span>
+<span class="tmut">Issue #2:  "Implementar RN03: verificar lote na base de referência"  → label: feature</span>
+<span class="tmut">Issue #3:  "Implementar RN04–RN05: status e normalização OK/NOK"     → label: feature</span>
+<span class="tmut">Issue #4:  "Implementar RN07: observação obrigatória em reprovado"   → label: feature</span>
+<span class="tmut">Issue #5:  "Gerar relatório de divergências em .xlsx"                → label: feature</span></pre>
+          </div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-n">3</div>
+        <div class="step-b">
+          <h4>Configurar cada Issue</h4>
+          <p>Para cada Issue, preencha:</p>
+          <ul class="bullet">
+            <li><strong>Title:</strong> título claro e direto</li>
+            <li><strong>Description:</strong> o que deve ser feito e critérios de aceite</li>
+            <li><strong>Assignees:</strong> quem vai resolver</li>
+            <li><strong>Labels:</strong> <code>feature</code>, <code>style</code>, etc.</li>
+            <li><strong>Milestone:</strong> "Sprint 1" (criar antes se não existir)</li>
+          </ul>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-n">4</div>
+        <div class="step-b">
+          <h4>Verificar na aba Issues</h4>
+          <p>Todos os membros devem conseguir ver as 5 Issues abertas na aba Issues do repositório. O painel de Issues é o quadro de trabalho da equipe.</p>
+        </div>
+      </div>
+    </div>
+
+    <h3>Template de Issue bem escrita</h3>
+    <div class="cb">
+      <div class="cb-h"><span class="cb-lang">markdown — exemplo de Issue #1</span><button class="cb-copy" onclick="cc(this)">Copiar</button></div>
+      <pre><span class="tmut">## O que precisa ser feito</span>
+<span class="tw">Implementar a validação de estrutura (RN01) e campos obrigatórios (RN02) conforme PDD v0.2 seção 12.</span>
+
+<span class="tmut">## Critérios de aceite</span>
+<span class="tw">- [ ] Função valida_estrutura() retorna erro se faltar alguma das 8 colunas</span>
+<span class="tw">- [ ] Função valida_campos_obrigatorios() detecta campos vazios em lote_id, produto, linha, turno, status, responsavel, data</span>
+<span class="tw">- [ ] Testes unitários com pytest cobrindo ao menos 3 casos de campo vazio</span>
+<span class="tw">- [ ] Código em src/validacao.py, referenciando RN01 e RN02 nos docstrings</span>
+<span class="tw">- [ ] README atualizado com instruções de execução</span>
+
+<span class="tmut">## Referências visuais</span>
+<span class="tw">(Inserir print ou link de referência se houver)</span></pre>
+    </div>
+
+    <div class="box info">
+      <span class="bxi">💡</span>
+      <div class="bxc">
+        <strong>Aprendizado do exercício</strong>
+        <p>Não se cria uma branch "do nada". Cada branch nasce de uma Issue que justifica e documenta a mudança. Isso rastreia o que foi feito, por quem e por quê — essencial em equipes.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════
+     S04 — EXERCÍCIO 2: BRANCHES
+══════════════════════════════════════════ -->
+<section class="section" id="s04">
+  <div class="sec-header">
+    <div class="sec-num">02</div>
+    <div class="sec-tg"><h2>Exercício 2 — Criando Branch a partir de uma Issue</h2><p>Nomenclatura profissional e o primeiro fluxo local</p></div>
+  </div>
+
+  <div class="flow-trail">
+    <span class="ft-item done">📋 Issue ✓</span><span class="ft-arrow">›</span>
+    <span class="ft-item active">🌿 Branch</span><span class="ft-arrow">›</span>
+    <span class="ft-item">💾 Commits</span><span class="ft-arrow">›</span>
+    <span class="ft-item">⬆ Push</span><span class="ft-arrow">›</span>
+    <span class="ft-item">🔀 PR</span><span class="ft-arrow">›</span>
+    <span class="ft-item">👁 Review</span><span class="ft-arrow">›</span>
+    <span class="ft-item">✅ Merge</span><span class="ft-arrow">›</span>
+    <span class="ft-item">🗑 Deletar</span>
+  </div>
+
+  <div class="box objective">
+    <span class="bxi">🎯</span>
+    <div class="bxc">
+      <strong>Objetivo</strong>
+      <p>Aprender nomenclatura de branches e executar o primeiro fluxo completo: clonar → criar branch → editar → commitar → enviar.</p>
+    </div>
+  </div>
+
+  <h3>Padrão de nomenclatura</h3>
+  <table class="tbl">
+    <thead><tr><th>Prefixo</th><th>Quando usar</th><th>Exemplo</th></tr></thead>
+    <tbody>
+      <tr><td>feature/</td><td>Nova funcionalidade</td><td><code>feature/cabecalho</code></td></tr>
+      <tr><td>fix/</td><td>Correção de bug</td><td><code>fix/link-menu-quebrado</code></td></tr>
+      <tr><td>style/</td><td>Ajuste visual / CSS</td><td><code>style/melhorias-css</code></td></tr>
+      <tr><td>docs/</td><td>Documentação</td><td><code>docs/atualiza-readme</code></td></tr>
+      <tr><td>refactor/</td><td>Refatoração interna</td><td><code>refactor/organiza-css</code></td></tr>
+    </tbody>
+  </table>
+
+  <div class="exercise">
+    <div class="ex-hdr">
+      <span class="ex-badge">Exercício 2</span>
+      <h3>🧪 Fluxo completo: clonar → branch → commit → push</h3>
+    </div>
+
+    <div class="two-col">
+      <div>
+        <h3>Via Terminal</h3>
+        <div class="cb">
+          <div class="cb-h"><span class="cb-lang">bash — cada aluno executa</span><button class="cb-copy" onclick="cc(this)">Copiar</button></div>
+          <pre><span class="tmut"># 1. Clonar o repositório</span>
+<span class="tok">git clone https://github.com/EQUIPE/conferencia-lotes-qualidade.git</span>
+<span class="tok">cd conferencia-lotes-qualidade</span>
+
+<span class="tmut"># 2. Verificar que está na main atualizada</span>
+<span class="tok">git status</span>
+<span class="tok">git pull</span>
+
+<span class="tmut"># 3. Criar a branch vinculada à sua Issue</span>
+<span class="tmut"># (substitua pelo número e nome da SUA issue)</span>
+<span class="tok">git switch -c feature/cabecalho</span>
+<span class="tmut"># ou: git switch -c feature/secao-sobre</span>
+<span class="tmut"># ou: git switch -c style/melhorias-css</span>
+
+<span class="tmut"># 4. Criar o arquivo HTML da sua seção</span>
+<span class="tok">touch index.html</span>       <span class="tmut"># aluno do cabeçalho</span>
+<span class="tok">touch sobre.html</span>       <span class="tmut"># aluno da seção sobre</span>
+<span class="tok">touch style.css</span>        <span class="tmut"># aluno do CSS</span>
+
+<span class="tmut"># 5. Editar o arquivo com seu conteúdo</span>
+<span class="tok">code index.html</span>        <span class="tmut"># abrir no VS Code</span>
+
+<span class="tmut"># 6. Verificar, adicionar e commitar</span>
+<span class="tok">git status</span>
+<span class="tok">git add .</span>
+<span class="tok">git commit -m "feat(validacao): implementar RN01 e RN02 — estrutura e campos obrigatorios refs #1"</span>
+
+<span class="tmut"># 7. Enviar a branch ao GitHub</span>
+<span class="tok">git push -u origin feature/cabecalho</span></pre>
+        </div>
+      </div>
+      <div>
+        <h3>Via VS Code</h3>
+        <div class="cb">
+          <div class="cb-h"><span class="cb-lang">VS Code — interface gráfica</span><button class="cb-copy" onclick="cc(this)">Copiar</button></div>
+          <pre><span class="tmut"># 1. Abrir a pasta do repositório no VS Code</span>
+<span class="tw">File → Open Folder → conferencia-lotes-qualidade</span>
+
+<span class="tmut"># 2. Criar branch pela barra de status</span>
+<span class="tw">Clicar em "main" no canto inferior esquerdo</span>
+<span class="tw">→ Create new branch</span>
+<span class="tw">→ Digitar: feature/cabecalho</span>
+<span class="tw">→ Enter</span>
+
+<span class="tmut"># 3. Editar os arquivos normalmente</span>
+
+<span class="tmut"># 4. Fazer commit pelo Source Control</span>
+<span class="tw">Ícone de ramificação na barra lateral (Ctrl+Shift+G)</span>
+<span class="tw">→ + (Stage All Changes)</span>
+<span class="tw">→ Digitar mensagem do commit</span>
+<span class="tw">→ Ctrl+Enter para commitar</span>
+
+<span class="tmut"># 5. Publicar a branch</span>
+<span class="tw">Clicar em "Publish Branch" na barra de status</span>
+<span class="tw">ou no botão de sincronização (↑)</span></pre>
+        </div>
+
+        <h3>HTML mínimo de referência</h3>
+        <div class="cb">
+          <div class="cb-h"><span class="cb-lang">html — estrutura base do index.html</span><button class="cb-copy" onclick="cc(this)">Copiar</button></div>
+          <pre><span class="tred">&lt;!DOCTYPE html&gt;</span>
+<span class="tred">&lt;html</span> <span class="tg">lang</span><span class="tw">="pt-BR"</span><span class="tred">&gt;</span>
+<span class="tred">&lt;head&gt;</span>
+  <span class="tred">&lt;meta</span> <span class="tg">charset</span><span class="tw">="UTF-8"</span><span class="tred">&gt;</span>
+  <span class="tred">&lt;title&gt;</span><span class="tw">Site Colaborativo</span><span class="tred">&lt;/title&gt;</span>
+  <span class="tred">&lt;link</span> <span class="tg">rel</span><span class="tw">="stylesheet"</span> <span class="tg">href</span><span class="tw">="style.css"</span><span class="tred">&gt;</span>
+<span class="tred">&lt;/head&gt;</span>
+<span class="tred">&lt;body&gt;</span>
+
+  <span class="tred">&lt;header&gt;</span>
+    <span class="tred">&lt;h1&gt;</span><span class="tw">Site da Turma</span><span class="tred">&lt;/h1&gt;</span>
+    <span class="tred">&lt;nav&gt;</span>
+      <span class="tred">&lt;a</span> <span class="tg">href</span><span class="tw">="index.html"</span><span class="tred">&gt;</span><span class="tw">Home</span><span class="tred">&lt;/a&gt;</span>
+      <span class="tred">&lt;a</span> <span class="tg">href</span><span class="tw">="sobre.html"</span><span class="tred">&gt;</span><span class="tw">Sobre</span><span class="tred">&lt;/a&gt;</span>
+      <span class="tred">&lt;a</span> <span class="tg">href</span><span class="tw">="cursos.html"</span><span class="tred">&gt;</span><span class="tw">Cursos</span><span class="tred">&lt;/a&gt;</span>
+    <span class="tred">&lt;/nav&gt;</span>
+  <span class="tred">&lt;/header&gt;</span>
+
+<span class="tred">&lt;/body&gt;</span>
+<span class="tred">&lt;/html&gt;</span></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════
+     S05 — EXERCÍCIO 3: PULL REQUEST
+══════════════════════════════════════════ -->
+<section class="section" id="s05">
+  <div class="sec-header">
+    <div class="sec-num">03</div>
+    <div class="sec-tg"><h2>Exercício 3 — Abrindo Pull Request</h2><p>A porta de entrada do código na main</p></div>
+  </div>
+
+  <div class="flow-trail">
+    <span class="ft-item done">📋 Issue ✓</span><span class="ft-arrow">›</span>
+    <span class="ft-item done">🌿 Branch ✓</span><span class="ft-arrow">›</span>
+    <span class="ft-item done">💾 Commits ✓</span><span class="ft-arrow">›</span>
+    <span class="ft-item done">⬆ Push ✓</span><span class="ft-arrow">›</span>
+    <span class="ft-item active">🔀 PR</span><span class="ft-arrow">›</span>
+    <span class="ft-item">👁 Review</span><span class="ft-arrow">›</span>
+    <span class="ft-item">✅ Merge</span><span class="ft-arrow">›</span>
+    <span class="ft-item">🗑 Deletar</span>
+  </div>
+
+  <div class="box objective">
+    <span class="bxi">🎯</span>
+    <div class="bxc">
+      <strong>Objetivo</strong>
+      <p>Entender que o código nunca vai direto para a main. Toda mudança proposta chega via Pull Request, que é a oportunidade de revisar, discutir e melhorar antes de integrar.</p>
+    </div>
+  </div>
+
+  <div class="exercise">
+    <div class="ex-hdr">
+      <span class="ex-badge">Exercício 3</span>
+      <h3>🧪 Abrindo o primeiro Pull Request</h3>
+    </div>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-n">1</div>
+        <div class="step-b">
+          <h4>Entrar no repositório no GitHub</h4>
+          <p>Após fazer o push da branch, o GitHub geralmente exibe um banner amarelo: <strong>"Compare &amp; pull request"</strong>. Clique nele. Se não aparecer, vá em Pull Requests → New Pull Request.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-n">2</div>
+        <div class="step-b">
+          <h4>Verificar as branches</h4>
+          <p>Confirme que está correto:</p>
+          <ul class="bullet">
+            <li><strong>base:</strong> main (para onde o código vai entrar)</li>
+            <li><strong>compare:</strong> feature/cabecalho (o que você está propondo)</li>
+          </ul>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-n">3</div>
+        <div class="step-b">
+          <h4>Preencher o Pull Request</h4>
+          <p>Use o template abaixo. Um PR bem descrito é revisado mais rápido e com mais qualidade:</p>
+          <div class="cb">
+            <div class="cb-h"><span class="cb-lang">markdown — descrição do PR</span><button class="cb-copy" onclick="cc(this)">Copiar</button></div>
+            <pre><span class="tmut">## O que foi feito?</span>
+
+<span class="tw">- Adiciona src/validacao.py com valida_estrutura() e valida_campos_obrigatorios()</span>
+<span class="tw">- Adicionado título principal com &lt;h1&gt;</span>
+<span class="tw">- Incluído menu de navegação &lt;nav&gt; com 4 links</span>
+<span class="tw">- Aplicado estilo CSS básico de cor e tipografia</span>
+
+<span class="tmut">## Issue relacionada</span>
+
+<span class="tw">Closes #1</span>
+
+<span class="tmut">## Como testar?</span>
+
+<span class="tw">1. Abrir o arquivo `index.html` no navegador</span>
+<span class="tw">2. Verificar se o cabeçalho aparece no topo</span>
+<span class="tw">3. Conferir se os links do menu estão visíveis e funcionais</span>
+
+<span class="tmut">## Checklist</span>
+
+<span class="tw">- [x] Branch criada a partir da main atualizada</span>
+<span class="tw">- [x] Nome da branch segue o padrão</span>
+<span class="tw">- [x] Commit referencia a Issue (#1)</span>
+<span class="tw">- [x] Sem arquivos desnecessários (.DS_Store, node_modules)</span></pre>
+          </div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-n">4</div>
+        <div class="step-b">
+          <h4>Configurar o PR</h4>
+          <p>No painel lateral do PR:</p>
+          <ul class="bullet">
+            <li><strong>Reviewers:</strong> adicionar o colega que vai revisar (rotação de duplas)</li>
+            <li><strong>Assignees:</strong> você mesmo (quem criou o PR)</li>
+            <li><strong>Labels:</strong> <code>feature</code> ou <code>style</code></li>
+          </ul>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-n">5</div>
+        <div class="step-b">
+          <h4>Clicar em "Create Pull Request"</h4>
+          <p>O PR está aberto! Agora aguarde o colega fazer a revisão (Exercício 4).</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="box info">
+      <span class="bxi">🔗</span>
+      <div class="bxc">
+        <strong>O poder do "Closes #1"</strong>
+        <p>Quando você escreve <code>Closes #1</code> na descrição do PR, o GitHub vincula automaticamente o PR à Issue #1. Quando o PR for mergeado na main, a Issue é fechada automaticamente. Palavras aceitas: <code>closes</code>, <code>fixes</code>, <code>resolves</code>, <code>close</code>, <code>fix</code>, <code>resolve</code>.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════
+     S06 — EXERCÍCIO 4: CODE REVIEW
+══════════════════════════════════════════ -->
+<section class="section" id="s06">
+  <div class="sec-header">
+    <div class="sec-num">04</div>
+    <div class="sec-tg"><h2>Exercício 4 — Revisão de Pull Request</h2><p>Melhorando o código antes de integrar</p></div>
+  </div>
+
+  <div class="flow-trail">
+    <span class="ft-item done">📋 Issue ✓</span><span class="ft-arrow">›</span>
+    <span class="ft-item done">🌿 Branch ✓</span><span class="ft-arrow">›</span>
+    <span class="ft-item done">💾 Commits ✓</span><span class="ft-arrow">›</span>
+    <span class="ft-item done">⬆ Push ✓</span><span class="ft-arrow">›</span>
+    <span class="ft-item done">🔀 PR ✓</span><span class="ft-arrow">›</span>
+    <span class="ft-item active">👁 Review</span><span class="ft-arrow">›</span>
+    <span class="ft-item">✅ Merge</span><span class="ft-arrow">›</span>
+    <span class="ft-item">🗑 Deletar</span>
+  </div>
+
+  <div class="box objective">
+    <span class="bxi">🎯</span>
+    <div class="bxc">
+      <strong>Objetivo</strong>
+      <p>Aprender que um PR nunca é aprovado pelo próprio autor. A revisão por par melhora a qualidade, distribui o conhecimento e cria responsabilidade coletiva pelo código.</p>
+    </div>
+  </div>
+
+  <h3>Dinâmica de duplas — quem revisa quem</h3>
+  <table class="tbl">
+    <thead><tr><th>Aluno</th><th>Criou o PR de</th><th>Revisa o PR de</th></tr></thead>
+    <tbody>
+      <tr><td>Aluno A</td><td>feature/cabecalho</td><td>Aluno B (feature/secao-sobre)</td></tr>
+      <tr><td>Aluno B</td><td>feature/secao-sobre</td><td>Aluno C (feature/secao-cursos)</td></tr>
+      <tr><td>Aluno C</td><td>feature/secao-cursos</td><td>Aluno D (feature/rodape)</td></tr>
+      <tr><td>Aluno D</td><td>feature/rodape</td><td>Aluno E (style/melhorias-css)</td></tr>
+      <tr><td>Aluno E</td><td>style/melhorias-css</td><td>Aluno A (feature/cabecalho)</td></tr>
+    </tbody>
+  </table>
+
+  <div class="exercise">
+    <div class="ex-hdr">
+      <span class="ex-badge">Exercício 4</span>
+      <h3>🧪 Fazendo um Code Review profissional</h3>
+    </div>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-n">1</div>
+        <div class="step-b">
+          <h4>Abrir o PR do colega</h4>
+          <p>Pull Requests → selecionar o PR que você foi marcado como reviewer → aba "Files changed" para ver as diferenças.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-n">2</div>
+        <div class="step-b">
+          <h4>Verificar esses pontos no código</h4>
+          <ul class="bullet">
+            <li>O código funciona? (abrir o arquivo e testar)</li>
+            <li>O nome dos arquivos está adequado?</li>
+            <li>A indentação está correta? (2 ou 4 espaços, consistente)</li>
+            <li>A mudança realmente resolve a Issue descrita?</li>
+            <li>A mensagem do commit está clara?</li>
+            <li>O PR tem descrição completa?</li>
+            <li>Há arquivos desnecessários (como .DS_Store)?</li>
+            <li>Há tags HTML semânticas (<code>&lt;header&gt;</code>, <code>&lt;main&gt;</code>, <code>&lt;footer&gt;</code>)?</li>
+          </ul>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-n">3</div>
+        <div class="step-b">
+          <h4>Fazer comentários na linha do código</h4>
+          <p>Passe o mouse sobre uma linha → clique no <strong>+</strong> azul → escreva um comentário específico. Use os exemplos abaixo como referência:</p>
+          <div class="cb">
+            <div class="cb-h"><span class="cb-lang">exemplos de comentários — do ruim ao bom</span><button class="cb-copy" onclick="cc(this)">Copiar</button></div>
+            <pre><span class="tmut"># ❌ Ruim — vago e desmotivador</span>
+<span class="tred">"Isso está errado"</span>
+<span class="tred">"Não gostei"</span>
+
+<span class="tmut"># ✅ Bom — específico, construtivo, com sugestão</span>
+<span class="tok">"Sugiro usar a tag semântica &lt;header&gt; em vez de &lt;div class='topo'&gt;.</span>
+<span class="tok">Representa melhor o cabeçalho para leitores de tela e SEO."</span>
+
+<span class="tok">"Implementação correta do RN01. Para o RN02, faltou validar o campo 'data' — está listado no PDD mas não tem assert no test_validacao.py.</span>
+<span class="tok">Pode adicionar: &lt;a href='cursos.html'&gt;Cursos&lt;/a&gt; ?"</span>
+
+<span class="tok">"[nit] Linha 14: há um espaço extra no final.</span>
+<span class="tok">Pode deixar, mas se quisermos manter consistência no projeto..."</span>
+
+<span class="tok">"O código resolve bem a Issue #1. Aprovado após a correção do link!"</span></pre>
+          </div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-n">4</div>
+        <div class="step-b">
+          <h4>Finalizar o review</h4>
+          <p>Clique em "Review changes" → escolha uma das opções:</p>
+          <ul class="bullet">
+            <li><strong>Comment</strong> — deixar observações sem bloquear nem aprovar</li>
+            <li><strong>Approve</strong> — código está pronto para merge ✅</li>
+            <li><strong>Request changes</strong> — há algo a corrigir antes do merge ❌</li>
+          </ul>
+          <p><strong>Regra da turma:</strong> todo PR deve ter pelo menos um comentário, mesmo que seja para aprovar e elogiar.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════
+     S07 — EXERCÍCIO 5: AJUSTES NO PR
+══════════════════════════════════════════ -->
+<section class="section" id="s07">
+  <div class="sec-header">
+    <div class="sec-num">05</div>
+    <div class="sec-tg"><h2>Exercício 5 — Solicitando e Fazendo Ajustes</h2><p>PR não é "aceitar ou rejeitar" — é um diálogo</p></div>
+  </div>
+
+  <div class="box objective">
+    <span class="bxi">🎯</span>
+    <div class="bxc">
+      <strong>Objetivo</strong>
+      <p>Entender que corrigir um PR não significa abrir um novo. Basta fazer mais um commit na mesma branch — o PR se atualiza automaticamente.</p>
+    </div>
+  </div>
+
+  <div class="exercise">
+    <div class="ex-hdr">
+      <span class="ex-badge">Exercício 5</span>
+      <h3>🧪 Ciclo: sugestão → correção → re-review</h3>
+    </div>
+
+    <h3>Cenário didático</h3>
+    <div class="cb">
+      <div class="cb-h"><span class="cb-lang">html — código antes da revisão</span><button class="cb-copy" onclick="cc(this)">Copiar</button></div>
+      <pre><span class="tmut">&lt;!-- Código do Aluno A antes da revisão --&gt;</span>
+<span class="tred">&lt;div</span> <span class="tg">class</span><span class="tw">="topo"</span><span class="tred">&gt;</span>
+  <span class="tred">&lt;h1&gt;</span><span class="tw">Meu Site</span><span class="tred">&lt;/h1&gt;</span>
+<span class="tred">&lt;/div&gt;</span></pre>
+    </div>
+    <div class="cb">
+      <div class="cb-h"><span class="cb-lang">comentário do revisor no PR</span><button class="cb-copy" onclick="cc(this)">Copiar</button></div>
+      <pre><span class="tok">"Sugiro usar a tag semântica &lt;header&gt; em vez de &lt;div&gt;,</span>
+<span class="tok">pois representa melhor o cabeçalho para navegadores e SEO."</span>
+<span class="tmut">→ Status: "Request changes" ❌</span></pre>
+    </div>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-n">1</div>
+        <div class="step-b">
+          <h4>Autor recebe o feedback e faz a correção localmente</h4>
+          <div class="cb">
+            <div class="cb-h"><span class="cb-lang">bash — corrigir e atualizar o PR</span><button class="cb-copy" onclick="cc(this)">Copiar</button></div>
+            <pre><span class="tmut"># Confirmar que está na branch correta</span>
+<span class="tok">git branch</span>              <span class="tmut"># deve mostrar: * feature/cabecalho</span>
+
+<span class="tmut"># Fazer a correção no arquivo (no VS Code ou terminal)</span>
+<span class="tmut"># Antes: &lt;div class="topo"&gt;</span>
+<span class="tmut"># Depois: &lt;header class="topo"&gt;</span>
+
+<span class="tok">git add index.html</span>
+<span class="tok">git commit -m "fix: corrige cabeçalho usando tag semântica header"</span>
+<span class="tok">git push</span></pre>
+          </div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-n">2</div>
+        <div class="step-b">
+          <h4>Verificar que o PR foi atualizado automaticamente</h4>
+          <p>Abra o PR no GitHub. O novo commit aparece automaticamente na conversa. <strong>Não precisa abrir um novo PR!</strong></p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-n">3</div>
+        <div class="step-b">
+          <h4>Responder ao comentário do revisor</h4>
+          <p>No GitHub, clique em "Resolve conversation" no comentário do revisor para indicar que foi corrigido. Ou escreva: <em>"Corrigido no commit [hash]. Usei a tag &lt;header&gt; como sugerido."</em></p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-n">4</div>
+        <div class="step-b">
+          <h4>Revisor faz o re-review</h4>
+          <p>O revisor volta ao PR, verifica a correção e muda o status para <strong>Approve</strong> ✅ se estiver resolvido.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="box tip">
+      <span class="bxi">💡</span>
+      <div class="bxc">
+        <strong>Aprendizado central do exercício</strong>
+        <p>Nunca abra um novo PR para corrigir o anterior. Faça o commit na mesma branch e o PR se atualiza. Um PR pode ter dezenas de commits — cada um respondendo a um feedback do review.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════
+     S08 — EXERCÍCIO 6: MERGE
+══════════════════════════════════════════ -->
+<section class="section" id="s08">
+  <div class="sec-header">
+    <div class="sec-num">06</div>
+    <div class="sec-tg"><h2>Exercício 6 — Merge do Pull Request</h2><p>Integrando o código aprovado na main</p></div>
+  </div>
+
+  <div class="flow-trail">
+    <span class="ft-item done">📋 Issue ✓</span><span class="ft-arrow">›</span>
+    <span class="ft-item done">🌿 Branch ✓</span><span class="ft-arrow">›</span>
+    <span class="ft-item done">💾 Commits ✓</span><span class="ft-arrow">›</span>
+    <span class="ft-item done">⬆ Push ✓</span><span class="ft-arrow">›</span>
+    <span class="ft-item done">🔀 PR ✓</span><span class="ft-arrow">›</span>
+    <span class="ft-item done">👁 Review ✓</span><span class="ft-arrow">›</span>
+    <span class="ft-item active">✅ Merge</span><span class="ft-arrow">›</span>
+    <span class="ft-item">🗑 Deletar</span>
+  </div>
+
+  <div class="box objective">
+    <span class="bxi">🎯</span>
+    <div class="bxc">
+      <strong>Objetivo</strong>
+      <p>Entender os três tipos de merge do GitHub e quando usar cada um. Para iniciantes, começar com "Create a merge commit" e depois experimentar "Squash and merge".</p>
+    </div>
+  </div>
+
+  <h3>Os três tipos de merge no GitHub</h3>
+  <table class="tbl">
+    <thead><tr><th>Tipo</th><th>O que faz</th><th>Quando usar</th></tr></thead>
+    <tbody>
+      <tr><td>Create a merge commit</td><td>Mantém todos os commits do PR + cria commit de merge</td><td>Padrão — preserva histórico completo. Recomendado para iniciantes.</td></tr>
+      <tr><td>Squash and merge</td><td>Une todos os commits do PR em um único commit na main</td><td>Quando o PR tem commits "sujos" (wip, teste, ajuste). Histórico da main mais limpo.</td></tr>
+      <tr><td>Rebase and merge</td><td>Reaplica commits linearmente, sem commit de merge extra</td><td>Para histórico completamente linear. Requer commits bem organizados.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="exercise">
+    <div class="ex-hdr">
+      <span class="ex-badge">Exercício 6</span>
+      <h3>🧪 Merge + limpeza de branch</h3>
+    </div>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-n">1</div>
+        <div class="step-b">
+          <h4>Fazer o merge (após aprovação)</h4>
+          <p>No PR aprovado, clique em <strong>"Merge pull request"</strong> → confirme. Comece com <strong>Create a merge commit</strong>.</p>
+          <p>Observe: a Issue vinculada (#1) é fechada automaticamente!</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-n">2</div>
+        <div class="step-b">
+          <h4>Deletar a branch após o merge</h4>
+          <p>O GitHub mostra o botão <strong>"Delete branch"</strong> logo após o merge. Clique! Branch de feature não deve ficar aberta após ser integrada.</p>
+          <div class="cb">
+            <div class="cb-h"><span class="cb-lang">bash — limpar localmente também</span><button class="cb-copy" onclick="cc(this)">Copiar</button></div>
+            <pre><span class="tmut"># Sincronizar com o remoto</span>
+<span class="tok">git switch main</span>
+<span class="tok">git pull origin main</span>        <span class="tmut"># baixar o merge que foi feito no GitHub</span>
+
+<span class="tmut"># Deletar a branch local</span>
+<span class="tok">git branch -d feature/cabecalho</span>
+
+<span class="tmut"># Limpar referências de branches remotas deletadas</span>
+<span class="tok">git fetch --prune</span>
+
+<span class="tmut"># Verificar que tudo está limpo</span>
+<span class="tok">git branch</span>                  <span class="tmut"># deve mostrar só: * main</span>
+<span class="tok">git log --oneline -5</span>        <span class="tmut"># ver o merge commit</span></pre>
+          </div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-n">3</div>
+        <div class="step-b">
+          <h4>Experimentar o Squash and Merge</h4>
+          <p>No PR seguinte, use <strong>"Squash and merge"</strong> em vez de "Create a merge commit". Compare o histórico da main depois:</p>
+          <div class="cb">
+            <div class="cb-h"><span class="cb-lang">bash — comparar históricos</span><button class="cb-copy" onclick="cc(this)">Copiar</button></div>
+            <pre><span class="tok">git log --oneline</span>
+<span class="tmut"># Com merge commit: vários commits do PR aparecem</span>
+<span class="tmut"># Com squash: apenas 1 commit limpo por PR</span></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="box tip">
+      <span class="bxi">💡</span>
+      <div class="bxc">
+        <strong>Squash and Merge — por que ele existe</strong>
+        <p>Durante o desenvolvimento de uma feature, é comum ter commits como "wip", "ajuste", "testando", "agora vai"... Esses commits não agregam ao histórico da main. O Squash os junta em um único commit limpo, como: <code>feat: adiciona seção de cursos</code>.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════
+     S09 — EXERCÍCIO 7: PROTEÇÃO DA MAIN
+══════════════════════════════════════════ -->
+<section class="section" id="s09">
+  <div class="sec-header">
+    <div class="sec-num">07</div>
+    <div class="sec-tg"><h2>Exercício 7 — Protegendo a Branch main</h2><p>Simulando um ambiente profissional real</p></div>
+  </div>
+
+  <div class="box objective">
+    <span class="bxi">🎯</span>
+    <div class="bxc">
+      <strong>Objetivo</strong>
+      <p>Impedir que os alunos façam push direto na main. Em projetos reais, a main é protegida — o fluxo via PR se torna obrigatório, não opcional.</p>
+    </div>
+  </div>
+
+  <div class="exercise">
+    <div class="ex-hdr">
+      <span class="ex-badge">Exercício 7</span>
+      <h3>🧪 Configurando Branch Protection Rules</h3>
+    </div>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-n">1</div>
+        <div class="step-b">
+          <h4>Acessar as configurações</h4>
+          <p>No repositório: <strong>Settings → Branches → Add branch protection rule</strong></p>
+          <p>Em "Branch name pattern", digitar: <code>main</code></p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-n">2</div>
+        <div class="step-b">
+          <h4>Ativar as proteções</h4>
+          <div class="cb">
+            <div class="cb-h"><span class="cb-lang">configurações recomendadas para a turma</span><button class="cb-copy" onclick="cc(this)">Copiar</button></div>
+            <pre><span class="tok">✓ Require a pull request before merging</span>
+<span class="tok">    Required approvals: 1</span>
+<span class="tok">    ✓ Dismiss stale PR approvals on new commits</span>
+
+<span class="tok">✓ Require status checks (se tiver CI configurado)</span>
+<span class="tok">✓ Require conversation resolution before merging</span>
+<span class="tok">✓ Restrict who can push to matching branches</span>
+<span class="tok">    → incluir apenas o Tech Lead / professor</span>
+
+<span class="tok">✓ Do not allow bypassing the above settings</span></pre>
+          </div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-n">3</div>
+        <div class="step-b">
+          <h4>Testar a proteção</h4>
+          <p>Algum aluno deve tentar fazer push direto na main para ver o que acontece:</p>
+          <div class="cb">
+            <div class="cb-h"><span class="cb-lang">bash — testando a proteção</span><button class="cb-copy" onclick="cc(this)">Copiar</button></div>
+            <pre><span class="tok">git switch main</span>
+<span class="tok">echo "teste" &gt;&gt; README.md</span>
+<span class="tok">git add . &amp;&amp; git commit -m "teste direto na main"</span>
+<span class="tok">git push origin main</span>
+
+<span class="tmut"># Resultado esperado:</span>
+<span class="tred">remote: error: GH006: Protected branch update failed for refs/heads/main.</span>
+<span class="tred">remote: error: Required pull request reviews must not be dismissed.</span>
+<span class="tmut"># ← O GitHub bloqueou! Agora o fluxo via PR é obrigatório.</span></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="box tip">
+      <span class="bxi">💡</span>
+      <div class="bxc">
+        <strong>Aprendizado do exercício</strong>
+        <p>O aluno percebe que, em projetos reais, ele não pode alterar a branch principal diretamente. O fluxo <strong>branch → commit → push → PR → review → merge</strong> deixa de ser uma sugestão e se torna a única forma de trabalhar.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════
+     S10 — EXERCÍCIO 8: CONFLITOS
+══════════════════════════════════════════ -->
+<section class="section" id="s10">
+  <div class="sec-header">
+    <div class="sec-num">08</div>
+    <div class="sec-tg"><h2>Exercício 8 — Resolvendo Conflitos</h2><p>O exercício mais importante da trilha</p></div>
+  </div>
+
+  <div class="box objective">
+    <span class="bxi">🎯</span>
+    <div class="bxc">
+      <strong>Objetivo</strong>
+      <p>Entender que conflito não é erro — é o Git pedindo uma decisão quando duas pessoas editaram a mesma linha. Aprender a resolver de forma calma e comunicativa.</p>
+    </div>
+  </div>
+
+  <div class="exercise">
+    <div class="ex-hdr">
+      <span class="ex-badge">Exercício 8</span>
+      <h3>🧪 Criando e resolvendo um conflito didático</h3>
+    </div>
+
+    <h3>Cenário — dois alunos editam o mesmo arquivo</h3>
+    <div class="cb">
+      <div class="cb-h"><span class="cb-lang">situação</span><button class="cb-copy" onclick="cc(this)">Copiar</button></div>
+      <pre><span class="tmut"># Aluno A (em feature/cabecalho) escreve:</span>
+<span class="tred">&lt;h1&gt;</span><span class="tw">Bem-vindo ao Site da Turma</span><span class="tred">&lt;/h1&gt;</span>
+
+<span class="tmut"># Aluno B (em feature/secao-sobre) também edita index.html:</span>
+<span class="tred">&lt;h1&gt;</span><span class="tw">Projeto GitHub Colaborativo</span><span class="tred">&lt;/h1&gt;</span>
+
+<span class="tmut"># O PR do Aluno A é aprovado e mergeado primeiro.
+<span class="tmut"># Quando o Aluno B tentar mergear: CONFLITO!</span></pre>
+    </div>
+
+    <h3>Opção A — Resolver no GitHub (conflitos simples)</h3>
+    <div class="steps">
+      <div class="step">
+        <div class="step-n">1</div>
+        <div class="step-b">
+          <h4>GitHub detecta o conflito no PR</h4>
+          <p>Na tela do PR do Aluno B aparece: <em>"This branch has conflicts that must be resolved"</em>. Clique em <strong>"Resolve conflicts"</strong>.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-n">2</div>
+        <div class="step-b">
+          <h4>Ver os marcadores e decidir</h4>
+          <div class="cb">
+            <div class="cb-h"><span class="cb-lang">html — arquivo com conflito</span><button class="cb-copy" onclick="cc(this)">Copiar</button></div>
+            <pre><span class="tmut">&lt;&lt;&lt;&lt;&lt;&lt;&lt; feature/secao-sobre</span>
+<span class="tred">&lt;h1&gt;</span><span class="tw">Projeto GitHub Colaborativo</span><span class="tred">&lt;/h1&gt;</span>        <span class="tmut">← Aluno B</span>
+<span class="tmut">=======</span>
+<span class="tred">&lt;h1&gt;</span><span class="tw">Bem-vindo ao Site da Turma</span><span class="tred">&lt;/h1&gt;</span>           <span class="tmut">← Aluno A (main)</span>
+<span class="tmut">&gt;&gt;&gt;&gt;&gt;&gt;&gt; main</span>
+
+<span class="tmut"># Decisão combinada com a equipe — remover os marcadores e deixar:</span>
+<span class="tred">&lt;h1&gt;</span><span class="tw">Bem-vindo ao Projeto GitHub Colaborativo da Turma</span><span class="tred">&lt;/h1&gt;</span></pre>
+          </div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-n">3</div>
+        <div class="step-b">
+          <h4>Confirmar a resolução</h4>
+          <p>Após remover todos os marcadores e salvar a decisão, clique em <strong>"Mark as resolved"</strong> e depois <strong>"Commit merge"</strong>.</p>
+        </div>
+      </div>
+    </div>
+
+    <h3>Opção B — Resolver via terminal + VS Code (conflitos complexos)</h3>
+    <div class="cb">
+      <div class="cb-h"><span class="cb-lang">bash — resolução local</span><button class="cb-copy" onclick="cc(this)">Copiar</button></div>
+      <pre><span class="tmut"># Na branch do Aluno B</span>
+<span class="tok">git switch feature/secao-sobre</span>
+
+<span class="tmut"># Trazer as atualizações da main (onde o PR do A foi mergeado)</span>
+<span class="tok">git pull origin main</span>
+<span class="tmut"># CONFLICT (content): Merge conflict in index.html</span>
+
+<span class="tmut"># Ver os arquivos em conflito</span>
+<span class="tok">git status</span>       <span class="tmut"># mostra "both modified: index.html"</span>
+
+<span class="tmut"># Abrir no VS Code para resolver visualmente</span>
+<span class="tok">code index.html</span>
+<span class="tmut"># VS Code mostra botões: Accept Current | Accept Incoming | Accept Both | Compare</span>
+<span class="tmut"># Escolher a opção correta OU editar manualmente para uma terceira solução</span>
+
+<span class="tmut"># Após resolver e salvar:</span>
+<span class="tok">git add index.html</span>
+<span class="tok">git commit -m "merge: resolve conflito no título — combina versões dos dois alunos"</span>
+<span class="tok">git push</span>
+
+<span class="tmut"># Verificar que não há mais marcadores</span>
+<span class="tok">grep -r "&lt;&lt;&lt;&lt;&lt;&lt;&lt;" .</span>    <span class="tmut"># não deve retornar nada</span></pre>
+    </div>
+
+    <div class="box info">
+      <span class="bxi">💬</span>
+      <div class="bxc">
+        <strong>Comunicação resolve conflitos antes do Git</strong>
+        <p>Quando dois alunos estão editando a mesma área do código, o melhor é combinar antecipadamente quem cuida de qual arquivo. A resolução técnica do conflito é simples — a parte humana (comunicação) é o verdadeiro aprendizado.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════
+     S11 — EXERCÍCIO 9: BRANCH DESATUALIZADA
+══════════════════════════════════════════ -->
+<section class="section" id="s11">
+  <div class="sec-header">
+    <div class="sec-num">09</div>
+    <div class="sec-tg"><h2>Exercício 9 — Atualizando Branch Desatualizada</h2><p>O que fazer quando colegas avançaram e você ficou para trás</p></div>
+  </div>
+
+  <div class="box objective">
+    <span class="bxi">🎯</span>
+    <div class="bxc">
+      <strong>Objetivo</strong>
+      <p>Entender que uma branch pode ficar desatualizada em relação à main conforme outros PRs são mergeados. Aprender a trazer as atualizações de forma segura.</p>
+    </div>
+  </div>
+
+  <div class="exercise">
+    <div class="ex-hdr">
+      <span class="ex-badge">Exercício 9</span>
+      <h3>🧪 Simulando branch antiga e atualizando</h3>
+    </div>
+
+    <h3>Cenário</h3>
+    <p>A <code>main</code> recebeu 3 novos merges enquanto você trabalhava na sua branch. Seu PR agora mostra: <em>"This branch is out-of-date with the base branch."</em></p>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-n">1</div>
+        <div class="step-b">
+          <h4>Verificar o quão desatualizada está sua branch</h4>
+          <div class="cb">
+            <div class="cb-h"><span class="cb-lang">bash</span><button class="cb-copy" onclick="cc(this)">Copiar</button></div>
+            <pre><span class="tok">git fetch origin</span>
+<span class="tok">git log --oneline HEAD..origin/main</span>   <span class="tmut"># commits que existem na main mas não na sua branch</span></pre>
+          </div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-n">2</div>
+        <div class="step-b">
+          <h4>Trazer as atualizações da main para a sua branch</h4>
+          <div class="cb">
+            <div class="cb-h"><span class="cb-lang">bash — atualizar a branch (opção recomendada para iniciantes)</span><button class="cb-copy" onclick="cc(this)">Copiar</button></div>
+            <pre><span class="tmut"># Garantir que está na sua branch</span>
+<span class="tok">git switch feature/secao-cursos</span>
+
+<span class="tmut"># Atualizar a main local</span>
+<span class="tok">git switch main &amp;&amp; git pull</span>
+
+<span class="tmut"># Voltar para sua branch e trazer as atualizações da main</span>
+<span class="tok">git switch feature/secao-cursos</span>
+<span class="tok">git merge main</span>           <span class="tmut"># integra o que há na main na sua branch</span>
+
+<span class="tmut"># Se houver conflitos, resolvê-los (como no Ex.8)</span>
+<span class="tmut"># Depois:</span>
+<span class="tok">git push</span>                  <span class="tmut"># atualizar o PR automaticamente</span></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="box tip">
+      <span class="bxi">💡</span>
+      <div class="bxc">
+        <strong>Rotina preventiva</strong>
+        <p>Execute toda manhã antes de começar a trabalhar: <code>git switch main &amp;&amp; git pull &amp;&amp; git switch feature/sua-branch &amp;&amp; git merge main</code>. Isso evita que a branch fique muito desatualizada e reduz conflitos acumulados.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════
+     S12 — EXERCÍCIO 10: FORK
+══════════════════════════════════════════ -->
+<section class="section" id="s12">
+  <div class="sec-header">
+    <div class="sec-num">10</div>
+    <div class="sec-tg"><h2>Exercício 10 — Fork e Contribuição Externa</h2><p>O modelo usado em projetos open source</p></div>
+  </div>
+
+  <div class="box objective">
+    <span class="bxi">🎯</span>
+    <div class="bxc">
+      <strong>Objetivo</strong>
+      <p>Aprender o fluxo de fork: quando você não tem permissão no repositório original, você cria sua própria cópia (fork) e contribui via PR. Preparação para colaboração em projetos open source.</p>
+    </div>
+  </div>
+
+  <div class="exercise">
+    <div class="ex-hdr">
+      <span class="ex-badge">Exercício 10</span>
+      <h3>🧪 Contribuindo para o repositório do professor</h3>
+    </div>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-n">1</div>
+        <div class="step-b">
+          <h4>Professor cria o repositório-modelo</h4>
+          <p>O professor cria o repositório público <code>projeto-modelo-html</code> com um arquivo <code>participantes.md</code> inicial:</p>
+          <div class="cb">
+            <div class="cb-h"><span class="cb-lang">markdown — participantes.md inicial</span><button class="cb-copy" onclick="cc(this)">Copiar</button></div>
+            <pre><span class="tmut"># Participantes</span>
+
+<span class="tw">Lista de alunos que contribuíram com este projeto.</span>
+
+<span class="tmut">## Turma DevOps 2025</span>
+
+<span class="tw">(Adicione seu nome via Pull Request!)</span></pre>
+          </div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-n">2</div>
+        <div class="step-b">
+          <h4>Alunos fazem fork do repositório</h4>
+          <p>No GitHub, acessar o repositório do professor → clicar em <strong>Fork</strong> (canto superior direito) → confirmar. Agora cada aluno tem sua cópia em <code>github.com/SEU_USUARIO/projeto-modelo-html</code>.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-n">3</div>
+        <div class="step-b">
+          <h4>Clonar o fork e adicionar o nome</h4>
+          <div class="cb">
+            <div class="cb-h"><span class="cb-lang">bash — fluxo de fork</span><button class="cb-copy" onclick="cc(this)">Copiar</button></div>
+            <pre><span class="tmut"># 1. Clonar SEU fork (não o do professor)</span>
+<span class="tok">git clone https://github.com/SEU_USUARIO/projeto-modelo-html.git</span>
+<span class="tok">cd projeto-modelo-html</span>
+
+<span class="tmut"># 2. Adicionar o repositório original como "upstream"</span>
+<span class="tok">git remote add upstream https://github.com/PROFESSOR/projeto-modelo-html.git</span>
+<span class="tok">git remote -v</span>
+<span class="tmut"># origin   = seu fork (você tem permissão total)</span>
+<span class="tmut"># upstream = repositório do professor (só leitura)</span>
+
+<span class="tmut"># 3. Criar branch para a sua contribuição</span>
+<span class="tok">git switch -c docs/adiciona-nome</span>
+
+<span class="tmut"># 4. Adicionar seu nome ao arquivo</span>
+<span class="tok">echo "- [Seu Nome](https://github.com/SEU_USUARIO)" &gt;&gt; participantes.md</span>
+
+<span class="tmut"># 5. Commitar e enviar para o SEU fork</span>
+<span class="tok">git add participantes.md</span>
+<span class="tok">git commit -m "docs: adiciona [Seu Nome] à lista de participantes"</span>
+<span class="tok">git push -u origin docs/adiciona-nome</span>
+
+<span class="tmut"># 6. No GitHub, abrir PR do seu fork para o repositório do professor</span>
+<span class="tmut"># base repository: PROFESSOR/projeto-modelo-html   branch: main</span>
+<span class="tmut"># head repository: SEU_USUARIO/projeto-modelo-html  branch: docs/adiciona-nome</span></pre>
+          </div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-n">4</div>
+        <div class="step-b">
+          <h4>Professor aprova e mergeia os PRs</h4>
+          <p>O professor revisa cada PR e mergeia para o repositório original. Os alunos veem suas contribuições aparecerem no repositório do professor!</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-n">5</div>
+        <div class="step-b">
+          <h4>Sincronizar o fork com o repositório original</h4>
+          <div class="cb">
+            <div class="cb-h"><span class="cb-lang">bash — manter fork atualizado</span><button class="cb-copy" onclick="cc(this)">Copiar</button></div>
+            <pre><span class="tok">git fetch upstream</span>
+<span class="tok">git switch main</span>
+<span class="tok">git merge upstream/main</span>     <span class="tmut"># seu fork agora tem as contribuições dos colegas</span>
+<span class="tok">git push origin main</span>        <span class="tmut"># atualizar o fork no GitHub também</span></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════
+     S13 — EXERCÍCIO 11: PR NO VS CODE
+══════════════════════════════════════════ -->
+<section class="section" id="s13">
+  <div class="sec-header">
+    <div class="sec-num">11</div>
+    <div class="sec-tg"><h2>Exercício 11 — Pull Requests no VS Code</h2><p>Gerenciando PRs sem sair do editor</p></div>
+  </div>
+
+  <div class="box objective">
+    <span class="bxi">🎯</span>
+    <div class="bxc">
+      <strong>Objetivo</strong>
+      <p>Usar a extensão <strong>GitHub Pull Requests and Issues</strong> para visualizar, revisar e responder a PRs diretamente no VS Code — o mesmo ambiente onde você escreve código.</p>
+    </div>
+  </div>
+
+  <div class="exercise">
+    <div class="ex-hdr">
+      <span class="ex-badge">Exercício 11</span>
+      <h3>🧪 Configurando e usando a extensão</h3>
+    </div>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-n">1</div>
+        <div class="step-b">
+          <h4>Instalar a extensão</h4>
+          <p>No VS Code: Extensions (Ctrl+Shift+X) → buscar <strong>"GitHub Pull Requests and Issues"</strong> → Install. Publicada pelo próprio GitHub.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-n">2</div>
+        <div class="step-b">
+          <h4>Fazer login no GitHub pelo VS Code</h4>
+          <p>Após instalar, clique no ícone do GitHub na barra lateral → "Sign in" → autorize o acesso. O VS Code agora tem acesso aos seus repositórios e PRs.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-n">3</div>
+        <div class="step-b">
+          <h4>Visualizar PRs abertos</h4>
+          <p>Na barra lateral do VS Code, aparece o ícone do GitHub Pull Requests. Clique para ver:</p>
+          <ul class="bullet">
+            <li>PRs que você criou</li>
+            <li>PRs que você precisa revisar</li>
+            <li>Todos os PRs do repositório</li>
+          </ul>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-n">4</div>
+        <div class="step-b">
+          <h4>Fazer review de um PR no VS Code</h4>
+          <p>Clique em um PR → "Checkout" para ver o código no contexto certo → clique no arquivo para ver as mudanças → clique em uma linha para comentar diretamente. Tudo isso sem abrir o navegador!</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-n">5</div>
+        <div class="step-b">
+          <h4>Ver Issues no VS Code</h4>
+          <p>Na aba de Issues (mesma extensão), você pode criar Issues, atribuí-las e criar branches vinculadas diretamente pelo VS Code — sem sair do editor.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="box info">
+      <span class="bxi">💡</span>
+      <div class="bxc">
+        <strong>Por que isso importa</strong>
+        <p>Profissionais passam horas nos seus editores. Ter acesso ao fluxo de PR sem precisar alternar entre VS Code e navegador aumenta significativamente a produtividade e reduz contexto-switching.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════
+     S14 — EXERCÍCIO 12: CHECKLIST DE PR
+══════════════════════════════════════════ -->
+<section class="section" id="s14">
+  <div class="sec-header">
+    <div class="sec-num">12</div>
+    <div class="sec-tg"><h2>Exercício 12 — Checklist de Pull Request</h2><p>Criando disciplina de qualidade na equipe</p></div>
+  </div>
+
+  <div class="box objective">
+    <span class="bxi">🎯</span>
+    <div class="bxc">
+      <strong>Objetivo</strong>
+      <p>Criar um checklist padrão que todos os PRs do repositório devem incluir. Isso cria disciplina coletiva e reduz erros óbvios antes da revisão.</p>
+    </div>
+  </div>
+
+  <div class="exercise">
+    <div class="ex-hdr">
+      <span class="ex-badge">Exercício 12</span>
+      <h3>🧪 Criando o template de PR do repositório</h3>
+    </div>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-n">1</div>
+        <div class="step-b">
+          <h4>Criar o arquivo de template</h4>
+          <div class="cb">
+            <div class="cb-h"><span class="cb-lang">bash — criar o template</span><button class="cb-copy" onclick="cc(this)">Copiar</button></div>
+            <pre><span class="tok">mkdir -p .github</span>
+<span class="tok">touch .github/pull_request_template.md</span></pre>
+          </div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-n">2</div>
+        <div class="step-b">
+          <h4>Preencher o template com o checklist</h4>
+          <div class="cb">
+            <div class="cb-h"><span class="cb-lang">markdown — .github/pull_request_template.md</span><button class="cb-copy" onclick="cc(this)">Copiar</button></div>
+            <pre><span class="tmut">## O que foi feito?</span>
+<span class="tw">&lt;!-- Descreva brevemente a mudança --&gt;</span>
+
+<span class="tmut">## Issue relacionada</span>
+<span class="tw">Closes #&lt;NUMERO&gt;</span>
+
+<span class="tmut">## Como testar?</span>
+<span class="tw">1. </span>
+<span class="tw">2. </span>
+<span class="tw">3. </span>
+
+<span class="tmut">## Checklist do PR</span>
+
+<span class="tw">- [ ] A branch foi criada a partir da main atualizada</span>
+<span class="tw">- [ ] O nome da branch segue o padrão combinado</span>
+<span class="tw">- [ ] A alteração resolve a issue descrita</span>
+<span class="tw">- [ ] O código foi testado manualmente</span>
+<span class="tw">- [ ] Não há arquivos desnecessários (.DS_Store, etc.)</span>
+<span class="tw">- [ ] O PR tem título e descrição claros</span>
+<span class="tw">- [ ] O commit segue Conventional Commits</span>
+<span class="tw">- [ ] O código foi revisado por pelo menos um colega</span></pre>
+          </div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-n">3</div>
+        <div class="step-b">
+          <h4>Commitar e enviar o template</h4>
+          <div class="cb">
+            <div class="cb-h"><span class="cb-lang">bash</span><button class="cb-copy" onclick="cc(this)">Copiar</button></div>
+            <pre><span class="tok">git switch -c docs/adiciona-template-pr</span>
+<span class="tok">git add .github/pull_request_template.md</span>
+<span class="tok">git commit -m "docs: adiciona template de Pull Request"</span>
+<span class="tok">git push -u origin docs/adiciona-template-pr</span>
+<span class="tmut"># Abrir PR, aprovação e merge — usando o próprio template!</span></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="box tip">
+      <span class="bxi">💡</span>
+      <div class="bxc">
+        <strong>A partir deste momento</strong>
+        <p>Todo novo PR terá automaticamente o checklist pré-preenchido na descrição. Os alunos devem marcar os itens antes de submeter. O revisor verifica se o checklist foi cumprido antes de aprovar.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════
+     S15 — EXERCÍCIO 13: MENSAGENS DE COMMIT
+══════════════════════════════════════════ -->
+<section class="section" id="s15">
+  <div class="sec-header">
+    <div class="sec-num">13</div>
+    <div class="sec-tg"><h2>Exercício 13 — Boas Mensagens de Commit</h2><p>O histórico do projeto é a documentação mais honesta que existe</p></div>
+  </div>
+
+  <div class="box objective">
+    <span class="bxi">🎯</span>
+    <div class="bxc">
+      <strong>Objetivo</strong>
+      <p>Aprender a escrever mensagens de commit que comunicam intenção, não apenas o que foi feito. Um bom histórico permite entender o projeto sem ler uma linha de código.</p>
+    </div>
+  </div>
+
+  <div class="exercise">
+    <div class="ex-hdr">
+      <span class="ex-badge">Exercício 13</span>
+      <h3>🧪 Reescrevendo mensagens ruins</h3>
+    </div>
+
+    <p>Reescreva as mensagens abaixo seguindo o padrão <strong>Conventional Commits</strong>:</p>
+    <p>Formato: <code>tipo: descrição imperativa sem ponto final</code></p>
+
+    <table class="tbl">
+      <thead><tr><th>Mensagem ruim</th><th>Contexto</th><th>Mensagem corrigida</th></tr></thead>
+      <tbody>
+        <tr><td>teste</td><td>Verificou se o menu aparecia</td><td><code>feat: adiciona menu de navegação ao cabeçalho</code></td></tr>
+        <tr><td>ajuste</td><td>Corrigiu alinhamento do header</td><td><code>style: corrige alinhamento horizontal do cabeçalho</code></td></tr>
+        <tr><td>bug</td><td>Corrigiu link quebrado na nav</td><td><code>fix: corrige link quebrado na navegação para Cursos</code></td></tr>
+        <tr><td>coisas</td><td>Adicionou seção de cursos</td><td><code>feat: adiciona seção de cursos à página inicial</code></td></tr>
+        <tr><td>final</td><td>Atualizou o README</td><td><code>docs: atualiza README com instruções de instalação</code></td></tr>
+        <tr><td>agora vai</td><td>Corrigiu tag div para header</td><td><code>fix: substitui div por tag semântica header</code></td></tr>
+      </tbody>
+    </table>
+
+    <h3>Atividade — reescrever em dupla</h3>
+    <div class="cb">
+      <div class="cb-h"><span class="cb-lang">mensagens para reescrever</span><button class="cb-copy" onclick="cc(this)">Copiar</button></div>
+      <pre><span class="tred">mudei o css</span>           <span class="tmut">→ Qual tipo? O que mudou? Por quê?</span>
+<span class="tred">atualização</span>           <span class="tmut">→ De quê? Para quê?</span>
+<span class="tred">não sei</span>               <span class="tmut">→ Jamais commitar sem saber o que foi feito</span>
+<span class="tred">fix</span>                   <span class="tmut">→ Fix de quê?</span>
+<span class="tred">salvo</span>                 <span class="tmut">→ O Git já salva. O commit precisa descrever o que mudou.</span>
+<span class="tred">semana 3</span>              <span class="tmut">→ Histórico não é diário de bordo, é registro de intenção</span>
+<span class="tred">Implementa RN01 (estrutura) e RN02 (campos obrigatórios) em src/validacao.py. Testes em tests/test_validacao.py com cobertura de 87%.</span>
+<span class="tmut">→ Muito longo. Regra: máximo 72 caracteres. Detalhe no corpo se necessário.</span></pre>
+    </div>
+
+    <div class="box info">
+      <span class="bxi">💡</span>
+      <div class="bxc">
+        <strong>Teste mental antes de commitar</strong>
+        <p>Complete a frase: <em>"Se aplicado, este commit vai ___________"</em>. A resposta é o que vai depois do tipo. Exemplo: "vai <strong>adicionar o menu de navegação ao cabeçalho</strong>" → <code>feat: adiciona menu de navegação ao cabeçalho</code></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════
+     S16 — EXERCÍCIO 14: ISSUES COM LABELS
+══════════════════════════════════════════ -->
+<section class="section" id="s16">
+  <div class="sec-header">
+    <div class="sec-num">14</div>
+    <div class="sec-tg"><h2>Exercício 14 — Issues com Labels e Responsáveis</h2><p>Organizando tarefas como um projeto de verdade</p></div>
+  </div>
+
+  <div class="box objective">
+    <span class="bxi">🎯</span>
+    <div class="bxc">
+      <strong>Objetivo</strong>
+      <p>Criar Issues completas com labels, assignees, milestones e critérios de aceite. Uma Issue bem escrita elimina dúvidas durante o desenvolvimento.</p>
+    </div>
+  </div>
+
+  <div class="exercise">
+    <div class="ex-hdr">
+      <span class="ex-badge">Exercício 14</span>
+      <h3>🧪 Criando Issues estruturadas para o projeto final</h3>
+    </div>
+
+    <h3>Labels sugeridas para criar no repositório</h3>
+    <table class="tbl">
+      <thead><tr><th>Label</th><th>Cor sugerida</th><th>Quando usar</th></tr></thead>
+      <tbody>
+        <tr><td>feature</td><td>🔵 #0075ca</td><td>Nova funcionalidade ou página</td></tr>
+        <tr><td>bug</td><td>🔴 #d73a4a</td><td>Algo não funciona como esperado</td></tr>
+        <tr><td>documentation</td><td>🟢 #0075ca</td><td>Melhoria ou adição à documentação</td></tr>
+        <tr><td>style</td><td>🟣 #e4e669</td><td>Mudanças apenas visuais / CSS</td></tr>
+        <tr><td>enhancement</td><td>🟠 #a2eeef</td><td>Melhoria em algo que já existe</td></tr>
+        <tr><td>help wanted</td><td>⚪ #008672</td><td>Tarefa que precisa de colaboração</td></tr>
+        <tr><td>in progress</td><td>🟡 #fbca04</td><td>Alguém está trabalhando nisso agora</td></tr>
+        <tr><td>review</td><td>🟤 #c5def5</td><td>PR aberto, aguardando revisão</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Template de Issue com critérios de aceite</h3>
+    <div class="cb">
+      <div class="cb-h"><span class="cb-lang">markdown — issue bem estruturada</span><button class="cb-copy" onclick="cc(this)">Copiar</button></div>
+      <pre><span class="tmut">## Tarefa</span>
+<span class="tw">Implementar RN03 — verificar existência do lote na base de referência (src/base_referencia.py).</span>
+
+<span class="tmut">## Por que é necessário?</span>
+<span class="tw">Os visitantes precisam conhecer a turma e o projeto antes de navegar.</span>
+
+<span class="tmut">## Critérios de aceite</span>
+<span class="tw">- [ ] Arquivo sobre.html criado na raiz do projeto</span>
+<span class="tw">- [ ] Deve ter &lt;header&gt; com link de retorno à home</span>
+<span class="tw">- [ ] Deve ter um &lt;h1&gt; com "Sobre a Turma"</span>
+<span class="tw">- [ ] Deve ter um parágrafo descritivo (2-3 linhas)</span>
+<span class="tw">- [ ] Deve ter estilo CSS básico (importar style.css)</span>
+<span class="tw">- [ ] Link "Sobre" do menu principal deve funcionar</span>
+
+<span class="tmut">## Referência visual</span>
+<span class="tw">(Inserir print ou link se houver)</span>
+
+<span class="tmut">## Configuração</span>
+<span class="tw">- **Assignee:** @nome-do-aluno</span>
+<span class="tw">- **Label:** feature</span>
+<span class="tw">- **Milestone:** Sprint 1</span>
+<span class="tw">- **Estimativa:** 1-2 horas</span></pre>
+    </div>
+
+    <div class="box tip">
+      <span class="bxi">💡</span>
+      <div class="bxc">
+        <strong>Critérios de aceite = definição de "pronto"</strong>
+        <p>O aluno que faz o review usa os critérios de aceite como checklist. Se todos estão marcados, o PR pode ser aprovado. Isso evita interpretações diferentes do que "pronto" significa.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════
+     S17 — EXERCÍCIO 15: GITHUB PROJECTS
+══════════════════════════════════════════ -->
+<section class="section" id="s17">
+  <div class="sec-header">
+    <div class="sec-num">15</div>
+    <div class="sec-tg"><h2>Exercício 15 — GitHub Projects (Kanban)</h2><p>Gestão visual do fluxo de trabalho</p></div>
+  </div>
+
+  <div class="box objective">
+    <span class="bxi">🎯</span>
+    <div class="bxc">
+      <strong>Objetivo</strong>
+      <p>Criar um quadro Kanban no GitHub Projects e movimentar Issues pelo fluxo de trabalho, simulando um board de Sprint como equipes ágeis usam na prática.</p>
+    </div>
+  </div>
+
+  <div class="exercise">
+    <div class="ex-hdr">
+      <span class="ex-badge">Exercício 15</span>
+      <h3>🧪 Criando e usando o board do projeto</h3>
+    </div>
+
+    <h3>Estrutura do Kanban</h3>
+    <div class="kanban">
+      <div class="k-col k-backlog">
+        <div class="k-header">📋 Backlog</div>
+        <div class="k-body">
+          <div class="k-card docs">Issue #8: docs/readme</div>
+          <div class="k-card feature">Issue #6: contato.html</div>
+        </div>
+      </div>
+      <div class="k-col k-todo">
+        <div class="k-header">📌 To Do</div>
+        <div class="k-body">
+          <div class="k-card feature">Issue #3: cursos.html</div>
+          <div class="k-card feature">Issue #4: RN07 obs. reprovado</div>
+        </div>
+      </div>
+      <div class="k-col k-progress">
+        <div class="k-header">⚙️ In Progress</div>
+        <div class="k-body">
+          <div class="k-card feature">Issue #1: header (Aluno A)</div>
+          <div class="k-card feature">Issue #2: sobre (Aluno B)</div>
+        </div>
+      </div>
+      <div class="k-col k-review">
+        <div class="k-header">👁 Review</div>
+        <div class="k-body">
+          <div class="k-card bug">PR #7: fix/link-menu</div>
+        </div>
+      </div>
+      <div class="k-col k-done">
+        <div class="k-header">✅ Done</div>
+        <div class="k-body">
+          <div class="k-card docs">Issue #0: setup</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-n">1</div>
+        <div class="step-b">
+          <h4>Criar o Project</h4>
+          <p>No repositório: aba <strong>Projects → New project → Board</strong>. Nomear: <strong>"Sprint 1 — Site Colaborativo"</strong>.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-n">2</div>
+        <div class="step-b">
+          <h4>Criar as colunas</h4>
+          <p>Criar as 5 colunas: <strong>Backlog → To Do → In Progress → Review → Done</strong></p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-n">3</div>
+        <div class="step-b">
+          <h4>Vincular as Issues ao board</h4>
+          <p>Em cada Issue, clique em "Projects" → selecione o board criado. A Issue aparece automaticamente no Backlog.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-n">4</div>
+        <div class="step-b">
+          <h4>Movimentar conforme o trabalho avança</h4>
+          <ul class="bullet">
+            <li>Issue criada → <strong>To Do</strong></li>
+            <li>Aluno começa a trabalhar → <strong>In Progress</strong></li>
+            <li>PR aberto → <strong>Review</strong></li>
+            <li>PR aprovado e mergeado → <strong>Done</strong></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════
+     S18 — DINÂMICA: EQUIPE REAL
+══════════════════════════════════════════ -->
+<section class="section" id="s18">
+  <div class="sec-header">
+    <div class="sec-num">★</div>
+    <div class="sec-tg"><h2>Dinâmica — Simulando uma Equipe Real</h2><p>Papéis definidos, entrega real, fluxo completo</p></div>
+  </div>
+
+  <p>Esta dinâmica simula um ambiente profissional com papéis definidos. Cada aluno assume uma responsabilidade diferente durante o desenvolvimento de uma landing page para um curso de programação.</p>
+
+  <h3>Papéis da equipe</h3>
+  <div class="role-grid">
+    <div class="role-card">
+      <div class="role-tag rt-lead">👑 Product Owner</div>
+      <h4>Define as tarefas</h4>
+      <p>Cria as Issues com requisitos claros, define prioridades, aceita ou rejeita entregas com base nos critérios de aceite.</p>
+    </div>
+    <div class="role-card">
+      <div class="role-tag rt-dev">💻 Dev 1</div>
+      <h4>Implementa o header</h4>
+      <p>Cabeçalho com logo, navegação e hero section. Branch: <code>feature/header</code></p>
+    </div>
+    <div class="role-card">
+      <div class="role-tag rt-dev">💻 Dev 2</div>
+      <h4>Implementa o conteúdo</h4>
+      <p>Seções de benefícios, grade curricular e depoimentos. Branch: <code>feature/conteudo</code></p>
+    </div>
+    <div class="role-card">
+      <div class="role-tag rt-dev">💻 Dev 3</div>
+      <h4>Implementa o formulário</h4>
+      <p>Gerador de relatório .xlsx. Branch: <code>feature/relatorio</code></p>
+    </div>
+    <div class="role-card">
+      <div class="role-tag rt-rev">👁 Revisor</div>
+      <h4>Analisa os PRs</h4>
+      <p>Revisa código, verifica critérios de aceite, faz comentários construtivos e aprova ou solicita mudanças.</p>
+    </div>
+    <div class="role-card">
+      <div class="role-tag rt-int">🔀 Integrador</div>
+      <h4>Faz o merge</h4>
+      <p>Realiza o merge dos PRs aprovados, resolve conflitos que surgirem na integração, mantém a main estável.</p>
+    </div>
+  </div>
+
+  <h3>Regras da dinâmica</h3>
+  <ul class="bullet">
+    <li>O PO cria <strong>todas</strong> as Issues antes de qualquer dev começar</li>
+    <li>Cada dev cria <strong>exatamente uma branch</strong> para sua feature</li>
+    <li>Cada dev abre <strong>exatamente um PR</strong> quando terminar</li>
+    <li>O revisor deve deixar <strong>pelo menos 2 comentários</strong> em cada PR</li>
+    <li>O autor do PR deve <strong>responder</strong> a todos os comentários antes do merge</li>
+    <li>O integrador só faz merge após a aprovação do revisor</li>
+    <li><strong>Ninguém</strong> faz push direto na main</li>
+  </ul>
+
+  <h3>Entrega final da dinâmica</h3>
+  <p>Cada grupo apresenta para a turma:</p>
+  <div class="two-col">
+    <div>
+      <div class="cb">
+        <div class="cb-h"><span class="cb-lang">o que apresentar</span><button class="cb-copy" onclick="cc(this)">Copiar</button></div>
+        <pre><span class="tmut">1. Histórico de commits</span>
+<span class="tok">git log --oneline --graph</span>
+
+<span class="tmut">2. Branches criadas e mergeadas</span>
+<span class="tok">git branch -a</span>
+
+<span class="tmut">3. Issues fechadas</span>
+<span class="tmut"># Aba Issues → Closed</span>
+
+<span class="tmut">4. Pull Requests aceitos</span>
+<span class="tmut"># Aba Pull Requests → Closed
+
+<span class="tmut">5. O site funcionando no navegador</span></pre>
+      </div>
+    </div>
+    <div>
+      <div class="box concept">
+        <span class="bxi">🗣️</span>
+        <div class="bxc">
+          <strong>Perguntas para a apresentação</strong>
+          <p>
+            • Qual foi o maior conflito que encontraram?<br>
+            • O que fariam diferente se repetissem?<br>
+            • Qual papel foi mais desafiador?<br>
+            • O que aprenderam que não sabiam antes?
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════
+     S19 — PROJETO FINAL: PORTAL ACADÊMICO
+══════════════════════════════════════════ -->
+<section class="section" id="s19">
+  <div class="sec-header">
+    <div class="sec-num">🏆</div>
+    <div class="sec-tg"><h2>Projeto Final — Bot Conferência de Lotes</h2><p>Aplicar o GitHub Flow completo para construir o bot do PDD</p></div>
+  </div>
+
+  <div class="box concept">
+    <span class="bxi">🎯</span>
+    <div class="bxc">
+      <strong>Proposta do projeto</strong>
+      <p>Construir colaborativamente o <strong>bot de conferência de lotes</strong> — cada regra do PDD (RN01–RN07) vira uma Issue, é implementada em branch, revisada em PR e integrada via merge. A main deve terminar com o bot executável, testes com ≥80% de cobertura e tag v0.1.0.</p>
+    </div>
+  </div>
+
+  <h3>Estrutura do repositório</h3>
+  <div class="two-col">
+    <div>
+      <div class="cb">
+        <div class="cb-h"><span class="cb-lang">estrutura de arquivos</span><button class="cb-copy" onclick="cc(this)">Copiar</button></div>
+        <pre><span class="tok">conferencia-lotes-qualidade/</span>
+<span class="tok">├── bot.py               </span><span class="tmut">← entry point (nome fixo)</span>
+<span class="tok">├── requirements.txt     </span><span class="tmut">← dependências</span>
+<span class="tok">├── .env.example         </span><span class="tmut">← template sem valores reais</span>
+<span class="tok">├── .gitignore           </span><span class="tmut">← venv, .env, logs, data/output</span>
+<span class="tok">├── README.md            </span><span class="tmut">← como instalar e executar</span>
+<span class="tok">├── CHANGELOG.md         </span><span class="tmut">← histórico de versões</span>
+<span class="tok">├── src/</span>
+<span class="tok">│   ├── config.py        </span><span class="tmut">← variáveis de ambiente</span>
+<span class="tok">│   ├── validacao.py     </span><span class="tmut">← RN01–RN07 (PDD seção 12)</span>
+<span class="tok">│   ├── base_referencia.py</span><span class="tmut">← consulta à base de lotes</span>
+<span class="tok">│   └── relatorio.py     </span><span class="tmut">← gera divergencias.xlsx</span>
+<span class="tok">├── tests/</span>
+<span class="tok">│   └── test_validacao.py</span><span class="tmut">← cobertura ≥80%</span>
+<span class="tok">├── data/samples/        </span><span class="tmut">← planilha fictícia (25 registros)</span>
+<span class="tok">├── docs/pdd/            </span><span class="tmut">← PDD versionado</span>
+<span class="tok">└── .github/</span>
+<span class="tok">    └── pull_request_template.md</span></pre>
+      </div>
+    </div>
+    <div>
+      <h3>Distribuição de tarefas</h3>
+      <table class="tbl" style="font-size:.8rem">
+        <thead><tr><th>Aluno</th><th>Responsabilidade</th><th>Branch</th></tr></thead>
+        <tbody>
+          <tr><td>Aluno 1</td><td>RN01 + RN02 — estrutura e campos obrig.</td><td><code>feature/rn01-rn02-estrutura</code></td></tr>
+          <tr><td>Aluno 2</td><td>RN03 — verificar lote na base</td><td><code>feature/rn03-base-referencia</code></td></tr>
+          <tr><td>Aluno 3</td><td>RN04 + RN05 — status e normalização</td><td><code>feature/rn04-rn05-status</code></td></tr>
+          <tr><td>Aluno 4</td><td>RN07 — obs. obrigatória em reprovado</td><td><code>feature/rn07-obs-reprovado</code></td></tr>
+          <tr><td>Aluno 5</td><td>Relatório de divergências .xlsx</td><td><code>feature/relatorio-divergencias</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <h3>Regras obrigatórias do projeto</h3>
+  <div class="checklist">
+    <h4>📋 Checklist de entrega do projeto</h4>
+    <div class="cl-item"><div class="cl-box"></div>Repositório criado com README, .gitignore e templates</div>
+    <div class="cl-item"><div class="cl-box"></div>Branch protection ativa na main (require PR + 1 aprovação)</div>
+    <div class="cl-item"><div class="cl-box"></div>Todas as Issues criadas antes de qualquer branch</div>
+    <div class="cl-item"><div class="cl-box"></div>Nenhum aluno fez push direto na main</div>
+    <div class="cl-item"><div class="cl-box"></div>Todo PR está vinculado a uma Issue (Closes #N)</div>
+    <div class="cl-item"><div class="cl-box"></div>Todo PR tem pelo menos 1 review de um colega</div>
+    <div class="cl-item"><div class="cl-box"></div>Todo PR tem pelo menos 1 comentário de review</div>
+    <div class="cl-item"><div class="cl-box"></div>Todos os conflitos foram resolvidos pelo autor da branch</div>
+    <div class="cl-item"><div class="cl-box"></div>Branches de feature foram deletadas após o merge</div>
+    <div class="cl-item"><div class="cl-box"></div>Commit messages seguem Conventional Commits</div>
+    <div class="cl-item"><div class="cl-box"></div>Tag v1.0.0 criada e enviada ao GitHub</div>
+    <div class="cl-item"><div class="cl-box"></div>Release v1.0.0 criada no GitHub com notas descritivas</div>
+  </div>
+
+  <h3>Criando a tag e release de entrega</h3>
+  <div class="cb">
+    <div class="cb-h"><span class="cb-lang">bash — publicar v1.0.0</span><button class="cb-copy" onclick="cc(this)">Copiar</button></div>
+    <pre><span class="tmut"># Atualizar a main com todos os merges</span>
+<span class="tok">git switch main &amp;&amp; git pull origin main</span>
+
+<span class="tmut"># Verificar histórico final do projeto</span>
+<span class="tok">git log --oneline --graph</span>
+
+<span class="tmut"># Criar a tag anotada</span>
+<span class="tok">git tag -a v0.1.0 -m "Release v0.1.0 — Validação RN01-RN07 implementada"</span>
+
+<span class="tmut"># Enviar a tag ao GitHub</span>
+<span class="tok">git push origin v0.1.0</span>
+
+<span class="tmut"># Criar a Release no GitHub</span>
+<span class="tmut"># GitHub → Releases → Create a new release</span>
+<span class="tmut"># Tag: v0.1.0  |  Title: Bot Conferência de Lotes v0.1.0</span>
+<span class="tmut"># Description: listar as regras implementadas (RN01-RN07), cobertura de testes e status do bot</span></pre>
+  </div>
+
+  <div class="box info">
+    <span class="bxi">🔖</span>
+    <div class="bxc">
+      <strong>Por que criar uma Release?</strong>
+      <p>A Release é um marco rastreável — no projeto da LG Electronics, cada release corresponde a um conjunto de regras do PDD testadas e validadas. A tag v0.1.0 é a evidência de entrega exigida pelo Convênio 005/2025 e pode ser apresentada na banca de avaliação.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════
+     S20 — AVALIAÇÃO
+══════════════════════════════════════════ -->
+<section class="section" id="s20">
+  <div class="sec-header">
+    <div class="sec-num">📊</div>
+    <div class="sec-tg"><h2>Avaliação Prática</h2><p>Critérios objetivos para medir o aprendizado real</p></div>
+  </div>
+
+  <p>A avaliação é baseada em evidências <strong>rastreáveis no GitHub</strong> — não apenas no produto final, mas em todo o processo de desenvolvimento colaborativo.</p>
+
+  <h3>Tabela de critérios — 10 pontos</h3>
+  <table class="score-tbl">
+    <thead>
+      <tr><th>Critério</th><th>Como verificar</th><th>Pontos</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Criou Issue corretamente</td>
+        <td>Issue com título, descrição, assignee e label</td>
+        <td>1,0</td>
+      </tr>
+      <tr>
+        <td>Criou branch com nome adequado</td>
+        <td>Nome segue o padrão: <code>feature/nome</code>, <code>fix/nome</code>, etc.</td>
+        <td>1,0</td>
+      </tr>
+      <tr>
+        <td>Fez commits claros</td>
+        <td>Mensagens seguem Conventional Commits com intenção clara</td>
+        <td>1,5</td>
+      </tr>
+      <tr>
+        <td>Abriu Pull Request bem descrito</td>
+        <td>PR com título, descrição das mudanças e como testar</td>
+        <td>1,5</td>
+      </tr>
+      <tr>
+        <td>Vinculou PR à Issue</td>
+        <td>Descrição do PR contém <code>Closes #N</code></td>
+        <td>1,0</td>
+      </tr>
+      <tr>
+        <td>Revisou PR de colega</td>
+        <td>Pelo menos 1 review com comentário construtivo no PR de outro aluno</td>
+        <td>1,0</td>
+      </tr>
+      <tr>
+        <td>Corrigiu comentários da revisão</td>
+        <td>Commit adicional na branch respondendo ao feedback do revisor</td>
+        <td>1,0</td>
+      </tr>
+      <tr>
+        <td>Resolveu conflito ou atualizou branch</td>
+        <td>Branch atualizada com a main antes do merge, conflito resolvido se houver</td>
+        <td>1,0</td>
+      </tr>
+      <tr>
+        <td>Fez merge corretamente</td>
+        <td>Merge realizado via PR aprovado, branch deletada após</td>
+        <td>1,0</td>
+      </tr>
+      <tr>
+        <td>Total</td>
+        <td></td>
+        <td>10,0</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Como o professor verifica cada critério</h3>
+  <div class="cb">
+    <div class="cb-h"><span class="cb-lang">bash — verificações do professor</span><button class="cb-copy" onclick="cc(this)">Copiar</button></div>
+    <pre><span class="tmut"># 1. Verificar Issues criadas</span>
+<span class="tmut"># GitHub → Issues → All (ver se há descrição, label, assignee)</span>
+
+<span class="tmut"># 2. Verificar nomenclatura de branches</span>
+<span class="tok">git branch -a</span>
+<span class="tmut"># GitHub → Insights → Network (grafo visual)</span>
+
+<span class="tmut"># 3. Verificar qualidade dos commits</span>
+<span class="tok">git log --oneline --all --author="NomeDoAluno"</span>
+<span class="tmut"># GitHub → Commits (filtrar por autor)</span>
+
+<span class="tmut"># 4. Verificar PRs</span>
+<span class="tmut"># GitHub → Pull Requests → Closed (ver descrição de cada PR)</span>
+
+<span class="tmut"># 5. Verificar vínculo PR ↔ Issue</span>
+<span class="tmut"># No PR: ver se aparece "closes #N" na descrição</span>
+<span class="tmut"># Na Issue fechada: ver se aparece "Closed via #PR"</span>
+
+<span class="tmut"># 6. Verificar reviews</span>
+<span class="tmut"># Em cada PR: aba "Files changed" → reviews e comentários</span>
+
+<span class="tmut"># 7. Verificar correções pós-review</span>
+<span class="tmut"># No PR: ver se houve commit após "Request changes"</span>
+
+<span class="tmut"># 8. Verificar merge limpo</span>
+<span class="tok">git log --oneline --graph main</span>
+<span class="tmut"># Ver se não há branch aberta sem merge</span>
+
+<span class="tmut"># 9. Verificar tag e release</span>
+<span class="tok">git tag</span>
+<span class="tmut"># GitHub → Releases → ver se v1.0.0 existe com notas</span></pre>
+  </div>
+
+  <h3>Evidências que o aluno deve salvar</h3>
+  <div class="two-col">
+    <div>
+      <div class="checklist">
+        <h4>📸 Prints para o portfólio</h4>
+        <div class="cl-item"><div class="cl-box"></div>Print da Issue criada (com todos os campos)</div>
+        <div class="cl-item"><div class="cl-box"></div>Print do PR aberto (com a descrição completa)</div>
+        <div class="cl-item"><div class="cl-box"></div>Print do review que você fez (com comentários)</div>
+        <div class="cl-item"><div class="cl-box"></div>Print da tag v0.1.0 no GitHub</div>
+        <div class="cl-item"><div class="cl-box"></div>Print do histórico de commits (<code>git log --graph</code>)</div>
+      </div>
+    </div>
+    <div>
+      <div class="box tip">
+        <span class="bxi">🏆</span>
+        <div class="bxc">
+          <strong>Diferencial no mercado</strong>
+          <p>Um desenvolvedor que sabe usar Git e GitHub de forma colaborativa e profissional tem uma vantagem real na seleção. Coloque o link do repositório no LinkedIn e no currículo — os PRs, issues e histórico de commits falam por si mesmos.</p>
+        </div>
+      </div>
+      <div class="box info">
+        <span class="bxi">🔗</span>
+        <div class="bxc">
+          <strong>Checklist final de aprendizados</strong>
+          <p>
+            ☐ Crio Issues bem descritas<br>
+            ☐ Uso nomenclatura correta de branches<br>
+            ☐ Escrevo Conventional Commits<br>
+            ☐ Abro PRs com descrição completa<br>
+            ☐ Faço reviews construtivos<br>
+            ☐ Resolvo conflitos com calma<br>
+            ☐ Nunca faço push na main<br>
+            ☐ Crio tags e releases
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="footer">
+  <p>🤖 Git &amp; GitHub · Bot Conferência de Lotes · AX Academy / LG Electronics do Brasil</p>
+  <p style="margin-top:.3rem">Convênio N.º 005/2025 — INOVA | IFAM | LG Electronics do Brasil Ltda. · Polo Industrial de Manaus</p>
+</div>
+
+</main>
+
+<script>
+function cc(btn){
+  const pre=btn.closest('.cb').querySelector('pre');
+  navigator.clipboard.writeText(pre.innerText).then(()=>{
+    const o=btn.textContent;btn.textContent='✓ Copiado';btn.classList.add('copied');
+    setTimeout(()=>{btn.textContent=o;btn.classList.remove('copied')},2000);
+  });
+}
+const secs=document.querySelectorAll('section[id]');
+const navs=document.querySelectorAll('.nav-item[href]');
+const pF=document.getElementById('progFill');
+const pL=document.getElementById('progLabel');
+function onScroll(){
+  const sy=window.scrollY;
+  const dh=document.documentElement.scrollHeight-window.innerHeight;
+  const pct=Math.round((sy/dh)*100);
+  if(pF){pF.style.width=pct+'%';pL.textContent='Progresso: '+pct+'%';}
+  let cur='';
+  secs.forEach(s=>{if(sy>=s.offsetTop-130)cur=s.id;});
+  navs.forEach(a=>a.classList.toggle('active',a.getAttribute('href')==='#'+cur));
+}
+window.addEventListener('scroll',onScroll,{passive:true});
+onScroll();
+</script>
+</body>
+</html>
