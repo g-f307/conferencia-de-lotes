@@ -61,6 +61,13 @@ def test_rn06_separates_ambiguous_status_for_human_review():
         validate_lote(valid_item(status="pendente"), REFERENCE_LOTES)
 
 
+def test_rn06_treats_pendente_as_human_review_status():
+    with pytest.raises(HumanReviewStatus) as exc:
+        validate_lote(valid_item(status="PENDENTE"), REFERENCE_LOTES)
+
+    assert exc.value.status == "PENDENTE"
+
+
 def test_rn07_requires_observation_for_reproved_lote():
     with pytest.raises(ValidationError, match="RN07"):
         validate_lote(valid_item(status="NOK", observacao=""), REFERENCE_LOTES)

@@ -111,3 +111,40 @@ def test_performer_stops_when_datapool_returns_empty_item():
     assert queue.done == []
     assert queue.business_errors == []
     assert queue.system_errors == []
+
+
+def test_performer_marks_system_error_when_next_raises():
+    class BrokenQueue(FakeQueue):
+        def __init__(self):
+            super().__init__([])
+
+        def has_next(self):
+            return True
+
+        def next(self):
+            raise RuntimeError("fila indisponivel")
+
+    queue = BrokenQueue()
+    performer = LotePerformer(queue, {"L001"}, VaultClient(FakeVaultProvider()))
+
+    result = performer.run()
+
+    assert result.total == 0
+    assert result.system_errors == 1
+    assert queue.system_errors == [({}, "fila indisponivel")]
+
+
+def test_performer_waits_configured_delay_after_item():
+    sleeps = []
+    queue = FakeQueue([item()])
+    performer = LotePerformer(
+        queue,
+        {"L001"},
+        VaultClient(FakeVaultProvider()),
+        processing_delay_seconds=1,
+        sleep_fn=sleeps.append,
+    )
+
+    performer.run()
+
+    assert sleeps == [1]

@@ -15,9 +15,11 @@ def test_as_bool(value, expected):
 
 def test_settings_resolve_caminhos_relativos(monkeypatch, tmp_path: Path):
     monkeypatch.setenv("INPUT_DIR", "entrada_teste")
+    monkeypatch.setenv("INPUT_CSV", "entrada_teste/lotes.csv")
     monkeypatch.setenv("LOG_FILE", "saida/teste.log")
     settings = Settings.from_env(tmp_path)
     assert settings.input_dir == tmp_path / "entrada_teste"
+    assert settings.input_csv == tmp_path / "entrada_teste" / "lotes.csv"
     assert settings.log_file == tmp_path / "saida/teste.log"
 
 
@@ -46,6 +48,14 @@ def test_settings_carrega_lotes_de_referencia(monkeypatch, tmp_path: Path):
     settings = Settings.from_env(tmp_path)
 
     assert settings.reference_lotes == ("L010", "L011", "L012")
+
+
+def test_settings_carrega_delay_de_processamento(monkeypatch, tmp_path: Path):
+    monkeypatch.setenv("PROCESSING_DELAY_SECONDS", "0.25")
+
+    settings = Settings.from_env(tmp_path)
+
+    assert settings.processing_delay_seconds == 0.25
 
 
 def test_maestro_ativado_exige_chaves(monkeypatch, tmp_path: Path):

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass, field
-from typing import Iterable, Protocol
+from typing import Callable, Iterable, Protocol
 
 from src.validation import HumanReviewRequired, HumanReviewStatus, ValidationError, validate_lote
 from src.vault_client import ErpCredential, VaultClient
@@ -46,10 +47,14 @@ class LotePerformer:
         queue: QueueAdapter,
         reference_lotes: Iterable[str],
         vault_client: VaultClient,
+        processing_delay_seconds: float = 0,
+        sleep_fn: Callable[[float], None] = time.sleep,
     ) -> None:
         self.queue = queue
         self.reference_lotes = tuple(reference_lotes)
         self.vault_client = vault_client
+        self.processing_delay_seconds = processing_delay_seconds
+        self.sleep_fn = sleep_fn
 
     def run(self) -> PerformerResult:
         result = PerformerResult()
@@ -57,10 +62,18 @@ class LotePerformer:
         while self.queue.has_next():
             try:
                 item = self.queue.next()
-                if item is None:
-                    LOGGER.info("DataPool retornou item vazio; encerrando consumo")
-                    break
-                result.total += 1
+            except Exception as exc:
+                LOGGER.exception("Falha tecnica ao obter item da fila")
+                self.queue.mark_system_error({}, str(exc))
+                result.system_errors += 1
+                break
+
+            if item is None:
+                LOGGER.info("DataPool retornou item vazio; encerrando consumo")
+                break
+
+            result.total += 1
+            try:
                 if not credential_logged:
                     credential = self.vault_client.get_erp_credential()
                     self._log_erp_user(credential)
@@ -82,6 +95,9 @@ class LotePerformer:
                 LOGGER.exception("Falha tecnica ao processar item da fila")
                 self.queue.mark_system_error(item, str(exc))
                 result.system_errors += 1
+            finally:
+                if self.processing_delay_seconds > 0:
+                    self.sleep_fn(self.processing_delay_seconds)
 
         return result
 

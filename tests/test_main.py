@@ -58,6 +58,9 @@ class FakeMaestroClient:
         self.artifacts.append((artifact_name, path, summary))
         return path
 
+    def create_entry(self, data):
+        self.items.append(data)
+
 
 class FakeVaultProvider:
     def get_credential(self, label):
@@ -83,7 +86,11 @@ def settings_for(tmp_path, input_exists=True):
     settings = Settings.from_env(tmp_path)
     if input_exists:
         settings.input_dir.mkdir(parents=True)
-    return settings
+        settings.input_csv.write_text(
+            "lote_id,produto,linha,turno,status,responsavel,data,observacao\n",
+            encoding="utf-8",
+        )
+    return replace(settings, processing_delay_seconds=0)
 
 
 def test_fail_fast_quando_pasta_de_entrada_nao_existe(tmp_path):
@@ -163,13 +170,14 @@ def test_configuracao_invalida_falha_antes_do_processamento(tmp_path):
 
 def test_run_consumindo_datapool_e_publicando_resumo(tmp_path):
     settings = settings_for(tmp_path)
-    client = FakeMaestroClient(
-        [
-            lote_item(),
-            lote_item(lote_id="L999"),
-            lote_item(status="pendente"),
-        ]
+    settings.input_csv.write_text(
+        "lote_id,produto,linha,turno,status,responsavel,data,observacao\n"
+        "L001,Monitor,Linha A,Manha,APROVADO,Marcelo,2026-07-20,\n"
+        "L999,Monitor,Linha A,Manha,APROVADO,Marcelo,2026-07-20,\n"
+        "L001,Monitor,Linha A,Manha,pendente,Marcelo,2026-07-20,\n",
+        encoding="utf-8",
     )
+    client = FakeMaestroClient([])
     vault = VaultClient(FakeVaultProvider())
 
     result = run(

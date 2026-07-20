@@ -6,7 +6,7 @@ import pytest
 
 from src.bot import LotePerformer
 from src.config import Settings
-from src.dispatcher import DATAPOOL_FIELDS, dispatch_csv, iter_csv_rows
+from src.dispatcher import DATAPOOL_FIELDS, dispatch_csv, iter_csv_rows, run as run_dispatcher
 from src.maestro_client import BotCityMaestroGateway, DataPoolWorkItem, MaestroClient
 from src.validation import HumanReviewRequired
 from src.vault_client import VaultClient
@@ -125,6 +125,37 @@ def test_dispatcher_exige_campos_para_publicar_no_datapool(tmp_path):
         list(iter_csv_rows(csv_path))
 
     assert "linha" in str(exc.value)
+
+
+def test_dispatcher_rejeita_coluna_extra(tmp_path):
+    csv_path = write_csv(
+        tmp_path,
+        "lote_id,produto,linha,turno,status,responsavel,data,observacao,extra\n"
+        "LG-1,TV,L1,A,APROVADO,Ana,14/06/2026,,valor\n",
+    )
+
+    with pytest.raises(ValueError, match="campos inesperados: extra"):
+        list(iter_csv_rows(csv_path))
+
+
+def test_dispatcher_run_usa_input_csv_configurado(tmp_path):
+    settings = settings_for(tmp_path)
+    input_dir = tmp_path / "dados_entrada"
+    input_dir.mkdir()
+    input_csv = input_dir / "entrada.csv"
+    input_csv.write_text(
+        "lote_id,produto,linha,turno,status,responsavel,data,observacao\n"
+        "LG-1,TV,L1,A,APROVADO,Ana,14/06/2026,\n",
+        encoding="utf-8",
+    )
+    settings = replace(settings, input_dir=input_dir, input_csv=input_csv)
+    gateway = FakeGateway()
+    client = MaestroClient(settings, gateway=gateway)
+
+    published = run_dispatcher(settings=settings, maestro_client=client)
+
+    assert published == 1
+    assert gateway.created[0][1]["lote_id"] == "LG-1"
 
 
 def test_maestro_client_expoe_has_next_e_next(tmp_path):
@@ -294,6 +325,19 @@ def test_gateway_real_consume_item_com_task_id():
     assert isinstance(item, DataPoolWorkItem)
     assert item.get("lote_id") == "LG-1"
     assert item.entry is sdk.datapool.last_item
+    assert sdk.datapool.next_calls == [123]
+
+
+def test_gateway_real_retorna_none_quando_datapool_retorna_none():
+    sdk = FakeSdk()
+    sdk.datapool.next_item = None
+    error_type = SimpleNamespace(BUSINESS="BUSINESS", SYSTEM="SYSTEM")
+    alert_type = SimpleNamespace(INFO="INFO", ERROR="ERROR")
+    gateway = BotCityMaestroGateway(sdk, FakeDataPoolEntry, error_type, alert_type)
+
+    item = gateway.next("FilaAuditoriaLotes")
+
+    assert item is None
     assert sdk.datapool.next_calls == [123]
 
 

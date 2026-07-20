@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import json
 import logging
+import secrets
 from pathlib import Path
 from typing import Any, Iterable, Protocol
 
 from src.bot import LotePerformer, PerformerResult
 from src.config import Settings
+from src.dispatcher import dispatch_csv
 from src.logging_config import configure_logging
 from src.maestro_client import MaestroClient
 from src.models import ExecutionResult
@@ -55,6 +57,16 @@ class MissingVaultProvider:
         )
 
 
+class LocalVaultProvider:
+    """Credencial efemera para execucao local sem Maestro Vault."""
+
+    def get_credential(self, label: str) -> dict[str, str]:
+        return {
+            "username": "local.erp",
+            "password": secrets.token_urlsafe(16),
+        }
+
+
 def save_execution_report(result: ExecutionResult, report_dir: Path) -> Path:
     """Persiste o resumo local que depois sera publicado como artefato."""
     report_dir.mkdir(parents=True, exist_ok=True)
@@ -84,6 +96,8 @@ def build_vault_client(settings: Settings, client: SummaryGateway) -> VaultClien
     sdk = getattr(gateway, "sdk", None)
     if settings.vault_enabled and sdk is not None:
         return VaultClient(BotCityVaultProvider(sdk), settings.vault_label)
+    if not settings.vault_enabled:
+        return VaultClient(LocalVaultProvider(), settings.vault_label)
     return VaultClient(MissingVaultProvider(), settings.vault_label)
 
 
@@ -137,11 +151,14 @@ def run(
 
     try:
         client.send_start_alert()
+        published = dispatch_csv(current_settings.input_csv, client, logger=current_logger)
+        current_logger.info("Dispatcher publicou %s itens do CSV configurado", published)
         current_logger.info("Estrutura inicial validada; iniciando consumo do DataPool")
         performer = LotePerformer(
             client,
             reference_lotes or current_settings.reference_lotes,
             current_vault_client,
+            processing_delay_seconds=current_settings.processing_delay_seconds,
         )
         result = execution_result_from_performer(performer.run())
         client.post_summary_artifact(result.to_dict(), report_dir=current_settings.report_dir)

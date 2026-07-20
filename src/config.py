@@ -36,8 +36,10 @@ class Settings:
     vault_label: str
     reference_lotes: tuple[str, ...]
     input_dir: Path
+    input_csv: Path
     log_file: Path
     report_dir: Path
+    processing_delay_seconds: float
 
     @classmethod
     def from_env(cls, base_dir: Path | None = None) -> "Settings":
@@ -69,8 +71,10 @@ class Settings:
                 if lote.strip()
             ),
             input_dir=project_path("INPUT_DIR", "dados_entrada"),
+            input_csv=project_path("INPUT_CSV", "dados_entrada/lotes_auditoria.csv"),
             log_file=project_path("LOG_FILE", "logs/execucao.log"),
             report_dir=project_path("REPORT_DIR", "relatorios"),
+            processing_delay_seconds=float(os.getenv("PROCESSING_DELAY_SECONDS", "1")),
         )
 
     def validate(self) -> None:
