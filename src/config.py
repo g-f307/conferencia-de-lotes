@@ -31,6 +31,7 @@ class Settings:
     maestro_server: str
     maestro_login: str
     maestro_key: str
+    maestro_task_id: str
     datapool_label: str
     vault_label: str
     input_dir: Path
@@ -56,6 +57,7 @@ class Settings:
             maestro_server=os.getenv("MAESTRO_SERVER", "").strip(),
             maestro_login=os.getenv("MAESTRO_LOGIN", "").strip(),
             maestro_key=os.getenv("MAESTRO_KEY", "").strip(),
+            maestro_task_id=os.getenv("MAESTRO_TASK_ID", "").strip(),
             datapool_label=os.getenv(
                 "DATAPOOL_LABEL", "FilaAuditoriaLotes"
             ).strip(),
