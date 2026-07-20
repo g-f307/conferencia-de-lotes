@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import json
+import os
+from collections.abc import Iterator, Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Protocol
 
@@ -88,6 +91,33 @@ class InMemoryMaestroGateway:
         self.artifacts.append((name, path))
 
 
+@dataclass(frozen=True)
+class DataPoolWorkItem(Mapping[str, Any]):
+    """Item entregue ao Performer mantendo a referência do DataPoolEntry real."""
+
+    entry: Any
+    values: Mapping[str, Any]
+
+    @classmethod
+    def from_entry(cls, entry: Any) -> "DataPoolWorkItem":
+        values = getattr(entry, "values", None)
+        if values is None:
+            raise TypeError("DataPoolEntry recebido sem atributo values")
+        return cls(entry=entry, values=values)
+
+    def __getitem__(self, key: str) -> Any:
+        return self.values[key]
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self.values)
+
+    def __len__(self) -> int:
+        return len(self.values)
+
+    def get(self, key: str, default: Any = None) -> Any:
+        return self.values.get(key, default)
+
+
 class BotCityMaestroGateway:
     """Gateway real para operações do BotCity Maestro SDK."""
 
@@ -103,7 +133,7 @@ class BotCityMaestroGateway:
         self.datapool_entry_cls = datapool_entry_cls
         self.error_type = error_type
         self.alert_type = alert_type
-        self.task_id = task_id if task_id is not None else getattr(sdk, "task_id", None)
+        self.task_id = self._resolve_task_id(task_id if task_id is not None else getattr(sdk, "task_id", None))
 
     @classmethod
     def from_settings(cls, settings: Settings) -> "BotCityMaestroGateway":
@@ -115,13 +145,34 @@ class BotCityMaestroGateway:
                 "botcity-maestro-sdk deve estar instalado quando MAESTRO_ENABLED=true"
             ) from exc
 
-        sdk = BotMaestroSDK(
-            server=settings.maestro_server,
-            login=settings.maestro_login,
-            key=settings.maestro_key,
-        )
-        sdk.login()
-        return cls(sdk, DataPoolEntry, ErrorType, AlertType)
+        sdk = BotMaestroSDK.from_sys_args()
+        if not cls._is_valid_task_id(getattr(sdk, "task_id", None)):
+            sdk = BotMaestroSDK(
+                server=settings.maestro_server,
+                login=settings.maestro_login,
+                key=settings.maestro_key,
+            )
+            sdk.login()
+        task_id = settings.maestro_task_id or os.getenv("MAESTRO_TASK_ID", "")
+        return cls(sdk, DataPoolEntry, ErrorType, AlertType, task_id=task_id)
+
+    @staticmethod
+    def _is_valid_task_id(task_id: Any) -> bool:
+        return str(task_id or "").strip() not in {"", "0"}
+
+    def _resolve_task_id(self, configured_task_id: Any) -> str | int | None:
+        if self._is_valid_task_id(configured_task_id):
+            return configured_task_id
+        if self._is_valid_task_id(getattr(self.sdk, "task_id", None)):
+            return getattr(self.sdk, "task_id")
+        return None
+
+    def _require_task_id(self) -> str | int:
+        if not self._is_valid_task_id(self.task_id):
+            raise RuntimeError(
+                "MAESTRO_TASK_ID ausente ou inválido para operação dependente de task"
+            )
+        return self.task_id
 
     def _datapool(self, datapool_label: str) -> Any:
         return self.sdk.get_datapool(datapool_label)
@@ -133,33 +184,37 @@ class BotCityMaestroGateway:
     def has_next(self, datapool_label: str) -> bool:
         return self._datapool(datapool_label).has_next()
 
-    def next(self, datapool_label: str) -> Any:
-        return self._datapool(datapool_label).next(task_id=self.task_id)
+    def next(self, datapool_label: str) -> DataPoolWorkItem:
+        entry = self._datapool(datapool_label).next(task_id=self._require_task_id())
+        return DataPoolWorkItem.from_entry(entry)
+
+    def _entry_from_item(self, item: Any) -> Any:
+        return item.entry if isinstance(item, DataPoolWorkItem) else item
 
     def mark_done(self, item: Any, result: dict[str, str]) -> None:
-        item.report_done(finish_message="Lote processado com sucesso")
+        self._entry_from_item(item).report_done(finish_message="Lote processado com sucesso")
 
     def mark_business_error(self, item: Any, error: str) -> None:
-        item.report_error(
+        self._entry_from_item(item).report_error(
             error_type=self.error_type.BUSINESS,
             finish_message=error,
         )
 
     def mark_system_error(self, item: Any, error: str) -> None:
-        item.report_error(
+        self._entry_from_item(item).report_error(
             error_type=self.error_type.SYSTEM,
             finish_message=error,
         )
 
     def mark_human_review(self, item: Any, review: HumanReviewRequired) -> None:
-        item.report_error(
+        self._entry_from_item(item).report_error(
             error_type=self.error_type.BUSINESS,
             finish_message=review.reason,
         )
 
     def send_info_alert(self, message: str) -> None:
         self.sdk.alert(
-            task_id=self.task_id,
+            task_id=self._require_task_id(),
             title="Auditoria de lotes",
             message=message,
             alert_type=self.alert_type.INFO,
@@ -167,14 +222,14 @@ class BotCityMaestroGateway:
 
     def send_error_alert(self, message: str) -> None:
         self.sdk.alert(
-            task_id=self.task_id,
+            task_id=self._require_task_id(),
             title="Auditoria de lotes",
             message=message,
             alert_type=self.alert_type.ERROR,
         )
 
     def post_artifact(self, name: str, path: Path) -> None:
-        self.sdk.post_artifact(self.task_id, name, str(path))
+        self.sdk.post_artifact(self._require_task_id(), name, str(path))
 
 
 class MaestroClient:

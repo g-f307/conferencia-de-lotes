@@ -4,10 +4,12 @@ from types import SimpleNamespace
 
 import pytest
 
+from src.bot import LotePerformer
 from src.config import Settings
 from src.dispatcher import DATAPOOL_FIELDS, dispatch_csv, iter_csv_rows
-from src.maestro_client import BotCityMaestroGateway, MaestroClient
+from src.maestro_client import BotCityMaestroGateway, DataPoolWorkItem, MaestroClient
 from src.validation import HumanReviewRequired
+from src.vault_client import VaultClient
 
 
 class FakeGateway:
@@ -232,22 +234,26 @@ class FakeDataPool:
         self.created_entries = []
         self.next_calls = []
         self.next_item = FakeDataPoolEntry({"lote_id": "LG-1"})
+        self.last_item = None
 
     def create_entry(self, entry):
         self.created_entries.append(entry)
         return entry
 
     def has_next(self):
-        return True
+        return self.next_item is not None
 
     def next(self, task_id=None):
         self.next_calls.append(task_id)
-        return self.next_item
+        item = self.next_item
+        self.last_item = item
+        self.next_item = None
+        return item
 
 
 class FakeSdk:
-    def __init__(self):
-        self.task_id = 123
+    def __init__(self, task_id=123):
+        self.task_id = task_id
         self.datapool = FakeDataPool()
         self.datapool_labels = []
         self.alerts = []
@@ -285,7 +291,9 @@ def test_gateway_real_consume_item_com_task_id():
     assert gateway.has_next("FilaAuditoriaLotes") is True
     item = gateway.next("FilaAuditoriaLotes")
 
-    assert item is sdk.datapool.next_item
+    assert isinstance(item, DataPoolWorkItem)
+    assert item.get("lote_id") == "LG-1"
+    assert item.entry is sdk.datapool.last_item
     assert sdk.datapool.next_calls == [123]
 
 
@@ -328,3 +336,54 @@ def test_gateway_real_emite_alerta_info_erro_e_artefato(tmp_path):
         (123, "Auditoria de lotes", "Pasta de entrada inexistente", "ERROR"),
     ]
     assert sdk.artifacts == [(123, "resumo_execucao.json", str(artifact))]
+
+
+def test_gateway_real_falha_quando_task_id_esta_ausente_ou_zero():
+    sdk = FakeSdk(task_id=0)
+    error_type = SimpleNamespace(BUSINESS="BUSINESS", SYSTEM="SYSTEM")
+    alert_type = SimpleNamespace(INFO="INFO", ERROR="ERROR")
+    gateway = BotCityMaestroGateway(
+        sdk,
+        FakeDataPoolEntry,
+        error_type,
+        alert_type,
+        task_id=0,
+    )
+
+    with pytest.raises(RuntimeError, match="MAESTRO_TASK_ID"):
+        gateway.next("FilaAuditoriaLotes")
+
+
+class FakeVaultProvider:
+    def get_credential(self, label):
+        return {"username": "marcelo.erp", "password": "fake-password"}
+
+
+def test_maestro_client_integra_datapool_entry_com_performer(tmp_path):
+    sdk = FakeSdk()
+    error_type = SimpleNamespace(BUSINESS="BUSINESS", SYSTEM="SYSTEM")
+    alert_type = SimpleNamespace(INFO="INFO", ERROR="ERROR")
+    gateway = BotCityMaestroGateway(sdk, FakeDataPoolEntry, error_type, alert_type)
+    sdk.datapool.next_item = FakeDataPoolEntry(
+        {
+            "lote_id": "LG-1",
+            "produto": "TV",
+            "linha": "L1",
+            "turno": "A",
+            "status": "APROVADO",
+            "responsavel": "Marcelo",
+            "data": "14/06/2026",
+            "observacao": "",
+        }
+    )
+    client = MaestroClient(settings_for(tmp_path), gateway=gateway)
+    performer = LotePerformer(
+        client,
+        {"LG-1"},
+        VaultClient(FakeVaultProvider()),
+    )
+
+    result = performer.run()
+
+    assert result.success == 1
+    assert sdk.datapool.last_item.done_messages == ["Lote processado com sucesso"]

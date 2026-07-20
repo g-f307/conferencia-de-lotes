@@ -32,6 +32,14 @@ def test_maestro_desativado_nao_exige_chaves(monkeypatch, tmp_path: Path):
     Settings.from_env(tmp_path).validate()
 
 
+def test_settings_carrega_maestro_task_id(monkeypatch, tmp_path: Path):
+    monkeypatch.setenv("MAESTRO_TASK_ID", "123")
+
+    settings = Settings.from_env(tmp_path)
+
+    assert settings.maestro_task_id == "123"
+
+
 def test_maestro_ativado_exige_chaves(monkeypatch, tmp_path: Path):
     monkeypatch.setenv("MAESTRO_ENABLED", "true")
     monkeypatch.delenv("MAESTRO_SERVER", raising=False)
