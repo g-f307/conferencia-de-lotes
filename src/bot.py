@@ -1,0 +1,84 @@
+from __future__ import annotations
+
+import logging
+from dataclasses import dataclass, field
+from typing import Iterable, Protocol
+
+from src.validation import HumanReviewRequired, HumanReviewStatus, ValidationError, validate_lote
+from src.vault_client import ErpCredential, VaultClient
+
+
+LOGGER = logging.getLogger(__name__)
+
+
+class QueueAdapter(Protocol):
+    def has_next(self) -> bool:
+        raise NotImplementedError
+
+    def next(self) -> dict[str, object]:
+        raise NotImplementedError
+
+    def mark_done(self, item: dict[str, object], result: dict[str, str]) -> None:
+        raise NotImplementedError
+
+    def mark_business_error(self, item: dict[str, object], error: str) -> None:
+        raise NotImplementedError
+
+    def mark_system_error(self, item: dict[str, object], error: str) -> None:
+        raise NotImplementedError
+
+    def mark_human_review(self, item: dict[str, object], review: HumanReviewRequired) -> None:
+        raise NotImplementedError
+
+
+@dataclass
+class PerformerResult:
+    total: int = 0
+    success: int = 0
+    business_errors: int = 0
+    system_errors: int = 0
+    human_reviews: list[HumanReviewRequired] = field(default_factory=list)
+
+
+class LotePerformer:
+    def __init__(
+        self,
+        queue: QueueAdapter,
+        reference_lotes: Iterable[str],
+        vault_client: VaultClient,
+    ) -> None:
+        self.queue = queue
+        self.reference_lotes = tuple(reference_lotes)
+        self.vault_client = vault_client
+
+    def run(self) -> PerformerResult:
+        credential = self.vault_client.get_erp_credential()
+        self._log_erp_user(credential)
+
+        result = PerformerResult()
+        while self.queue.has_next():
+            item = self.queue.next()
+            result.total += 1
+            try:
+                validated = validate_lote(item, self.reference_lotes)
+                self.queue.mark_done(item, validated)
+                result.success += 1
+            except HumanReviewStatus as exc:
+                review = HumanReviewRequired(
+                    lote_id=str(item.get("lote_id") or "").strip(),
+                    status_original=exc.status,
+                )
+                self.queue.mark_human_review(item, review)
+                result.human_reviews.append(review)
+            except ValidationError as exc:
+                self.queue.mark_business_error(item, str(exc))
+                result.business_errors += 1
+            except Exception as exc:
+                LOGGER.exception("Falha tecnica ao processar item da fila")
+                self.queue.mark_system_error(item, str(exc))
+                result.system_errors += 1
+
+        return result
+
+    def _log_erp_user(self, credential: ErpCredential) -> None:
+        LOGGER.info("ERP autenticado com usuario %s", credential.username)
