@@ -7,3 +7,4 @@ __pycache__/
 htmlcov/
 logs/*.log
 relatorios/*.json
+Atividade.pdf

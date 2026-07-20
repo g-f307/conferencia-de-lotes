@@ -1,4 +1,4 @@
-"""Leitura da entrada e publicação dos lotes no DataPool do Maestro."""
+"""Leitura da entrada e publicacao dos lotes no DataPool do Maestro."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import logging
 from pathlib import Path
 from typing import Iterable
 
+from src.config import Settings
 from src.maestro_client import MaestroClient
 
 
@@ -23,19 +24,27 @@ DATAPOOL_FIELDS = (
 
 
 def normalize_row(row: dict[str, str | None]) -> dict[str, str]:
-    """Mantém só os campos do DataPool, sem aplicar regras de negócio."""
+    """Mantem so os campos do DataPool, sem aplicar regras de negocio."""
     return {field: (row.get(field) or "").strip() for field in DATAPOOL_FIELDS}
 
 
 def iter_csv_rows(csv_path: Path) -> Iterable[dict[str, str]]:
-    """Lê o CSV usando cabeçalho, sem depender da posição das colunas."""
+    """Le o CSV com cabecalho e exige exatamente as oito colunas oficiais."""
     with csv_path.open(newline="", encoding="utf-8-sig") as file:
         reader = csv.DictReader(file)
-        missing = [field for field in DATAPOOL_FIELDS if field not in (reader.fieldnames or [])]
-        if missing:
+        fieldnames = tuple(reader.fieldnames or ())
+        missing = [field for field in DATAPOOL_FIELDS if field not in fieldnames]
+        unexpected = [field for field in fieldnames if field not in DATAPOOL_FIELDS]
+        if missing or unexpected:
+            details = []
+            if missing:
+                details.append("campos ausentes: " + ", ".join(missing))
+            if unexpected:
+                details.append("campos inesperados: " + ", ".join(unexpected))
             raise ValueError(
-                "CSV sem campos obrigatórios para publicação: " + ", ".join(missing)
+                "CSV deve conter exatamente os campos do DataPool: " + "; ".join(details)
             )
+
         for row in reader:
             yield normalize_row(row)
 
@@ -56,3 +65,24 @@ def dispatch_csv(
 
     current_logger.info("Itens publicados no DataPool: %s", published)
     return published
+
+
+def run(
+    settings: Settings | None = None,
+    maestro_client: MaestroClient | None = None,
+    logger: logging.Logger | None = None,
+) -> int:
+    """Executa o Dispatcher usando o INPUT_CSV configurado."""
+    current_settings = settings or Settings.from_env()
+    client = maestro_client or MaestroClient(current_settings)
+    return dispatch_csv(current_settings.input_csv, client, logger=logger)
+
+
+def main() -> int:
+    """Entry point para alimentar o DataPool a partir do CSV."""
+    run()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

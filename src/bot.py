@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass, field
-from typing import Iterable, Protocol
+from typing import Callable, Iterable, Protocol
 
 from src.validation import HumanReviewRequired, HumanReviewStatus, ValidationError, validate_lote
 from src.vault_client import ErpCredential, VaultClient
@@ -15,7 +16,7 @@ class QueueAdapter(Protocol):
     def has_next(self) -> bool:
         raise NotImplementedError
 
-    def next(self) -> dict[str, object]:
+    def next(self) -> dict[str, object] | None:
         raise NotImplementedError
 
     def mark_done(self, item: dict[str, object], result: dict[str, str]) -> None:
@@ -40,27 +41,48 @@ class PerformerResult:
     human_reviews: list[HumanReviewRequired] = field(default_factory=list)
 
 
+class QueueItemFetchError(RuntimeError):
+    """Falha tecnica antes de existir item do DataPool para finalizar."""
+
+
 class LotePerformer:
     def __init__(
         self,
         queue: QueueAdapter,
         reference_lotes: Iterable[str],
         vault_client: VaultClient,
+        processing_delay_seconds: float = 0,
+        sleep_fn: Callable[[float], None] = time.sleep,
     ) -> None:
         self.queue = queue
         self.reference_lotes = tuple(reference_lotes)
         self.vault_client = vault_client
+        self.processing_delay_seconds = processing_delay_seconds
+        self.sleep_fn = sleep_fn
 
     def run(self) -> PerformerResult:
-        credential = self.vault_client.get_erp_credential()
-        self._log_erp_user(credential)
-
         result = PerformerResult()
+        credential_logged = False
         while self.queue.has_next():
-            item = self.queue.next()
+            try:
+                item = self.queue.next()
+            except Exception as exc:
+                LOGGER.exception("Falha tecnica ao obter item da fila")
+                raise QueueItemFetchError("Falha tecnica ao obter item da fila") from exc
+
+            if item is None:
+                LOGGER.info("DataPool retornou item vazio; encerrando consumo")
+                break
+
             result.total += 1
             try:
+                if not credential_logged:
+                    credential = self.vault_client.get_erp_credential()
+                    self._log_erp_user(credential)
+                    credential_logged = True
                 validated = validate_lote(item, self.reference_lotes)
+                if self.processing_delay_seconds > 0:
+                    self.sleep_fn(self.processing_delay_seconds)
                 self.queue.mark_done(item, validated)
                 result.success += 1
             except HumanReviewStatus as exc:

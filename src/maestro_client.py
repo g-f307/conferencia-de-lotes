@@ -22,7 +22,7 @@ class MaestroGateway(Protocol):
     def has_next(self, datapool_label: str) -> bool:
         ...
 
-    def next(self, datapool_label: str) -> dict[str, str]:
+    def next(self, datapool_label: str) -> dict[str, str] | None:
         ...
 
     def mark_done(self, item: Any, result: dict[str, str]) -> None:
@@ -66,7 +66,7 @@ class InMemoryMaestroGateway:
     def has_next(self, datapool_label: str) -> bool:
         return bool(self.entries.get(datapool_label))
 
-    def next(self, datapool_label: str) -> dict[str, str]:
+    def next(self, datapool_label: str) -> dict[str, str] | None:
         return self.entries.setdefault(datapool_label, []).pop(0)
 
     def mark_done(self, item: Any, result: dict[str, str]) -> None:
@@ -184,8 +184,10 @@ class BotCityMaestroGateway:
     def has_next(self, datapool_label: str) -> bool:
         return self._datapool(datapool_label).has_next()
 
-    def next(self, datapool_label: str) -> DataPoolWorkItem:
+    def next(self, datapool_label: str) -> DataPoolWorkItem | None:
         entry = self._datapool(datapool_label).next(task_id=self._require_task_id())
+        if entry is None:
+            return None
         return DataPoolWorkItem.from_entry(entry)
 
     def _entry_from_item(self, item: Any) -> Any:
@@ -263,7 +265,7 @@ class MaestroClient:
         """Indica se há item disponível para o Performer."""
         return self.gateway.has_next(self.datapool_label)
 
-    def next(self) -> dict[str, str]:
+    def next(self) -> dict[str, str] | None:
         """Obtém o próximo item da fila configurada."""
         return self.gateway.next(self.datapool_label)
 
