@@ -1,478 +1,312 @@
-# Auditor de Lotes v1.0 — roteiro de trabalho da equipe
+# Conferência de Lotes
 
-Este repositório começa apenas com os documentos do processo. O código deve ser construído pela equipe usando GitHub Flow, de modo que o histórico mostre claramente o trabalho de Gabriel, Marcelo e Rebecca.
+Automação para auditoria de registros de inspeção de lotes, desenvolvida em Python e preparada para integração com o ecossistema BotCity Maestro. O projeto organiza a entrada em uma fila do DataPool, aplica regras de negócio por item, separa exceções para revisão humana e mantém evidências técnicas da execução.
 
-## 1. Antes de programar: revisão conjunta do BPMN e PDD
+## Visão geral
 
-Os três integrantes devem fazer uma reunião curta e revisar:
+O processo recebe registros de inspeção sujeitos a inconsistências de preenchimento e status. A solução divide o processamento em dois componentes:
 
-- `docs/diagrama_pdd.bpmn` e `docs/diagrama_pdd.svg`;
-- `docs/Regras de validação a aplicar - Gabriel, Marcelo e Rebecca.docx.pdf`;
-- `docs/Inspeção de Lotes - Gabriel, Marcelo e Rebecca.xlsx`;
-- `docs/WhatsApp Image 2026-06-23 at 09.45.04.jpeg`;
-- `docs/index_lotes (1).html`.
+1. **Dispatcher:** lê um arquivo CSV e publica uma entrada por linha no DataPool `FilaAuditoriaLotes`.
+2. **Performer:** consome os itens da fila, recupera a credencial do ERP, aplica as regras RN01–RN07 e reporta o resultado individual de cada lote.
 
-Decisões que precisam ser registradas em uma Issue de documentação:
+O desenho considera resiliência por item: uma inconsistência de negócio não interrompe o processamento dos demais registros.
 
-1. O cenário real é **Inspeção de Lotes**, embora parte do enunciado use o exemplo genérico de auditoria de usuários e CPF.
-2. O DataPool usado no projeto será `FilaAuditoriaLotes`.
-3. Cada item da fila representa uma linha/lote da planilha.
-4. Campo obrigatório vazio será um `ValidationError`, equivalente ao exemplo do CPF vazio.
-5. Status ambíguo não será decidido pelo bot; será separado para revisão humana.
-6. A senha do ERP ficará somente no Credentials Vault.
+## Objetivo
 
-Ao final da reunião, Gabriel cria uma Issue chamada `docs: registrar revisão inicial do BPMN e PDD`. Marcelo e Rebecca comentam na Issue confirmando a revisão. Essa Issue é encerrada por um pequeno PR de documentação, antes das features.
+Padronizar e tornar rastreável a conferência de lotes, reduzindo retrabalho causado por campos ausentes, status inválidos, lotes sem referência e reprovações sem justificativa.
 
-## 2. Divisão técnica equilibrada
+Os objetivos técnicos são:
 
-Cada pessoa fica responsável por uma entrega completa e independente: Issue, branch, código, testes, documentação do próprio módulo e correções pedidas no review.
+- eliminar caminhos fixos e configurações sensíveis do código;
+- falhar imediatamente quando a estrutura mínima de entrada não existir;
+- manter logs locais com data, hora e severidade;
+- distribuir o processamento pelo DataPool do Maestro;
+- recuperar credenciais por uma abstração de Vault, sem registrar a senha;
+- distinguir erros de negócio, falhas de sistema e casos de revisão humana;
+- produzir um resumo serializável da execução;
+- permitir testes locais sem conexão ou credenciais reais do Maestro.
 
-| Pessoa | Responsabilidade técnica | Arquivos previstos | Revisor principal |
-|---|---|---|---|
-| Gabriel | Estrutura, configuração, logs, fail-fast, `ExecutionResult` e fechamento da execução | `bot.py`, `src/main.py`, `src/config.py`, configuração de logs | Rebecca |
-| Marcelo | Integração Maestro, Dispatcher, DataPool, alertas e artefato JSON | `src/dispatcher.py`, `src/maestro_client.py`, testes do DataPool | Gabriel |
-| Rebecca | RN01–RN07, Performer, `ValidationError` e Credentials Vault | `src/bot.py`, `src/validation.py`, `src/vault_client.py`, testes das regras | Marcelo |
+## Escopo implementado
 
-Gabriel administra o repositório, mas não implementa as partes de Marcelo e Rebecca. Cada autor corrige e conclui o próprio PR.
+- configuração por variáveis de ambiente;
+- resolução de caminhos relativos à raiz do projeto;
+- validação fail-fast da pasta `dados_entrada/`;
+- logs locais em `logs/execucao.log`;
+- saída padronizada por `ExecutionResult`;
+- leitura de CSV por cabeçalho;
+- publicação de uma entrada por linha no DataPool;
+- gateway local em memória para desenvolvimento e testes;
+- gateway real com `BotMaestroSDK`, `DataPoolEntry`, alertas e artefatos;
+- associação dos itens a um `task_id` válido;
+- consumo resiliente pelo Performer;
+- regras RN01–RN07;
+- normalização de `OK` e `NOK`;
+- separação de status ambíguos para revisão humana;
+- abstração de acesso à credencial `credencial_erp`;
+- testes unitários e de integração entre os módulos.
 
-## 3. Preparação inicial do repositório — Gabriel
+## Fora do escopo atual
 
-### 3.1 Criar o repositório local
+- leitura direta de arquivos XLSX pelo Dispatcher;
+- download automático de anexos de e-mail;
+- navegação ou lançamento de dados em um ERP real;
+- implementação concreta do provedor BotCity Credentials Vault;
+- tela ou formulário para tratamento dos casos de revisão humana;
+- atualização automática da base de referência de lotes;
+- implantação e agendamento em ambiente produtivo;
+- composição ponta a ponta no entry point principal.
 
-Na raiz deste projeto:
+O arquivo `bot.py` atualmente executa configuração, criação do log e fail-fast. Dispatcher, Performer, Maestro e Vault estão disponíveis como módulos, mas ainda precisam ser conectados ao ciclo completo em `src/main.py`.
 
-```bash
-git init -b main
-git status
-git add README.md docs/
-git commit -m "docs: adicionar materiais base e plano de colaboracao"
+## Processo de negócio
+
+![Diagrama BPMN do processo de inspeção de lotes](docs/diagrama_pdd.svg)
+
+O arquivo-fonte editável está disponível em [`docs/diagrama_pdd.bpmn`](docs/diagrama_pdd.bpmn). Os demais documentos de levantamento e evidências permanecem na pasta `docs/`.
+
+## Regras de validação
+
+| Regra | Comportamento implementado |
+|---|---|
+| RN01 | Exige exatamente as colunas `lote_id`, `produto`, `linha`, `turno`, `status`, `responsavel`, `data` e `observacao`. |
+| RN02 | Exige preenchimento de todos os campos, exceto `observacao`. |
+| RN03 | Verifica se `lote_id` pertence à base de referência informada ao Performer. |
+| RN04 | Aceita como estados finais `APROVADO` e `REPROVADO`. |
+| RN05 | Normaliza `OK` para `APROVADO` e `NOK` para `REPROVADO`. |
+| RN06 | Encaminha `PENDENTE`, `EM ANALISE`, `A REVISAR` e `REVISAO` para revisão humana. |
+| RN07 | Exige observação quando o status final é `REPROVADO`. |
+
+Erros RN01, RN02, RN03, RN04 e RN07 são tratados como erros de negócio. RN06 gera uma pendência de revisão humana. Exceções técnicas inesperadas são classificadas como erros de sistema.
+
+## Arquitetura
+
+```text
+CSV
+ └── Dispatcher
+      └── MaestroClient
+           ├── InMemoryMaestroGateway
+           └── BotCityMaestroGateway
+                └── FilaAuditoriaLotes
+                     └── LotePerformer
+                          ├── VaultClient
+                          ├── RN01–RN07
+                          └── resultado por item
 ```
 
-### 3.2 Criar o repositório no GitHub
+Os módulos de domínio não dependem diretamente do SDK. Protocolos e adaptadores isolam DataPool, alertas e credenciais, permitindo substituir integrações reais por objetos controlados nos testes.
 
-No GitHub:
+## Estrutura do repositório
 
-1. Clicar em **New repository**.
-2. Repositório criado: `g-f307/conferencia-de-lotes`.
-3. Não marcar criação automática de README, `.gitignore` ou licença, pois o projeto local já possui conteúdo.
-4. Copiar a URL apresentada pelo GitHub.
-
-Depois, no terminal:
-
-```bash
-git remote add origin https://github.com/g-f307/conferencia-de-lotes.git
-git remote -v
-git push -u origin main
+```text
+.
+├── bot.py                         # entry point atual
+├── dados_entrada/                 # arquivos recebidos para processamento
+├── docs/
+│   ├── GUIA_COLABORACAO_GIT.md    # roteiro Git/GitHub da equipe
+│   ├── diagrama_pdd.bpmn          # fonte BPMN
+│   └── diagrama_pdd.svg           # visualização do processo
+├── logs/                          # logs locais; arquivos .log não são versionados
+├── src/
+│   ├── bot.py                     # Performer e resultado por lote
+│   ├── config.py                  # variáveis de ambiente e caminhos
+│   ├── dispatcher.py              # CSV para DataPool
+│   ├── logging_config.py          # configuração do log local
+│   ├── maestro_client.py          # gateways local e BotCity
+│   ├── main.py                    # configuração e fail-fast
+│   ├── models.py                  # ExecutionResult
+│   ├── validation.py              # RN01–RN07
+│   └── vault_client.py            # contrato de credenciais do ERP
+├── tests/                         # testes automatizados
+├── .env.example                   # modelo de configuração sem segredos
+├── requirements.txt               # dependências de execução
+└── requirements-dev.txt           # dependências de desenvolvimento
 ```
 
-### 3.3 Adicionar a equipe
+## Requisitos
 
-No repositório do GitHub:
+- Python 3.10 ou superior;
+- acesso ao BotCity Maestro para operações reais;
+- DataPool previamente criado;
+- credencial técnica do workspace Maestro;
+- `task_id` fornecido pelo Runner ou configurado para desenvolvimento.
 
-1. Entrar em **Settings → Collaborators**.
-2. Adicionar as contas de Marcelo e Rebecca.
-3. Os dois devem aceitar o convite antes de começar.
-4. Cada integrante deve clonar o repositório na própria máquina:
+## Preparação do ambiente local
+
+Clone o repositório e entre no diretório:
 
 ```bash
 git clone https://github.com/g-f307/conferencia-de-lotes.git
 cd conferencia-de-lotes
-git status
 ```
 
-### 3.4 Proteger a `main`
+Crie e ative um ambiente virtual:
 
-Em **Settings → Branches/Rulesets**, criar uma regra para `main` com:
+```bash
+python -m venv .venv
+source .venv/bin/activate
+```
 
-- Pull Request obrigatório;
-- pelo menos uma aprovação;
-- conversas resolvidas antes do merge;
-- aprovação antiga descartada quando houver novos commits;
-- bloqueio de force push;
-- bloqueio de exclusão da `main`.
+No Windows PowerShell:
 
-Quando a CI for criada, Gabriel acrescenta a exigência de testes aprovados.
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+```
 
-## 4. Criar as Issues antes das branches
+Instale as dependências:
 
-As Issues devem ser criadas no GitHub antes de alguém programar.
+```bash
+python -m pip install -r requirements-dev.txt
+```
 
-### Issue 1 — Gabriel
+Crie a configuração local:
 
-Título:
+```bash
+cp .env.example .env
+```
+
+Crie as pastas operacionais, caso ainda não existam:
+
+```bash
+mkdir -p dados_entrada logs relatorios
+```
+
+## Configuração
+
+| Variável | Finalidade | Exemplo seguro |
+|---|---|---|
+| `MAESTRO_ENABLED` | Seleciona o gateway real do Maestro. | `false` |
+| `VAULT_ENABLED` | Indica uso obrigatório do Vault quando o Maestro está ativo. | `false` |
+| `MAESTRO_SERVER` | Endereço do workspace Maestro. | vazio no repositório |
+| `MAESTRO_LOGIN` | Identificador técnico do workspace. | vazio no repositório |
+| `MAESTRO_KEY` | Chave técnica do workspace. | vazio no repositório |
+| `MAESTRO_TASK_ID` | Task usada em execução local; o Runner fornece a sua própria. | vazio no repositório |
+| `DATAPOOL_LABEL` | Fila de auditoria. | `FilaAuditoriaLotes` |
+| `VAULT_LABEL` | Label da credencial do ERP. | `credencial_erp` |
+| `INPUT_DIR` | Diretório de entrada. | `dados_entrada` |
+| `LOG_FILE` | Arquivo de log. | `logs/execucao.log` |
+| `REPORT_DIR` | Diretório dos relatórios JSON. | `relatorios` |
+
+O `.env` não deve ser versionado. A senha do ERP não pertence ao `.env` nem ao código; deve ser recuperada pelo provedor de credenciais em tempo de execução.
+
+## Execução local
+
+Com `MAESTRO_ENABLED=false`, execute a validação estrutural e o fail-fast:
+
+```bash
+python bot.py
+```
+
+Com a pasta `dados_entrada/` disponível, o comando encerra com código `0` e registra que a estrutura está pronta para o Performer. Se a pasta estiver ausente, encerra com código diferente de zero e registra um erro.
+
+O Dispatcher e o Performer ainda não possuem comandos CLI próprios. Eles são consumidos programaticamente pelas funções e classes:
+
+```python
+from src.dispatcher import dispatch_csv
+from src.bot import LotePerformer
+```
+
+A execução real no Maestro exige `MAESTRO_ENABLED=true`, configuração técnica válida, DataPool existente e `task_id` não vazio.
+
+## Configuração no BotCity Maestro
+
+### DataPool
+
+Crie o DataPool `FilaAuditoriaLotes` com os seguintes campos de texto:
 
 ```text
-feat: criar estrutura, configuração e ciclo de execução
+lote_id
+produto
+linha
+turno
+status
+responsavel
+data
+observacao
 ```
 
-Descrição sugerida:
+O gateway publica itens com `DataPoolEntry`, consome usando o `task_id` e finaliza cada entrada com sucesso ou erro de negócio/sistema.
 
-```markdown
-## Objetivo
-Criar a estrutura modular do bot e o ciclo principal de execução.
+### Credentials Vault
 
-## Critérios de aceite
-- [ ] Existem bot.py, src/main.py e src/config.py
-- [ ] Não existem caminhos absolutos no código
-- [ ] Variáveis não sigilosas são carregadas do .env
-- [ ] A pasta dados_entrada é validada antes do processamento
-- [ ] A ausência da pasta encerra imediatamente a execução
-- [ ] logs/execucao.log contém data, hora e severidade
-- [ ] A saída utiliza ExecutionResult
-- [ ] Há testes da configuração e do fail-fast
-
-## Fora do escopo
-Dispatcher, DataPool, RN01-RN07 e acesso ao Vault.
-```
-
-Assignee: Gabriel. Labels: `feature`, `priority:high`.
-
-### Issue 2 — Marcelo
-
-Título:
+Crie uma credencial com o label:
 
 ```text
-feat: integrar dispatcher e fila do Maestro
+credencial_erp
 ```
 
-Descrição sugerida:
-
-```markdown
-## Objetivo
-Criar o Dispatcher e encapsular a integração com o BotCity Maestro.
-
-## Critérios de aceite
-- [ ] O CSV é lido linha por linha
-- [ ] Cada linha gera um DataPoolEntry
-- [ ] A fila utilizada é FilaAuditoriaLotes
-- [ ] O Performer pode obter itens com has_next e next
-- [ ] O início registra "Iniciando auditoria de acessos"
-- [ ] É possível emitir alerta de pasta ausente
-- [ ] O resumo JSON pode ser enviado como artefato
-- [ ] Os testes não dependem de credenciais reais
-
-## Fora do escopo
-Implementação das RN01-RN07 e leitura da senha do ERP.
-```
-
-Assignee: Marcelo. Labels: `feature`, `integration`.
-
-### Issue 3 — Rebecca
-
-Título:
+O contrato atual espera um provedor que retorne:
 
 ```text
-feat: implementar performer, validacoes e vault
+username
+password
 ```
 
-Descrição sugerida:
+Somente o nome do usuário pode aparecer no log. A senha nunca deve ser impressa, persistida em relatório ou adicionada ao repositório.
 
-```markdown
-## Objetivo
-Implementar RN01-RN07, consumo resiliente e credencial do ERP.
+## Testes
 
-## Critérios de aceite
-- [ ] RN01 valida as oito colunas
-- [ ] RN02 valida campos obrigatórios
-- [ ] RN03 verifica lote na base de referência
-- [ ] RN04 aceita somente os status oficiais
-- [ ] RN05 normaliza OK e NOK antes da validação
-- [ ] RN06 separa status ambíguo para revisão humana
-- [ ] RN07 exige observação em lote reprovado
-- [ ] ValidationError marca somente o item como erro e o loop continua
-- [ ] Usuário e senha são recuperados do Vault credencial_erp
-- [ ] Somente o nome do usuário aparece no log
-- [ ] Existem testes positivos e negativos
-```
-
-Assignee: Rebecca. Labels: `feature`, `security`, `priority:high`.
-
-## 5. Fluxo individual: Issue → branch → código → PR
-
-Cada integrante repete o processo abaixo na própria Issue.
-
-### 5.1 Atualizar a `main`
+Execute a suíte completa:
 
 ```bash
-git switch main
-git pull --ff-only origin main
-git status
-```
-
-O resultado de `git status` deve indicar uma árvore limpa antes de criar a branch.
-
-### 5.2 Criar a branch ligada à Issue
-
-Gabriel:
-
-```bash
-git switch -c feature/1-core-configuracao
-```
-
-Marcelo:
-
-```bash
-git switch -c feature/2-maestro-datapool
-```
-
-Rebecca:
-
-```bash
-git switch -c feature/3-validacoes-vault
-```
-
-Confirmar:
-
-```bash
-git branch --show-current
-```
-
-### 5.3 Trabalhar somente no próprio escopo
-
-Durante a implementação:
-
-```bash
-git status
-git diff
-```
-
-Evitar que um PR altere arquivos pertencentes à entrega de outro integrante. Quando uma interface entre módulos for necessária, os envolvidos combinam primeiro na Issue.
-
-### 5.4 Fazer commits pequenos
-
-Exemplos para Gabriel:
-
-```bash
-git add src/config.py
-git commit -m "feat(config): carregar variaveis de ambiente refs #1"
-
-git add src/main.py tests/
-git commit -m "feat(core): adicionar fail-fast e resultado de execucao refs #1"
-```
-
-Exemplos para Marcelo:
-
-```bash
-git add src/dispatcher.py tests/
-git commit -m "feat(dispatcher): publicar linhas no datapool refs #2"
-
-git add src/maestro_client.py
-git commit -m "feat(maestro): adicionar alertas e artefatos refs #2"
-```
-
-Exemplos para Rebecca:
-
-```bash
-git add src/validation.py tests/
-git commit -m "feat(validacao): implementar RN01 a RN07 refs #3"
-
-git add src/bot.py src/vault_client.py
-git commit -m "feat(performer): tratar itens e acessar vault refs #3"
-```
-
-Antes de cada commit:
-
-```bash
-git diff --cached
-```
-
-Isso permite verificar se senha, token, `.env` real ou arquivo fora do escopo foi incluído por engano.
-
-### 5.5 Enviar a branch
-
-```bash
-git push -u origin NOME_DA_BRANCH
-```
-
-Depois do primeiro push, novos commits usam apenas:
-
-```bash
-git push
-```
-
-## 6. Abrir o Pull Request
-
-No GitHub:
-
-1. Abrir **Pull Requests → New Pull Request**.
-2. Base: `main`.
-3. Compare: branch do integrante.
-4. Usar um título objetivo.
-5. Colocar `Closes #N` na descrição.
-6. Informar o que foi feito e como testar.
-7. Marcar o revisor definido na tabela.
-
-Modelo de descrição:
-
-```markdown
-## Issue relacionada
-Closes #N
-
-## O que foi feito
-- Item 1
-- Item 2
-
-## Como testar
-1. Criar o ambiente virtual
-2. Instalar as dependências
-3. Executar os testes
-
-## Evidências
-- Resultado dos testes
-- Print do Maestro, quando aplicável
-
-## Checklist
-- [ ] Trabalhei somente no escopo da Issue
-- [ ] Não incluí senha, token ou .env
-- [ ] Criei testes positivos e negativos
-- [ ] Atualizei a documentação necessária
-```
-
-## 7. Revisão cruzada
-
-O revisor deve:
-
-1. Ler a Issue e seus critérios de aceite.
-2. Abrir a aba **Files changed**.
-3. Verificar se o PR alterou somente o escopo esperado.
-4. Procurar senha, token, caminhos fixos e logs indevidos.
-5. Baixar e executar a branch:
-
-```bash
-git fetch origin
-git switch NOME_DA_BRANCH_DO_AUTOR
 python -m pytest
 ```
 
-6. Usar **Request changes** quando algum critério não for atendido.
-7. Explicar o problema de forma verificável, por exemplo:
+Execute com relatório de cobertura:
+
+```bash
+python -m pytest --cov=src --cov-report=term-missing --cov-fail-under=80
+```
+
+Na versão documentada, a suíte contém 45 testes e mantém cobertura global superior a 80%. Os testes usam gateways e provedores controlados; nenhuma credencial real é necessária.
+
+## Logs e evidências
+
+Os logs seguem o formato:
 
 ```text
-RN07 ainda aceita REPROVADO sem observação. Adicione um teste com
-observacao vazia e faça a função gerar ValidationError.
+AAAA-MM-DD HH:MM:SS | SEVERIDADE | logger | mensagem
 ```
 
-O autor não abre outro PR para corrigir. Ele altera a mesma branch:
+Arquivos `.log`, `.env`, ambientes virtuais e relatórios gerados não são versionados. O gateway Maestro suporta:
 
-```bash
-git add ARQUIVOS_CORRIGIDOS
-git commit -m "fix(validacao): exigir observacao em reprovados refs #3"
-git push
-```
+- alerta informativo de início;
+- alerta de erro no fail-fast;
+- postagem do resumo JSON como artefato;
+- estado individual dos itens no DataPool.
 
-O PR será atualizado automaticamente.
+## Segurança
 
-## 8. Ordem dos merges
+- não registrar senhas ou tokens;
+- não usar caminhos absolutos no código;
+- manter `.env` fora do Git;
+- usar Vault para a credencial do ERP;
+- usar gateway em memória apenas em desenvolvimento e testes;
+- rejeitar operações dependentes de task quando `task_id` estiver vazio ou igual a zero;
+- revisar toda alteração por Pull Request.
 
-Para diminuir conflitos:
+## Colaboração e versionamento
 
-1. PR de Gabriel: estrutura e contratos básicos.
-2. PR de Marcelo: integração Maestro e DataPool.
-3. PR de Rebecca: Performer, regras e Vault.
-4. PR final de integração, se necessário, contendo apenas ajustes entre os módulos.
+O projeto utiliza GitHub Flow: Issue, branch, commits pequenos, Pull Request, revisão cruzada e squash merge. O roteiro completo está em [`docs/GUIA_COLABORACAO_GIT.md`](docs/GUIA_COLABORACAO_GIT.md).
 
-Antes de abrir ou concluir um PR, o autor atualiza a branch:
+Responsabilidades iniciais:
 
-```bash
-git switch main
-git pull --ff-only origin main
-git switch NOME_DA_BRANCH
-git merge main
-python -m pytest
-git push
-```
+| Integrante | Área principal |
+|---|---|
+| Gabriel | configuração, logs, fail-fast e resultado de execução |
+| Marcelo | Dispatcher, DataPool, alertas e artefatos Maestro |
+| Rebecca | validações, Performer e abstração do Vault |
 
-Se houver conflito, o autor da branch resolve, executa os testes e pede nova revisão.
+## Documentação de referência
 
-Depois da aprovação e dos testes verdes, usar **Squash and merge**. Em seguida, apagar a branch no GitHub e localmente:
+- [`docs/diagrama_pdd.bpmn`](docs/diagrama_pdd.bpmn)
+- [`docs/diagrama_pdd.svg`](docs/diagrama_pdd.svg)
+- [`docs/Regras de validação a aplicar - Gabriel, Marcelo e Rebecca.docx.pdf`](docs/Regras%20de%20validação%20a%20aplicar%20-%20Gabriel,%20Marcelo%20e%20Rebecca.docx.pdf)
+- [`docs/Inspeção de Lotes - Gabriel, Marcelo e Rebecca.xlsx`](docs/Inspeção%20de%20Lotes%20-%20Gabriel,%20Marcelo%20e%20Rebecca.xlsx)
+- [`docs/index_lotes (1).html`](docs/index_lotes%20(1).html)
 
-```bash
-git switch main
-git pull --ff-only origin main
-git branch -d NOME_DA_BRANCH
-git fetch --prune
-```
+## Equipe
 
-## 9. Trabalho técnico detalhado por integrante
-
-### Gabriel — núcleo corporativo
-
-1. Criar `src/`, `logs/`, `dados_entrada/` e o entry point `bot.py`.
-2. Criar `.gitignore`, garantindo que `.env`, logs, relatórios e ambiente virtual não sejam versionados.
-3. Criar `.env.example` somente com nomes das variáveis e valores fictícios não sigilosos.
-4. Implementar `config.py` sem caminhos absolutos.
-5. Configurar log com data, hora e níveis `INFO`, `WARNING` e `ERROR`.
-6. Validar a existência de `dados_entrada/` antes de qualquer processamento.
-7. Criar o modelo `ExecutionResult` com totais, sucessos, erros e status final.
-8. Integrar os módulos de Marcelo e Rebecca somente depois dos PRs aprovados.
-
-### Marcelo — Maestro e Dispatcher
-
-1. Criar no painel do Maestro o DataPool `FilaAuditoriaLotes`.
-2. Definir os campos: `lote_id`, `produto`, `linha`, `turno`, `status`, `responsavel`, `data`, `observacao`.
-3. Criar um CSV com registros válidos e erros propositais.
-4. Implementar leitura do CSV usando cabeçalho, sem posições mágicas.
-5. Criar um `DataPoolEntry` para cada linha.
-6. Implementar o acesso à fila em uma classe adaptadora.
-7. Implementar alerta inicial, alerta de pasta ausente e postagem do resumo JSON.
-8. Criar mocks nos testes para não depender do Maestro real.
-
-### Rebecca — validação, Performer e segurança
-
-1. Implementar RN01–RN07 como funções pequenas e testáveis.
-2. Normalizar espaços e caixa antes das comparações.
-3. Converter `OK → APROVADO` e `NOK → REPROVADO` antes de validar o status.
-4. Criar `ValidationError` para erro determinístico de negócio.
-5. Criar tratamento específico para RN06 e registrar revisão humana.
-6. Consumir a fila em `while`, obtendo um item por vez.
-7. Colocar `try/except` dentro do loop, para um item inválido não interromper os próximos.
-8. Marcar validações como erro de negócio e falhas técnicas como erro de sistema.
-9. Criar `credencial_erp` no Vault com as chaves combinadas pela equipe, por exemplo `username` e `password`.
-10. Recuperar as duas chaves em tempo de execução e nunca registrar a senha.
-
-## 10. Integração e demonstração final
-
-Depois dos três PRs:
-
-1. Gabriel demonstra o fail-fast removendo ou renomeando temporariamente `dados_entrada/`.
-2. Marcelo demonstra o Dispatcher preenchendo `FilaAuditoriaLotes` e o artefato JSON.
-3. Rebecca demonstra item válido, campo obrigatório vazio, status ambíguo e acesso ao Vault.
-4. Os três verificam juntos que a senha não aparece em `git diff`, histórico, `.env.example` ou logs.
-5. Executar toda a suíte de testes.
-
-```bash
-python -m pytest --cov=src --cov-report=term-missing
-git log --oneline --graph --decorate --all
-git status
-```
-
-## 11. Evidências para a entrega
-
-Guardar prints ou exportações de:
-
-- revisão inicial de BPMN/PDD;
-- três Issues atribuídas a pessoas diferentes;
-- três branches com nomes padronizados;
-- três PRs vinculados às Issues;
-- comentários e correções de code review;
-- testes com cobertura mínima de 80%;
-- proteção da `main`;
-- DataPool com itens concluídos e com erro;
-- alerta de pasta ausente;
-- Vault mostrando o label, sem revelar a senha;
-- artefato JSON no Maestro;
-- histórico Git mostrando contribuições dos três integrantes.
-
-## 12. Release
-
-Somente depois de todos os critérios aprovados:
-
-```bash
-git switch main
-git pull --ff-only origin main
-python -m pytest
-git tag -a v1.0.0 -m "Auditor de Lotes v1.0.0"
-git push origin v1.0.0
-```
-
-No GitHub, criar uma Release a partir da tag e listar as três Issues/PRs que formam a versão.
+- Gabriel Fernandes
+- Marcelo Uchôa
+- Rebecca Xavier
