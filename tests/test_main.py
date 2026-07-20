@@ -62,6 +62,14 @@ class FakeMaestroClient:
         self.items.append(data)
 
 
+class BrokenNextMaestroClient(FakeMaestroClient):
+    def has_next(self):
+        return True
+
+    def next(self):
+        raise RuntimeError("DataPool indisponivel")
+
+
 class FakeVaultProvider:
     def get_credential(self, label):
         return {"username": "marcelo.erp", "password": "fake-password"}
@@ -198,3 +206,15 @@ def test_run_consumindo_datapool_e_publicando_resumo(tmp_path):
     assert len(client.human_reviews) == 1
     assert client.artifacts[0][0] == "resumo_execucao.json"
     assert client.artifacts[0][2]["total_items"] == 3
+
+
+def test_run_falha_quando_next_da_fila_quebra(tmp_path):
+    settings = settings_for(tmp_path)
+    client = BrokenNextMaestroClient([])
+    vault = VaultClient(FakeVaultProvider())
+
+    result = run(settings=settings, maestro_client=client, vault_client=vault)
+
+    assert result.status == "FAILED"
+    assert "Falha tecnica ao obter item da fila" in result.message
+    assert client.system_errors == []

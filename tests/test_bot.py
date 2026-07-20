@@ -1,6 +1,8 @@
 import logging
 
-from src.bot import LotePerformer
+import pytest
+
+from src.bot import LotePerformer, QueueItemFetchError
 from src.vault_client import VaultClient
 
 
@@ -29,6 +31,16 @@ class FakeQueue:
 
     def mark_human_review(self, item, review):
         self.human_reviews.append((item, review))
+
+
+class OrderedQueue(FakeQueue):
+    def __init__(self, items, events):
+        super().__init__(items)
+        self.events = events
+
+    def mark_done(self, item, result):
+        self.events.append("mark_done")
+        super().mark_done(item, result)
 
 
 class FakeVaultProvider:
@@ -113,7 +125,7 @@ def test_performer_stops_when_datapool_returns_empty_item():
     assert queue.system_errors == []
 
 
-def test_performer_marks_system_error_when_next_raises():
+def test_performer_propagates_when_next_raises_without_marking_item():
     class BrokenQueue(FakeQueue):
         def __init__(self):
             super().__init__([])
@@ -127,16 +139,31 @@ def test_performer_marks_system_error_when_next_raises():
     queue = BrokenQueue()
     performer = LotePerformer(queue, {"L001"}, VaultClient(FakeVaultProvider()))
 
-    result = performer.run()
+    with pytest.raises(QueueItemFetchError):
+        performer.run()
 
-    assert result.total == 0
-    assert result.system_errors == 1
-    assert queue.system_errors == [({}, "fila indisponivel")]
+    assert queue.system_errors == []
 
 
-def test_performer_waits_configured_delay_after_item():
+def test_performer_waits_after_validation_before_mark_done():
+    events = []
+    queue = OrderedQueue([item()], events)
+    performer = LotePerformer(
+        queue,
+        {"L001"},
+        VaultClient(FakeVaultProvider()),
+        processing_delay_seconds=1,
+        sleep_fn=lambda seconds: events.append(f"sleep:{seconds}"),
+    )
+
+    performer.run()
+
+    assert events == ["sleep:1", "mark_done"]
+
+
+def test_performer_does_not_wait_on_business_error_or_human_review():
     sleeps = []
-    queue = FakeQueue([item()])
+    queue = FakeQueue([item(produto=""), item(status="pendente")])
     performer = LotePerformer(
         queue,
         {"L001"},
@@ -147,4 +174,6 @@ def test_performer_waits_configured_delay_after_item():
 
     performer.run()
 
-    assert sleeps == [1]
+    assert sleeps == []
+    assert len(queue.business_errors) == 1
+    assert len(queue.human_reviews) == 1

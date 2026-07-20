@@ -41,6 +41,10 @@ class PerformerResult:
     human_reviews: list[HumanReviewRequired] = field(default_factory=list)
 
 
+class QueueItemFetchError(RuntimeError):
+    """Falha tecnica antes de existir item do DataPool para finalizar."""
+
+
 class LotePerformer:
     def __init__(
         self,
@@ -64,9 +68,7 @@ class LotePerformer:
                 item = self.queue.next()
             except Exception as exc:
                 LOGGER.exception("Falha tecnica ao obter item da fila")
-                self.queue.mark_system_error({}, str(exc))
-                result.system_errors += 1
-                break
+                raise QueueItemFetchError("Falha tecnica ao obter item da fila") from exc
 
             if item is None:
                 LOGGER.info("DataPool retornou item vazio; encerrando consumo")
@@ -79,6 +81,8 @@ class LotePerformer:
                     self._log_erp_user(credential)
                     credential_logged = True
                 validated = validate_lote(item, self.reference_lotes)
+                if self.processing_delay_seconds > 0:
+                    self.sleep_fn(self.processing_delay_seconds)
                 self.queue.mark_done(item, validated)
                 result.success += 1
             except HumanReviewStatus as exc:
@@ -95,9 +99,6 @@ class LotePerformer:
                 LOGGER.exception("Falha tecnica ao processar item da fila")
                 self.queue.mark_system_error(item, str(exc))
                 result.system_errors += 1
-            finally:
-                if self.processing_delay_seconds > 0:
-                    self.sleep_fn(self.processing_delay_seconds)
 
         return result
 
