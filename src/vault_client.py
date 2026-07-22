@@ -6,7 +6,7 @@ from typing import Any, Protocol
 
 
 LOGGER = logging.getLogger(__name__)
-DEFAULT_CREDENTIAL_LABEL = "credencial_erp"
+DEFAULT_CREDENTIAL_LABEL = "credencial_erp2"
 
 
 class CredentialProvider(Protocol):
@@ -31,18 +31,22 @@ class BotCityVaultProvider:
         self.sdk = sdk
 
     def get_credential(self, label: str) -> dict[str, str]:
+        return {
+            "username": self._get_required_key(label, "username"),
+            "password": self._get_required_key(label, "password"),
+        }
+
+    def _get_required_key(self, label: str, key: str) -> str:
         try:
-            username = self.sdk.get_credential(label=label, key="username")
-            password = self.sdk.get_credential(label=label, key="password")
+            return str(self.sdk.get_credential(label=label, key=key) or "")
         except AttributeError as exc:
             raise VaultCredentialError(
                 "SDK do Maestro nao expoe get_credential para acessar o Vault"
             ) from exc
-
-        return {
-            "username": str(username or ""),
-            "password": str(password or ""),
-        }
+        except Exception as exc:
+            raise VaultCredentialError(
+                f"Credencial {label} nao contem a chave obrigatoria {key}"
+            ) from exc
 
 
 class VaultClient:
@@ -53,14 +57,21 @@ class VaultClient:
     ) -> None:
         self.provider = provider
         self.credential_label = credential_label
+        self._cached_credential: ErpCredential | None = None
 
     def get_erp_credential(self) -> ErpCredential:
+        if self._cached_credential is not None:
+            return self._cached_credential
+
         credential = self.provider.get_credential(self.credential_label)
         username = str(credential.get("username") or "").strip()
         password = str(credential.get("password") or "")
 
         if not username or not password:
-            raise VaultCredentialError("credencial_erp deve conter username e password")
+            raise VaultCredentialError(
+                f"{self.credential_label} deve conter username e password"
+            )
 
         LOGGER.info("Credencial ERP recuperada para usuario %s", username)
-        return ErpCredential(username=username, password=password)
+        self._cached_credential = ErpCredential(username=username, password=password)
+        return self._cached_credential

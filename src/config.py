@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 import os
 from pathlib import Path
+import sys
 
 from dotenv import load_dotenv
 
@@ -15,6 +16,19 @@ def as_bool(value: str | None, default: bool = False) -> bool:
     if value is None:
         return default
     return value.strip().lower() in TRUE_VALUES
+
+
+def botcity_runner_args(argv: list[str] | None = None) -> tuple[str, str]:
+    """Extrai server e task_id quando o BotCity Runner chama bot.py."""
+    current_argv = argv if argv is not None else sys.argv
+    if len(current_argv) < 3:
+        return "", ""
+
+    server = current_argv[1].strip()
+    task_id = current_argv[2].strip()
+    if not server.startswith(("http://", "https://")) or not task_id:
+        return "", ""
+    return server, task_id
 
 
 @dataclass(frozen=True)
@@ -40,12 +54,15 @@ class Settings:
     log_file: Path
     report_dir: Path
     processing_delay_seconds: float
+    runner_context: bool
 
     @classmethod
     def from_env(cls, base_dir: Path | None = None) -> "Settings":
         """Carrega `.env` e resolve caminhos relativos a partir do projeto."""
         root = (base_dir or Path(__file__).resolve().parents[1]).resolve()
         load_dotenv(root / ".env")
+        runner_server, runner_task_id = botcity_runner_args()
+        runner_context = bool(runner_server and runner_task_id)
 
         def project_path(variable: str, default: str) -> Path:
             configured = Path(os.getenv(variable, default)).expanduser()
@@ -53,18 +70,21 @@ class Settings:
                 return configured
             return (root / configured).resolve()
 
+        def env_or_default(variable: str, default: str = "") -> str:
+            return (os.getenv(variable, "").strip() or default).strip()
+
         return cls(
             base_dir=root,
-            maestro_enabled=as_bool(os.getenv("MAESTRO_ENABLED")),
-            vault_enabled=as_bool(os.getenv("VAULT_ENABLED")),
-            maestro_server=os.getenv("MAESTRO_SERVER", "").strip(),
-            maestro_login=os.getenv("MAESTRO_LOGIN", "").strip(),
-            maestro_key=os.getenv("MAESTRO_KEY", "").strip(),
-            maestro_task_id=os.getenv("MAESTRO_TASK_ID", "").strip(),
+            maestro_enabled=as_bool(os.getenv("MAESTRO_ENABLED"), runner_context),
+            vault_enabled=as_bool(os.getenv("VAULT_ENABLED"), runner_context),
+            maestro_server=env_or_default("MAESTRO_SERVER", runner_server),
+            maestro_login=env_or_default("MAESTRO_LOGIN"),
+            maestro_key=env_or_default("MAESTRO_KEY"),
+            maestro_task_id=env_or_default("MAESTRO_TASK_ID", runner_task_id),
             datapool_label=os.getenv(
-                "DATAPOOL_LABEL", "FilaAuditoriaLotes"
+                "DATAPOOL_LABEL", "FilaAuditoriaLotes2"
             ).strip(),
-            vault_label=os.getenv("VAULT_LABEL", "credencial_erp").strip(),
+            vault_label=os.getenv("VAULT_LABEL", "credencial_erp2").strip(),
             reference_lotes=tuple(
                 lote.strip()
                 for lote in os.getenv("REFERENCE_LOTES", "L001,L002").split(",")
@@ -75,6 +95,7 @@ class Settings:
             log_file=project_path("LOG_FILE", "logs/execucao.log"),
             report_dir=project_path("REPORT_DIR", "relatorios"),
             processing_delay_seconds=float(os.getenv("PROCESSING_DELAY_SECONDS", "1")),
+            runner_context=runner_context,
         )
 
     def validate(self) -> None:
@@ -82,11 +103,14 @@ class Settings:
         if not self.maestro_enabled:
             return
 
-        required = {
-            "MAESTRO_SERVER": self.maestro_server,
-            "MAESTRO_LOGIN": self.maestro_login,
-            "MAESTRO_KEY": self.maestro_key,
-        }
+        required = {"MAESTRO_SERVER": self.maestro_server}
+        if not self.runner_context:
+            required.update(
+                {
+                    "MAESTRO_LOGIN": self.maestro_login,
+                    "MAESTRO_KEY": self.maestro_key,
+                }
+            )
         missing = [name for name, value in required.items() if not value]
         if missing:
             raise ValueError(

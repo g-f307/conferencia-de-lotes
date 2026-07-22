@@ -15,7 +15,7 @@ Os três integrantes devem fazer uma reunião curta e revisar:
 Decisões que precisam ser registradas em uma Issue de documentação:
 
 1. O cenário real é **Inspeção de Lotes**, embora parte do enunciado use o exemplo genérico de auditoria de usuários e CPF.
-2. O DataPool usado no projeto será `FilaAuditoriaLotes`.
+2. O DataPool usado no projeto será `FilaAuditoriaLotes2`.
 3. Cada item da fila representa uma linha/lote da planilha.
 4. Campo obrigatório vazio será um `ValidationError`, equivalente ao exemplo do CPF vazio.
 5. Status ambíguo não será decidido pelo bot; será separado para revisão humana.
@@ -144,7 +144,7 @@ Criar o Dispatcher e encapsular a integração com o BotCity Maestro.
 ## Critérios de aceite
 - [ ] O CSV é lido linha por linha
 - [ ] Cada linha gera um DataPoolEntry
-- [ ] A fila utilizada é FilaAuditoriaLotes
+- [ ] A fila utilizada é FilaAuditoriaLotes2
 - [ ] O Performer pode obter itens com has_next e next
 - [ ] O início registra "Iniciando auditoria de acessos"
 - [ ] É possível emitir alerta de pasta ausente
@@ -180,7 +180,7 @@ Implementar RN01-RN07, consumo resiliente e credencial do ERP.
 - [ ] RN06 separa status ambíguo para revisão humana
 - [ ] RN07 exige observação em lote reprovado
 - [ ] ValidationError marca somente o item como erro e o loop continua
-- [ ] Usuário e senha são recuperados do Vault credencial_erp
+- [ ] Usuário e senha são recuperados do Vault credencial_erp2
 - [ ] Somente o nome do usuário aparece no log
 - [ ] Existem testes positivos e negativos
 ```
@@ -408,7 +408,7 @@ git fetch --prune
 
 ### Marcelo — Maestro e Dispatcher
 
-1. Criar no painel do Maestro o DataPool `FilaAuditoriaLotes`.
+1. Criar no painel do Maestro o DataPool `FilaAuditoriaLotes2`.
 2. Definir os campos: `lote_id`, `produto`, `linha`, `turno`, `status`, `responsavel`, `data`, `observacao`.
 3. Criar um CSV com registros válidos e erros propositais.
 4. Implementar leitura do CSV usando cabeçalho, sem posições mágicas.
@@ -427,7 +427,7 @@ git fetch --prune
 6. Consumir a fila em `while`, obtendo um item por vez.
 7. Colocar `try/except` dentro do loop, para um item inválido não interromper os próximos.
 8. Marcar validações como erro de negócio e falhas técnicas como erro de sistema.
-9. Criar `credencial_erp` no Vault com as chaves combinadas pela equipe, por exemplo `username` e `password`.
+9. Criar `credencial_erp2` no Vault com as chaves combinadas pela equipe, por exemplo `username` e `password`.
 10. Recuperar as duas chaves em tempo de execução e nunca registrar a senha.
 
 ## 10. Integração e demonstração final
@@ -435,7 +435,7 @@ git fetch --prune
 Depois dos três PRs:
 
 1. Gabriel demonstra o fail-fast removendo ou renomeando temporariamente `dados_entrada/`.
-2. Marcelo demonstra o Dispatcher preenchendo `FilaAuditoriaLotes` e o artefato JSON.
+2. Marcelo demonstra o Dispatcher preenchendo `FilaAuditoriaLotes2` e o artefato JSON.
 3. Rebecca demonstra item válido, campo obrigatório vazio, status ambíguo e acesso ao Vault.
 4. Os três verificam juntos que a senha não aparece em `git diff`, histórico, `.env.example` ou logs.
 5. Executar toda a suíte de testes.

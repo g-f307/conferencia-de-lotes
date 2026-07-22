@@ -26,6 +26,7 @@ class FakeMaestroClient:
         self.system_errors = []
         self.human_reviews = []
         self.artifacts = []
+        self.finished_tasks = []
 
     def has_next(self):
         return bool(self.items)
@@ -58,6 +59,11 @@ class FakeMaestroClient:
         self.artifacts.append((artifact_name, path, summary))
         return path
 
+    def finish_task(self, status, message, total_items, processed_items, failed_items):
+        self.finished_tasks.append(
+            (status, message, total_items, processed_items, failed_items)
+        )
+
     def create_entry(self, data):
         self.items.append(data)
 
@@ -73,6 +79,11 @@ class BrokenNextMaestroClient(FakeMaestroClient):
 class FakeVaultProvider:
     def get_credential(self, label):
         return {"username": "marcelo.erp", "password": "fake-password"}
+
+
+class BrokenVaultProvider:
+    def get_credential(self, label):
+        raise RuntimeError(f"Credencial {label} nao contem username")
 
 
 def lote_item(**overrides):
@@ -206,6 +217,8 @@ def test_run_consumindo_datapool_e_publicando_resumo(tmp_path):
     assert len(client.human_reviews) == 1
     assert client.artifacts[0][0] == "resumo_execucao.json"
     assert client.artifacts[0][2]["total_items"] == 3
+    assert client.finished_tasks[0][0] == "SUCCESS"
+    assert client.finished_tasks[0][2:] == (3, 1, 2)
 
 
 def test_run_falha_quando_next_da_fila_quebra(tmp_path):
@@ -218,3 +231,22 @@ def test_run_falha_quando_next_da_fila_quebra(tmp_path):
     assert result.status == "FAILED"
     assert "Falha tecnica ao obter item da fila" in result.message
     assert client.system_errors == []
+    assert client.finished_tasks[0][0] == "FAILED"
+
+
+def test_run_falha_sem_publicar_csv_quando_vault_esta_invalido(tmp_path):
+    settings = settings_for(tmp_path)
+    settings.input_csv.write_text(
+        "lote_id,produto,linha,turno,status,responsavel,data,observacao\n"
+        "L001,Monitor,Linha A,Manha,APROVADO,Marcelo,2026-07-20,\n",
+        encoding="utf-8",
+    )
+    client = FakeMaestroClient([])
+    vault = VaultClient(BrokenVaultProvider(), "credencial_erp2")
+
+    result = run(settings=settings, maestro_client=client, vault_client=vault)
+
+    assert result.status == "FAILED"
+    assert "credencial_erp2" in result.message
+    assert client.items == []
+    assert client.finished_tasks[0][0] == "FAILED"

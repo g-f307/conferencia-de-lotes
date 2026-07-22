@@ -40,6 +40,15 @@ class SummaryGateway(AlertGateway, Protocol):
 
     def send_start_alert(self) -> None: ...
 
+    def finish_task(
+        self,
+        status: str,
+        message: str,
+        total_items: int,
+        processed_items: int,
+        failed_items: int,
+    ) -> None: ...
+
     def post_summary_artifact(
         self,
         summary: dict[str, Any],
@@ -116,6 +125,34 @@ def resolve_alert_gateway(
     return None
 
 
+def finish_maestro_task(
+    client: SummaryGateway,
+    result: ExecutionResult,
+    logger: logging.Logger,
+) -> None:
+    """Finaliza a task no Maestro sem transformar falha de negócio em falha técnica."""
+    failed_items = result.failed_items + result.ambiguous_items
+    finish_status = "FAILED" if result.status == "FAILED" else "SUCCESS"
+    finish_message = (
+        f"{result.message or 'Execucao finalizada'} - "
+        f"{result.total_items} itens, {result.processed_items} sucesso, "
+        f"{failed_items} falhas/revisoes"
+    )
+
+    try:
+        client.finish_task(
+            finish_status,
+            finish_message,
+            result.total_items,
+            result.processed_items,
+            failed_items,
+        )
+    except AttributeError:
+        logger.info("Gateway sem suporte a finish_task; finalizacao ignorada")
+    except Exception:
+        logger.exception("Nao foi possivel finalizar a task no Maestro")
+
+
 def run(
     settings: Settings | None = None,
     alert_gateway: AlertGateway | None = None,
@@ -151,6 +188,10 @@ def run(
 
     try:
         client.send_start_alert()
+        current_vault_client.get_erp_credential()
+        current_logger.info(
+            "Vault validado para a credencial %s", current_settings.vault_label
+        )
         published = dispatch_csv(current_settings.input_csv, client, logger=current_logger)
         current_logger.info("Dispatcher publicou %s itens do CSV configurado", published)
         current_logger.info("Estrutura inicial validada; iniciando consumo do DataPool")
@@ -162,6 +203,7 @@ def run(
         )
         result = execution_result_from_performer(performer.run())
         client.post_summary_artifact(result.to_dict(), report_dir=current_settings.report_dir)
+        finish_maestro_task(client, result, current_logger)
         current_logger.info(
             "Execucao finalizada com status %s: %s itens, %s sucesso, %s falhas, %s revisoes",
             result.status,
@@ -170,10 +212,13 @@ def run(
             result.failed_items,
             result.ambiguous_items,
         )
+        current_logger.info("Automacao encerrada com sucesso operacional")
         return result
     except Exception as exc:
         current_logger.exception("Falha fatal no ciclo principal")
-        return result.fail(str(exc))
+        failed_result = result.fail(str(exc))
+        finish_maestro_task(client, failed_result, current_logger)
+        return failed_result
 
 
 def main() -> int:

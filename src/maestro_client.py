@@ -46,6 +46,16 @@ class MaestroGateway(Protocol):
     def post_artifact(self, name: str, path: Path) -> None:
         ...
 
+    def finish_task(
+        self,
+        status: str,
+        message: str,
+        total_items: int,
+        processed_items: int,
+        failed_items: int,
+    ) -> None:
+        ...
+
 
 class InMemoryMaestroGateway:
     """Gateway local usado quando o Maestro real não está habilitado."""
@@ -59,6 +69,7 @@ class InMemoryMaestroGateway:
         self.business_errors: list[tuple[Any, str]] = []
         self.system_errors: list[tuple[Any, str]] = []
         self.human_reviews: list[tuple[Any, HumanReviewRequired]] = []
+        self.finished_tasks: list[tuple[str, str, int, int, int]] = []
 
     def create_datapool_entry(self, datapool_label: str, data: dict[str, str]) -> None:
         self.entries.setdefault(datapool_label, []).append(dict(data))
@@ -89,6 +100,18 @@ class InMemoryMaestroGateway:
 
     def post_artifact(self, name: str, path: Path) -> None:
         self.artifacts.append((name, path))
+
+    def finish_task(
+        self,
+        status: str,
+        message: str,
+        total_items: int,
+        processed_items: int,
+        failed_items: int,
+    ) -> None:
+        self.finished_tasks.append(
+            (status, message, total_items, processed_items, failed_items)
+        )
 
 
 @dataclass(frozen=True)
@@ -127,19 +150,27 @@ class BotCityMaestroGateway:
         datapool_entry_cls: type,
         error_type: Any,
         alert_type: Any,
+        finish_status_type: Any,
         task_id: str | int | None = None,
     ) -> None:
         self.sdk = sdk
         self.datapool_entry_cls = datapool_entry_cls
         self.error_type = error_type
         self.alert_type = alert_type
+        self.finish_status_type = finish_status_type
         self.task_id = self._resolve_task_id(task_id if task_id is not None else getattr(sdk, "task_id", None))
 
     @classmethod
     def from_settings(cls, settings: Settings) -> "BotCityMaestroGateway":
         """Constrói o gateway real com as credenciais técnicas do Maestro."""
         try:
-            from botcity.maestro import AlertType, BotMaestroSDK, DataPoolEntry, ErrorType
+            from botcity.maestro import (
+                AlertType,
+                AutomationTaskFinishStatus,
+                BotMaestroSDK,
+                DataPoolEntry,
+                ErrorType,
+            )
         except ImportError as exc:
             raise RuntimeError(
                 "botcity-maestro-sdk deve estar instalado quando MAESTRO_ENABLED=true"
@@ -154,7 +185,14 @@ class BotCityMaestroGateway:
             )
             sdk.login()
         task_id = settings.maestro_task_id or os.getenv("MAESTRO_TASK_ID", "")
-        return cls(sdk, DataPoolEntry, ErrorType, AlertType, task_id=task_id)
+        return cls(
+            sdk,
+            DataPoolEntry,
+            ErrorType,
+            AlertType,
+            AutomationTaskFinishStatus,
+            task_id=task_id,
+        )
 
     @staticmethod
     def _is_valid_task_id(task_id: Any) -> bool:
@@ -233,6 +271,24 @@ class BotCityMaestroGateway:
     def post_artifact(self, name: str, path: Path) -> None:
         self.sdk.post_artifact(self._require_task_id(), name, str(path))
 
+    def finish_task(
+        self,
+        status: str,
+        message: str,
+        total_items: int,
+        processed_items: int,
+        failed_items: int,
+    ) -> None:
+        finish_status = getattr(self.finish_status_type, status)
+        self.sdk.finish_task(
+            self._require_task_id(),
+            finish_status,
+            message=message,
+            total_items=total_items,
+            processed_items=processed_items,
+            failed_items=failed_items,
+        )
+
 
 class MaestroClient:
     """Facade usada pelo Dispatcher e pelo núcleo para falar com o Maestro."""
@@ -309,3 +365,20 @@ class MaestroClient:
         )
         self.gateway.post_artifact(artifact_name, artifact_path)
         return artifact_path
+
+    def finish_task(
+        self,
+        status: str,
+        message: str,
+        total_items: int,
+        processed_items: int,
+        failed_items: int,
+    ) -> None:
+        """Finaliza a task do Maestro com contadores consolidados."""
+        self.gateway.finish_task(
+            status,
+            message,
+            total_items,
+            processed_items,
+            failed_items,
+        )

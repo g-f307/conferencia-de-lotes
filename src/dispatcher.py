@@ -54,7 +54,7 @@ def dispatch_csv(
     maestro_client: MaestroClient,
     logger: logging.Logger | None = None,
 ) -> int:
-    """Publica cada linha do CSV como item em FilaAuditoriaLotes."""
+    """Publica cada linha do CSV como item em FilaAuditoriaLotes2."""
     current_logger = logger or logging.getLogger(__name__)
     current_logger.info("Iniciando auditoria de acessos")
 
