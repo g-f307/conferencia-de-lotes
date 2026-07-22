@@ -80,8 +80,8 @@ def test_dispatcher_publica_uma_entrada_por_linha_no_datapool(tmp_path):
 
     assert published == 2
     assert [entry[0] for entry in gateway.created] == [
-        "FilaAuditoriaLotes",
-        "FilaAuditoriaLotes",
+        "FilaAuditoriaLotes2",
+        "FilaAuditoriaLotes2",
     ]
     assert gateway.created[0][1] == {
         "lote_id": "LG-1",
@@ -289,6 +289,7 @@ class FakeSdk:
         self.datapool_labels = []
         self.alerts = []
         self.artifacts = []
+        self.finished_tasks = []
 
     def get_datapool(self, label):
         self.datapool_labels.append(label)
@@ -300,27 +301,49 @@ class FakeSdk:
     def post_artifact(self, task_id, artifact_name, filepath):
         self.artifacts.append((task_id, artifact_name, filepath))
 
+    def finish_task(
+        self,
+        task_id,
+        status,
+        message="",
+        total_items=None,
+        processed_items=None,
+        failed_items=None,
+    ):
+        self.finished_tasks.append(
+            (task_id, status, message, total_items, processed_items, failed_items)
+        )
+
+
+def gateway_for(sdk):
+    error_type = SimpleNamespace(BUSINESS="BUSINESS", SYSTEM="SYSTEM")
+    alert_type = SimpleNamespace(INFO="INFO", ERROR="ERROR")
+    finish_status_type = SimpleNamespace(SUCCESS="SUCCESS", FAILED="FAILED")
+    return BotCityMaestroGateway(
+        sdk,
+        FakeDataPoolEntry,
+        error_type,
+        alert_type,
+        finish_status_type,
+    )
+
 
 def test_gateway_real_publica_item_com_datapool_entry():
     sdk = FakeSdk()
-    error_type = SimpleNamespace(BUSINESS="BUSINESS", SYSTEM="SYSTEM")
-    alert_type = SimpleNamespace(INFO="INFO", ERROR="ERROR")
-    gateway = BotCityMaestroGateway(sdk, FakeDataPoolEntry, error_type, alert_type)
+    gateway = gateway_for(sdk)
 
-    gateway.create_datapool_entry("FilaAuditoriaLotes", {"lote_id": "LG-1"})
+    gateway.create_datapool_entry("FilaAuditoriaLotes2", {"lote_id": "LG-1"})
 
-    assert sdk.datapool_labels == ["FilaAuditoriaLotes"]
+    assert sdk.datapool_labels == ["FilaAuditoriaLotes2"]
     assert sdk.datapool.created_entries[0].values == {"lote_id": "LG-1"}
 
 
 def test_gateway_real_consume_item_com_task_id():
     sdk = FakeSdk()
-    error_type = SimpleNamespace(BUSINESS="BUSINESS", SYSTEM="SYSTEM")
-    alert_type = SimpleNamespace(INFO="INFO", ERROR="ERROR")
-    gateway = BotCityMaestroGateway(sdk, FakeDataPoolEntry, error_type, alert_type)
+    gateway = gateway_for(sdk)
 
-    assert gateway.has_next("FilaAuditoriaLotes") is True
-    item = gateway.next("FilaAuditoriaLotes")
+    assert gateway.has_next("FilaAuditoriaLotes2") is True
+    item = gateway.next("FilaAuditoriaLotes2")
 
     assert isinstance(item, DataPoolWorkItem)
     assert item.get("lote_id") == "LG-1"
@@ -331,11 +354,9 @@ def test_gateway_real_consume_item_com_task_id():
 def test_gateway_real_retorna_none_quando_datapool_retorna_none():
     sdk = FakeSdk()
     sdk.datapool.next_item = None
-    error_type = SimpleNamespace(BUSINESS="BUSINESS", SYSTEM="SYSTEM")
-    alert_type = SimpleNamespace(INFO="INFO", ERROR="ERROR")
-    gateway = BotCityMaestroGateway(sdk, FakeDataPoolEntry, error_type, alert_type)
+    gateway = gateway_for(sdk)
 
-    item = gateway.next("FilaAuditoriaLotes")
+    item = gateway.next("FilaAuditoriaLotes2")
 
     assert item is None
     assert sdk.datapool.next_calls == [123]
@@ -343,9 +364,7 @@ def test_gateway_real_retorna_none_quando_datapool_retorna_none():
 
 def test_gateway_real_finaliza_itens_com_done_e_erros():
     sdk = FakeSdk()
-    error_type = SimpleNamespace(BUSINESS="BUSINESS", SYSTEM="SYSTEM")
-    alert_type = SimpleNamespace(INFO="INFO", ERROR="ERROR")
-    gateway = BotCityMaestroGateway(sdk, FakeDataPoolEntry, error_type, alert_type)
+    gateway = gateway_for(sdk)
     item = FakeDataPoolEntry({"lote_id": "LG-1"})
 
     gateway.mark_done(item, {"status": "APROVADO"})
@@ -366,9 +385,7 @@ def test_gateway_real_finaliza_itens_com_done_e_erros():
 
 def test_gateway_real_emite_alerta_info_erro_e_artefato(tmp_path):
     sdk = FakeSdk()
-    error_type = SimpleNamespace(BUSINESS="BUSINESS", SYSTEM="SYSTEM")
-    alert_type = SimpleNamespace(INFO="INFO", ERROR="ERROR")
-    gateway = BotCityMaestroGateway(sdk, FakeDataPoolEntry, error_type, alert_type)
+    gateway = gateway_for(sdk)
     artifact = tmp_path / "resumo_execucao.json"
 
     gateway.send_info_alert("Iniciando auditoria de acessos")
@@ -382,20 +399,31 @@ def test_gateway_real_emite_alerta_info_erro_e_artefato(tmp_path):
     assert sdk.artifacts == [(123, "resumo_execucao.json", str(artifact))]
 
 
+def test_gateway_real_finaliza_task_no_maestro():
+    sdk = FakeSdk()
+    gateway = gateway_for(sdk)
+
+    gateway.finish_task("SUCCESS", "Processamento concluido", 3, 1, 2)
+
+    assert sdk.finished_tasks == [(123, "SUCCESS", "Processamento concluido", 3, 1, 2)]
+
+
 def test_gateway_real_falha_quando_task_id_esta_ausente_ou_zero():
     sdk = FakeSdk(task_id=0)
     error_type = SimpleNamespace(BUSINESS="BUSINESS", SYSTEM="SYSTEM")
     alert_type = SimpleNamespace(INFO="INFO", ERROR="ERROR")
+    finish_status_type = SimpleNamespace(SUCCESS="SUCCESS", FAILED="FAILED")
     gateway = BotCityMaestroGateway(
         sdk,
         FakeDataPoolEntry,
         error_type,
         alert_type,
+        finish_status_type,
         task_id=0,
     )
 
     with pytest.raises(RuntimeError, match="MAESTRO_TASK_ID"):
-        gateway.next("FilaAuditoriaLotes")
+        gateway.next("FilaAuditoriaLotes2")
 
 
 class FakeVaultProvider:
@@ -405,9 +433,7 @@ class FakeVaultProvider:
 
 def test_maestro_client_integra_datapool_entry_com_performer(tmp_path):
     sdk = FakeSdk()
-    error_type = SimpleNamespace(BUSINESS="BUSINESS", SYSTEM="SYSTEM")
-    alert_type = SimpleNamespace(INFO="INFO", ERROR="ERROR")
-    gateway = BotCityMaestroGateway(sdk, FakeDataPoolEntry, error_type, alert_type)
+    gateway = gateway_for(sdk)
     sdk.datapool.next_item = FakeDataPoolEntry(
         {
             "lote_id": "LG-1",

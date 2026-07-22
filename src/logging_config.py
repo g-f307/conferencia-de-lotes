@@ -1,6 +1,7 @@
-"""Configuração do log local exigido pelo processo."""
+"""Configuração do log local e console exigido pelo processo."""
 
 import logging
+import sys
 from pathlib import Path
 
 
@@ -8,7 +9,7 @@ LOGGER_NAME = "auditor_lotes"
 
 
 def configure_logging(log_file: Path) -> logging.Logger:
-    """Cria um logger de arquivo com data, hora, severidade e mensagem."""
+    """Cria logger de arquivo e console com data, hora, severidade e mensagem."""
     log_file.parent.mkdir(parents=True, exist_ok=True)
 
     logger = logging.getLogger(LOGGER_NAME)
@@ -19,12 +20,17 @@ def configure_logging(log_file: Path) -> logging.Logger:
         handler.close()
         logger.removeHandler(handler)
 
-    handler = logging.FileHandler(log_file, encoding="utf-8")
-    handler.setFormatter(
-        logging.Formatter(
-            fmt="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S",
-        )
+    formatter = logging.Formatter(
+        fmt="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
     )
-    logger.addHandler(handler)
+
+    file_handler = logging.FileHandler(log_file, encoding="utf-8")
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
+
     return logger

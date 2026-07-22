@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from src.config import Settings, as_bool
+from src.config import Settings, as_bool, botcity_runner_args
 
 
 @pytest.mark.parametrize(
@@ -40,6 +40,49 @@ def test_settings_carrega_maestro_task_id(monkeypatch, tmp_path: Path):
     settings = Settings.from_env(tmp_path)
 
     assert settings.maestro_task_id == "123"
+
+
+def test_botcity_runner_args_reconhece_server_e_task_id():
+    assert botcity_runner_args(["bot.py", "https://maestro.example", "123", "token"]) == (
+        "https://maestro.example",
+        "123",
+    )
+
+
+def test_settings_usa_contexto_do_runner_sem_chaves_tecnicas(monkeypatch, tmp_path: Path):
+    monkeypatch.delenv("MAESTRO_ENABLED", raising=False)
+    monkeypatch.delenv("VAULT_ENABLED", raising=False)
+    monkeypatch.delenv("MAESTRO_SERVER", raising=False)
+    monkeypatch.delenv("MAESTRO_LOGIN", raising=False)
+    monkeypatch.delenv("MAESTRO_KEY", raising=False)
+    monkeypatch.delenv("MAESTRO_TASK_ID", raising=False)
+    monkeypatch.setattr(
+        "sys.argv",
+        ["bot.py", "https://maestro.example", "23831639", "token"],
+    )
+
+    settings = Settings.from_env(tmp_path)
+
+    assert settings.runner_context is True
+    assert settings.maestro_enabled is True
+    assert settings.vault_enabled is True
+    assert settings.maestro_server == "https://maestro.example"
+    assert settings.maestro_task_id == "23831639"
+    settings.validate()
+
+
+def test_settings_ignora_maestro_task_id_vazio_quando_runner_informa_task(
+    monkeypatch, tmp_path: Path
+):
+    monkeypatch.setenv("MAESTRO_TASK_ID", "")
+    monkeypatch.setattr(
+        "sys.argv",
+        ["bot.py", "https://maestro.example", "23831639", "token"],
+    )
+
+    settings = Settings.from_env(tmp_path)
+
+    assert settings.maestro_task_id == "23831639"
 
 
 def test_settings_carrega_lotes_de_referencia(monkeypatch, tmp_path: Path):

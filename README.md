@@ -6,7 +6,7 @@ Automação para auditoria de registros de inspeção de lotes, desenvolvida em 
 
 O processo recebe registros de inspeção sujeitos a inconsistências de preenchimento e status. A solução divide o processamento em dois componentes:
 
-1. **Dispatcher:** lê um arquivo CSV e publica uma entrada por linha no DataPool `FilaAuditoriaLotes`.
+1. **Dispatcher:** lê um arquivo CSV e publica uma entrada por linha no DataPool `FilaAuditoriaLotes2`.
 2. **Performer:** consome os itens da fila, recupera a credencial do ERP, aplica as regras RN01–RN07 e reporta o resultado individual de cada lote.
 
 O desenho considera resiliência por item: uma inconsistência de negócio não interrompe o processamento dos demais registros.
@@ -42,7 +42,7 @@ Os objetivos técnicos são:
 - regras RN01–RN07;
 - normalização de `OK` e `NOK`;
 - separação de status ambíguos para revisão humana;
-- abstração de acesso à credencial `credencial_erp`;
+- abstração de acesso à credencial `credencial_erp2`;
 - testes unitários e de integração entre os módulos.
 
 ## Fora do escopo atual
@@ -53,10 +53,9 @@ Os objetivos técnicos são:
 - implementação concreta do provedor BotCity Credentials Vault;
 - tela ou formulário para tratamento dos casos de revisão humana;
 - atualização automática da base de referência de lotes;
-- implantação e agendamento em ambiente produtivo;
-- composição ponta a ponta no entry point principal.
+- implantação e agendamento em ambiente produtivo.
 
-O arquivo `bot.py` atualmente executa configuração, criação do log e fail-fast. Dispatcher, Performer, Maestro e Vault estão disponíveis como módulos, mas ainda precisam ser conectados ao ciclo completo em `src/main.py`.
+O arquivo `bot.py` executa o ciclo principal em `src/main.py`: valida a configuração, publica o CSV no DataPool, consome os itens, aplica as regras de negócio e publica o resumo da execução como artefato.
 
 ## Processo de negócio
 
@@ -86,7 +85,7 @@ CSV
       └── MaestroClient
            ├── InMemoryMaestroGateway
            └── BotCityMaestroGateway
-                └── FilaAuditoriaLotes
+                └── FilaAuditoriaLotes2
                      └── LotePerformer
                           ├── VaultClient
                           ├── RN01–RN07
@@ -102,10 +101,13 @@ Os módulos de domínio não dependem diretamente do SDK. Protocolos e adaptador
 ├── bot.py                         # entry point atual
 ├── dados_entrada/                 # arquivos recebidos para processamento
 ├── docs/
+│   ├── DEPLOY_BOTCITY.md          # roteiro de deploy no BotCity Maestro
 │   ├── GUIA_COLABORACAO_GIT.md    # roteiro Git/GitHub da equipe
 │   ├── diagrama_pdd.bpmn          # fonte BPMN
 │   └── diagrama_pdd.svg           # visualização do processo
 ├── logs/                          # logs locais; arquivos .log não são versionados
+├── scripts/
+│   └── build_botcity_package.py    # gera o zip de deploy BotCity
 ├── src/
 │   ├── bot.py                     # Performer e resultado por lote
 │   ├── config.py                  # variáveis de ambiente e caminhos
@@ -181,8 +183,8 @@ mkdir -p dados_entrada logs relatorios
 | `MAESTRO_LOGIN` | Identificador técnico do workspace. | vazio no repositório |
 | `MAESTRO_KEY` | Chave técnica do workspace. | vazio no repositório |
 | `MAESTRO_TASK_ID` | Task usada em execução local; o Runner fornece a sua própria. | vazio no repositório |
-| `DATAPOOL_LABEL` | Fila de auditoria. | `FilaAuditoriaLotes` |
-| `VAULT_LABEL` | Label da credencial do ERP. | `credencial_erp` |
+| `DATAPOOL_LABEL` | Fila de auditoria. | `FilaAuditoriaLotes2` |
+| `VAULT_LABEL` | Label da credencial do ERP. | `credencial_erp2` |
 | `INPUT_DIR` | Diretório de entrada. | `dados_entrada` |
 | `LOG_FILE` | Arquivo de log. | `logs/execucao.log` |
 | `REPORT_DIR` | Diretório dos relatórios JSON. | `relatorios` |
@@ -191,28 +193,33 @@ O `.env` não deve ser versionado. A senha do ERP não pertence ao `.env` nem ao
 
 ## Execução local
 
-Com `MAESTRO_ENABLED=false`, execute a validação estrutural e o fail-fast:
+Com `MAESTRO_ENABLED=false`, execute o ciclo local completo usando o gateway em memória:
 
 ```bash
 python bot.py
 ```
 
-Com a pasta `dados_entrada/` disponível, o comando encerra com código `0` e registra que a estrutura está pronta para o Performer. Se a pasta estiver ausente, encerra com código diferente de zero e registra um erro.
+Com a pasta `dados_entrada/` e o CSV configurado disponíveis, o comando publica os itens no gateway local, processa a fila e gera `relatorios/resumo_execucao.json`. Se a pasta estiver ausente, encerra com código diferente de zero e registra um erro.
 
-O Dispatcher e o Performer ainda não possuem comandos CLI próprios. Eles são consumidos programaticamente pelas funções e classes:
-
-```python
-from src.dispatcher import dispatch_csv
-from src.bot import LotePerformer
-```
+O Dispatcher e o Performer também podem ser consumidos programaticamente pelas funções e classes `dispatch_csv` e `LotePerformer`.
 
 A execução real no Maestro exige `MAESTRO_ENABLED=true`, configuração técnica válida, DataPool existente e `task_id` não vazio.
+
+## Pacote de deploy BotCity
+
+O BotCity Runner espera um bot Python customizado com `bot.py` e `requirements.txt` no pacote. Gere o zip de deploy com:
+
+```bash
+python scripts/build_botcity_package.py --version 0.1.0
+```
+
+O arquivo será criado em `dist/bot-conferencia-de-lotes-v1.zip`. O roteiro operacional completo está em [`docs/DEPLOY_BOTCITY.md`](docs/DEPLOY_BOTCITY.md).
 
 ## Configuração no BotCity Maestro
 
 ### DataPool
 
-Crie o DataPool `FilaAuditoriaLotes` com os seguintes campos de texto:
+Crie o DataPool `FilaAuditoriaLotes2` com os seguintes campos de texto:
 
 ```text
 lote_id
@@ -232,7 +239,7 @@ O gateway publica itens com `DataPoolEntry`, consome usando o `task_id` e finali
 Crie uma credencial com o label:
 
 ```text
-credencial_erp
+credencial_erp2
 ```
 
 O contrato atual espera um provedor que retorne:
@@ -258,7 +265,7 @@ Execute com relatório de cobertura:
 python -m pytest --cov=src --cov-report=term-missing --cov-fail-under=80
 ```
 
-Na versão documentada, a suíte contém 45 testes e mantém cobertura global superior a 80%. Os testes usam gateways e provedores controlados; nenhuma credencial real é necessária.
+Na versão documentada, a suíte contém 66 testes. Os testes usam gateways e provedores controlados; nenhuma credencial real é necessária.
 
 ## Logs e evidências
 

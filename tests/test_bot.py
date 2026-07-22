@@ -45,7 +45,7 @@ class OrderedQueue(FakeQueue):
 
 class FakeVaultProvider:
     def get_credential(self, label):
-        assert label == "credencial_erp"
+        assert label == "credencial_erp2"
         return {"username": "rebecca.erp", "password": "fake-password-for-test"}
 
 
