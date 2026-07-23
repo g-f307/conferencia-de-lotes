@@ -111,6 +111,7 @@ def test_settings_carrega_configuracao_da_automacao_web(
 
     assert settings.web_automation_enabled is True
     assert settings.web_test_url == "docs/index-lotes/index.html"
+    assert settings.web_artifact_dir == tmp_path / "artefatos"
 
 
 def test_maestro_ativado_exige_chaves(monkeypatch, tmp_path: Path):
