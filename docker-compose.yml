@@ -1,0 +1,19 @@
+services:
+  conferencia-lotes:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: conferencia-de-lotes:local
+    user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
+    environment:
+      MAESTRO_ENABLED: "false"
+      VAULT_ENABLED: "false"
+      INPUT_DIR: dados_entrada
+      INPUT_CSV: dados_entrada/lotes_auditoria.csv
+      LOG_FILE: logs/execucao.log
+      REPORT_DIR: relatorios
+      PROCESSING_DELAY_SECONDS: "0"
+    volumes:
+      - ./dados_entrada:/app/dados_entrada:ro
+      - ./logs:/app/logs
+      - ./relatorios:/app/relatorios
