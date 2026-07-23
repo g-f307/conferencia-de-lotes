@@ -15,6 +15,7 @@ from src.logging_config import configure_logging
 from src.maestro_client import MaestroClient
 from src.models import ExecutionResult
 from src.vault_client import BotCityVaultProvider, VaultClient
+from src.web_automation import run_web_automation
 
 
 class AlertGateway(Protocol):
@@ -219,6 +220,12 @@ def run(
                 "ambiente": "local",
             },
         )
+        if current_settings.web_automation_enabled:
+            opened_url = run_web_automation(
+                current_settings.web_test_url,
+                current_settings.base_dir,
+            )
+            current_logger.info("Automacao web executada em %s", opened_url)
         published = dispatch_csv(current_settings.input_csv, client, logger=current_logger)
         current_logger.info(
             "Dispatcher publicou %s itens do CSV configurado",

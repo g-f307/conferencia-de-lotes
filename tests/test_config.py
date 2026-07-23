@@ -101,6 +101,18 @@ def test_settings_carrega_delay_de_processamento(monkeypatch, tmp_path: Path):
     assert settings.processing_delay_seconds == 0.25
 
 
+def test_settings_carrega_configuracao_da_automacao_web(
+    monkeypatch, tmp_path: Path
+):
+    monkeypatch.setenv("WEB_AUTOMATION_ENABLED", "true")
+    monkeypatch.setenv("WEB_TEST_URL", "docs/index-lotes/index.html")
+
+    settings = Settings.from_env(tmp_path)
+
+    assert settings.web_automation_enabled is True
+    assert settings.web_test_url == "docs/index-lotes/index.html"
+
+
 def test_maestro_ativado_exige_chaves(monkeypatch, tmp_path: Path):
     monkeypatch.setenv("MAESTRO_ENABLED", "true")
     monkeypatch.delenv("MAESTRO_SERVER", raising=False)

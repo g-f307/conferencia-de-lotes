@@ -10,3 +10,4 @@ relatorios/*.json
 dist/
 Atividade.pdf
 .pytest_tmp/
+.mydocs/

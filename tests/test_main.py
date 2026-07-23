@@ -250,3 +250,33 @@ def test_run_falha_sem_publicar_csv_quando_vault_esta_invalido(tmp_path):
     assert "credencial_erp2" in result.message
     assert client.items == []
     assert client.finished_tasks[0][0] == "FAILED"
+
+
+def test_run_executa_automacao_web_quando_habilitada(monkeypatch, tmp_path):
+    settings = replace(
+        settings_for(tmp_path),
+        web_automation_enabled=True,
+        web_test_url="docs/index-lotes/index.html",
+    )
+    client = FakeMaestroClient([])
+    vault = VaultClient(FakeVaultProvider())
+    calls = []
+
+    def fake_run_web_automation(url, base_dir):
+        calls.append((url, base_dir))
+        return (base_dir / url).as_uri()
+
+    monkeypatch.setattr(
+        "src.main.run_web_automation", fake_run_web_automation
+    )
+
+    result = run(
+        settings=settings,
+        maestro_client=client,
+        vault_client=vault,
+    )
+
+    assert result.status == "SUCCESS"
+    assert calls == [
+        ("docs/index-lotes/index.html", settings.base_dir)
+    ]
