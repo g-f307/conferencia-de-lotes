@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Sistema corporativo de cadastro e acompanhamento de lotes de produção."
+    />
+    <title>Cadastro de Lotes de Produção</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="app.js" defer></script>
+  </head>
+
+  <body>
+    <div class="background-grid" aria-hidden="true"></div>
+
+    <main class="page-shell">
+      <section class="hero">
+        <div class="hero__badge">AMBIENTE DE TESTE</div>
+
+        <h1>Cadastro de Lotes de Produção</h1>
+        <p>
+          Registre, processe e acompanhe os lotes de produção em uma interface
+          simples, responsiva e preparada para testes automatizados.
+        </p>
+
+        <div class="hero__cards">
+          <article class="info-card">
+            <span class="info-card__icon">✓</span>
+            <div>
+              <strong>Validação automática</strong>
+              <p>Todos os campos obrigatórios são validados antes do envio.</p>
+            </div>
+          </article>
+
+          <article class="info-card">
+            <span class="info-card__icon">⌁</span>
+            <div>
+              <strong>Persistência local</strong>
+              <p>Os registros são armazenados pelo backend em arquivo JSON.</p>
+            </div>
+          </article>
+
+          <article class="info-card">
+            <span class="info-card__icon">⚙</span>
+            <div>
+              <strong>API REST</strong>
+              <p>Rotas para criar, listar, atualizar e excluir lotes.</p>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="workspace" aria-label="Área de cadastro">
+        <div class="panel panel--form">
+          <header class="panel__header">
+            <div class="panel__icon">◇</div>
+            <div>
+              <h2>Processar novo lote</h2>
+              <p>Sistema corporativo — ambiente de teste</p>
+            </div>
+          </header>
+
+          <form id="lote-form" novalidate>
+            <div class="field">
+              <label for="numero-lote">Número do lote</label>
+              <input
+                id="numero-lote"
+                name="numeroLote"
+                type="text"
+                placeholder="Ex.: LOTE-2026-0001"
+                autocomplete="off"
+                maxlength="40"
+                data-testid="numero-lote"
+                required
+              />
+              <small class="field__error" id="erro-numero-lote"></small>
+            </div>
+
+            <div class="field">
+              <label for="produto">Produto</label>
+              <select
+                id="produto"
+                name="produto"
+                data-testid="produto"
+                required
+              >
+                <option value="">Selecione um produto</option>
+              </select>
+              <small class="field__error" id="erro-produto"></small>
+            </div>
+
+            <fieldset class="field status-field">
+              <legend>Status</legend>
+
+              <label class="radio-option">
+                <input
+                  type="radio"
+                  name="status"
+                  value="Pendente"
+                  data-testid="status-pendente"
+                  checked
+                />
+                <span>Pendente</span>
+              </label>
+
+              <label class="radio-option">
+                <input
+                  type="radio"
+                  name="status"
+                  value="Em Processamento"
+                  data-testid="status-processamento"
+                />
+                <span>Em Processamento</span>
+              </label>
+
+              <label class="radio-option">
+                <input
+                  type="radio"
+                  name="status"
+                  value="Concluído"
+                  data-testid="status-concluido"
+                />
+                <span>Concluído</span>
+              </label>
+            </fieldset>
+
+            <button
+              id="botao-processar"
+              class="primary-button"
+              type="submit"
+              data-testid="processar-lote"
+            >
+              <span class="button-label">➤ Processar lote</span>
+              <span class="button-loader" aria-hidden="true"></span>
+            </button>
+
+            <div
+              id="mensagem"
+              class="message"
+              role="status"
+              aria-live="polite"
+              data-testid="mensagem"
+              hidden
+            ></div>
+          </form>
+        </div>
+
+        <div class="panel panel--list">
+          <div class="list-header">
+            <div>
+              <span class="eyebrow">REGISTROS</span>
+              <h2>Lotes cadastrados</h2>
+            </div>
+
+            <button
+              id="botao-atualizar"
+              class="secondary-button"
+              type="button"
+            >
+              Atualizar
+            </button>
+          </div>
+
+          <div id="lista-lotes" class="lots-list" aria-live="polite"></div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
