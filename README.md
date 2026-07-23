@@ -190,6 +190,7 @@ mkdir -p dados_entrada logs relatorios
 | `REPORT_DIR` | Diretório dos relatórios JSON. | `relatorios` |
 | `WEB_AUTOMATION_ENABLED` | Habilita o preenchimento do formulário web de teste. | `false` |
 | `WEB_TEST_URL` | URL HTTP, `file://` ou caminho local da página de teste. | `docs/index-lotes/index.html` |
+| `WEB_ARTIFACT_DIR` | Diretório das evidências visuais da automação web. | `artefatos` |
 
 O `.env` não deve ser versionado. A senha do ERP não pertence ao `.env` nem ao código; deve ser recuperada pelo provedor de credenciais em tempo de execução.
 
@@ -221,6 +222,7 @@ Configure no `.env`:
 ```dotenv
 WEB_AUTOMATION_ENABLED=true
 WEB_TEST_URL=docs/index-lotes/index.html
+WEB_ARTIFACT_DIR=artefatos
 ```
 
 `WEB_TEST_URL` aceita uma URL HTTP, uma URL `file://` ou um caminho relativo à
@@ -230,9 +232,13 @@ raiz do projeto. Para testar a página local sem acessar o Maestro:
 MAESTRO_ENABLED=false VAULT_ENABLED=false PROCESSING_DELAY_SECONDS=0 python bot.py
 ```
 
-O módulo abre a página, preenche o número do lote, seleciona produto e status e
-aciona o botão de processamento. Quando `WEB_AUTOMATION_ENABLED=false`, nenhuma
-instância de navegador é criada e o fluxo original permanece inalterado.
+O módulo abre a página, preenche o número do lote, seleciona produto e status,
+aciona o botão e aguarda a confirmação visível. Em seguida, salva em
+`artefatos/` um screenshot focado na mensagem de confirmação, identificado pelo
+lote e pelo horário da execução. Se a confirmação não aparecer dentro do tempo
+do Playwright, a execução informa claramente o lote afetado. Quando
+`WEB_AUTOMATION_ENABLED=false`, nenhuma instância de navegador é criada e o
+fluxo original permanece inalterado.
 
 ## Execução com Docker
 

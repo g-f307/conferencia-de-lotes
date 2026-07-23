@@ -56,6 +56,7 @@ class Settings:
     processing_delay_seconds: float
     web_automation_enabled: bool
     web_test_url: str
+    web_artifact_dir: Path
     runner_context: bool
 
     @classmethod
@@ -102,6 +103,9 @@ class Settings:
             ),
             web_test_url=env_or_default(
                 "WEB_TEST_URL", "docs/index-lotes/index.html"
+            ),
+            web_artifact_dir=project_path(
+                "WEB_ARTIFACT_DIR", "artefatos"
             ),
             runner_context=runner_context,
         )
