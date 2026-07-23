@@ -40,12 +40,10 @@ def fill_and_submit_lote(
     """Abre a página, preenche o formulário e aciona seu envio."""
     data = form_data or WebFormData()
     page.goto(url)
-    page.locator("#numero-lote").fill(data.lote_id)
-    page.locator("#produto").select_option(data.produto)
-    page.locator(
-        f'input[name="status"][value="{data.status}"]'
-    ).check()
-    page.locator("#botao-processar").click()
+    page.get_by_label("Número do lote").fill(data.lote_id)
+    page.get_by_label("Produto").select_option(data.produto)
+    page.get_by_label(data.status, exact=True).check()
+    page.get_by_role("button", name="Processar lote").click()
 
 
 def run_web_automation(

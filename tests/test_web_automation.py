@@ -28,8 +28,13 @@ class FakePage:
     def goto(self, url):
         self.opened_url = url
 
-    def locator(self, selector):
-        return self.locators.setdefault(selector, FakeLocator())
+    def get_by_label(self, label, exact=False):
+        key = ("label", label, exact)
+        return self.locators.setdefault(key, FakeLocator())
+
+    def get_by_role(self, role, name):
+        key = ("role", role, name)
+        return self.locators.setdefault(key, FakeLocator())
 
 
 def test_resolve_web_url_converte_caminho_relativo_em_file_url(tmp_path: Path):
@@ -57,13 +62,15 @@ def test_fill_and_submit_lote_preenche_seleciona_e_clica():
     fill_and_submit_lote(page, "file:///tmp/index.html", data)
 
     assert page.opened_url == "file:///tmp/index.html"
-    assert page.locators["#numero-lote"].actions == [
+    assert page.locators[("label", "Número do lote", False)].actions == [
         ("fill", "LOTE-TESTE-001")
     ]
-    assert page.locators["#produto"].actions == [
+    assert page.locators[("label", "Produto", False)].actions == [
         ("select_option", "Scanner")
     ]
+    assert page.locators[("label", "Concluído", True)].actions == [
+        ("check",)
+    ]
     assert page.locators[
-        'input[name="status"][value="Concluído"]'
-    ].actions == [("check",)]
-    assert page.locators["#botao-processar"].actions == [("click",)]
+        ("role", "button", "Processar lote")
+    ].actions == [("click",)]
