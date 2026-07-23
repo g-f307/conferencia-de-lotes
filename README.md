@@ -205,6 +205,48 @@ O Dispatcher e o Performer também podem ser consumidos programaticamente pelas 
 
 A execução real no Maestro exige `MAESTRO_ENABLED=true`, configuração técnica válida, DataPool existente e `task_id` não vazio.
 
+## Execução com Docker
+
+Para construir a imagem localmente:
+
+```bash
+docker build -t conferencia-de-lotes:local .
+```
+
+Para executar o fluxo local com Docker Compose:
+
+```bash
+mkdir -p logs relatorios
+docker compose up --build --abort-on-container-exit
+```
+
+O Compose monta `dados_entrada/` como somente leitura e persiste no host os
+arquivos criados em `logs/` e `relatorios/`. A execução local desabilita Maestro
+e Vault e reduz o atraso entre itens para zero. Por padrão, o container usa UID e
+GID `1000`; em outro ambiente Linux, informe os identificadores do usuário local:
+
+```bash
+LOCAL_UID=$(id -u) LOCAL_GID=$(id -g) docker compose up --build --abort-on-container-exit
+```
+
+Para remover o container após a execução:
+
+```bash
+docker compose down
+```
+
+O `.env` não faz parte do contexto de build. Em uma execução integrada, forneça
+as configurações por variáveis do ambiente de implantação ou pelos argumentos do
+BotCity Runner. Nunca adicione chaves, tokens ou senhas ao `Dockerfile` ou ao
+`docker-compose.yml`.
+
+## Integração contínua
+
+O workflow [`.github/workflows/ci.yml`](.github/workflows/ci.yml) é executado em
+pushes e pull requests destinados à `main`. Ele instala as dependências, executa
+a suíte com `pytest` e também confirma que a imagem Docker pode ser construída.
+O workflow utiliza apenas o modo de teste e não depende de credenciais do Maestro.
+
 ## Pacote de deploy BotCity
 
 O BotCity Runner espera um bot Python customizado com `bot.py` e `requirements.txt` no pacote. Gere o zip de deploy com:
