@@ -6,6 +6,7 @@ from src.logging_config import configure_logging
 from src.main import run, save_execution_report
 from src.models import ExecutionResult
 from src.vault_client import VaultClient
+from src.web_automation import WebAutomationResult
 
 
 class FakeAlertGateway:
@@ -262,9 +263,12 @@ def test_run_executa_automacao_web_quando_habilitada(monkeypatch, tmp_path):
     vault = VaultClient(FakeVaultProvider())
     calls = []
 
-    def fake_run_web_automation(url, base_dir):
-        calls.append((url, base_dir))
-        return (base_dir / url).as_uri()
+    def fake_run_web_automation(url, base_dir, artifact_dir):
+        calls.append((url, base_dir, artifact_dir))
+        return WebAutomationResult(
+            url=(base_dir / url).as_uri(),
+            evidence_path=artifact_dir / "comprovante.png",
+        )
 
     monkeypatch.setattr(
         "src.main.run_web_automation", fake_run_web_automation
@@ -278,5 +282,9 @@ def test_run_executa_automacao_web_quando_habilitada(monkeypatch, tmp_path):
 
     assert result.status == "SUCCESS"
     assert calls == [
-        ("docs/index-lotes/index.html", settings.base_dir)
+        (
+            "docs/index-lotes/index.html",
+            settings.base_dir,
+            settings.web_artifact_dir,
+        )
     ]

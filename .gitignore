@@ -7,6 +7,7 @@ __pycache__/
 htmlcov/
 logs/*.log
 relatorios/*.json
+artefatos/*.png
 dist/
 Atividade.pdf
 .pytest_tmp/

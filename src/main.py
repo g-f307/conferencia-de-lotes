@@ -218,11 +218,16 @@ def run(
             },
         )
         if current_settings.web_automation_enabled:
-            opened_url = run_web_automation(
+            web_result = run_web_automation(
                 current_settings.web_test_url,
                 current_settings.base_dir,
+                current_settings.web_artifact_dir,
             )
-            current_logger.info("Automacao web executada em %s", opened_url)
+            current_logger.info(
+                "Automacao web executada em %s; evidencia salva em %s",
+                web_result.url,
+                web_result.evidence_path,
+            )
         published = dispatch_csv(current_settings.input_csv, client, logger=current_logger)
         current_logger.info(
             "Dispatcher publicou %s itens do CSV configurado",
