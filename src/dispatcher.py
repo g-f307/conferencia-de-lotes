@@ -56,14 +56,33 @@ def dispatch_csv(
 ) -> int:
     """Publica cada linha do CSV como item em FilaAuditoriaLotes2."""
     current_logger = logger or logging.getLogger(__name__)
-    current_logger.info("Iniciando auditoria de acessos")
+    current_logger.info(
+        "Iniciando auditoria de acessos",
+        extra={
+            "evento": "INICIO_AUDITORIA",
+            "formulario": "Dispatcher",
+            "status": "STARTED",
+            "usuario": "sistema",
+            "ambiente": "local",
+        },
+    )
 
     published = 0
     for item in iter_csv_rows(csv_path):
         maestro_client.create_entry(item)
         published += 1
 
-    current_logger.info("Itens publicados no DataPool: %s", published)
+        current_logger.info(
+        "Itens publicados no DataPool: %s",
+        published,
+        extra={
+            "evento": "PUBLICACAO_DATAPOOL",
+            "formulario": "Dispatcher",
+            "status": "SUCCESS",
+            "usuario": "sistema",
+            "ambiente": "local",
+        },
+    )
     return published
 
 

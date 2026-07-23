@@ -72,6 +72,16 @@ class VaultClient:
                 f"{self.credential_label} deve conter username e password"
             )
 
-        LOGGER.info("Credencial ERP recuperada para usuario %s", username)
+        LOGGER.info(
+            "Credencial ERP recuperada para usuario %s",
+            username,
+            extra={
+                "evento": "RECUPERACAO_CREDENCIAL",
+                "formulario": "Vault",
+                "status": "SUCCESS",
+                "usuario": username,
+                "ambiente": "local",
+            },
+        )
         self._cached_credential = ErpCredential(username=username, password=password)
         return self._cached_credential
