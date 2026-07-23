@@ -7,7 +7,18 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
+from src.config import Settings
+
 LOGGER_NAME = "auditor_lotes"
+
+
+def resolve_log_environment(record: logging.LogRecord) -> str:
+    """Resolve o ambiente sem fixar local quando a execucao vem do Runner."""
+    ambiente = getattr(record, "ambiente", None)
+    if ambiente:
+        return str(ambiente)
+    return "runner" if Settings.from_env().runner_context else "local"
+
 
 class StructuredJsonFormatter(logging.Formatter):
 
@@ -24,7 +35,7 @@ class StructuredJsonFormatter(logging.Formatter):
                 "aplicacao",
                 "bot-conferencia-de-lotes-v1",
             ),
-            "ambiente": getattr(record, "ambiente", "local"),
+            "ambiente": resolve_log_environment(record),
             "usuario": getattr(record, "usuario", "sistema"),
             "detalhes": {
                 "formulario": getattr(record, "formulario", None),
@@ -33,10 +44,17 @@ class StructuredJsonFormatter(logging.Formatter):
             },
         }
 
+        if record.exc_info:
+            exc_type, exc_value, _ = record.exc_info
+            payload["detalhes"]["exception"] = self.formatException(record.exc_info)
+            payload["detalhes"]["exception_type"] = (
+                exc_type.__name__ if exc_type else None
+            )
+            payload["detalhes"]["exception_message"] = str(exc_value)
+
         return json.dumps(
             payload,
             ensure_ascii=False,
-            indent=2,
         )
 
 

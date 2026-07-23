@@ -4,7 +4,6 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-
 LOGGER = logging.getLogger(__name__)
 DEFAULT_CREDENTIAL_LABEL = "credencial_erp2"
 
@@ -80,7 +79,6 @@ class VaultClient:
                 "formulario": "Vault",
                 "status": "SUCCESS",
                 "usuario": username,
-                "ambiente": "local",
             },
         )
         self._cached_credential = ErpCredential(username=username, password=password)

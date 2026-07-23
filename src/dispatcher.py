@@ -52,6 +52,7 @@ def iter_csv_rows(csv_path: Path) -> Iterable[dict[str, str]]:
 def dispatch_csv(
     csv_path: Path,
     maestro_client: MaestroClient,
+    ambiente: str | None = None,
     logger: logging.Logger | None = None,
 ) -> int:
     """Publica cada linha do CSV como item em FilaAuditoriaLotes2."""
@@ -63,7 +64,7 @@ def dispatch_csv(
             "formulario": "Dispatcher",
             "status": "STARTED",
             "usuario": "sistema",
-            "ambiente": "local",
+            "ambiente": ambiente,
         },
     )
 
@@ -72,7 +73,7 @@ def dispatch_csv(
         maestro_client.create_entry(item)
         published += 1
 
-        current_logger.info(
+    current_logger.info(
         "Itens publicados no DataPool: %s",
         published,
         extra={
@@ -80,9 +81,10 @@ def dispatch_csv(
             "formulario": "Dispatcher",
             "status": "SUCCESS",
             "usuario": "sistema",
-            "ambiente": "local",
+            "ambiente": ambiente,
         },
     )
+
     return published
 
 
@@ -94,7 +96,15 @@ def run(
     """Executa o Dispatcher usando o INPUT_CSV configurado."""
     current_settings = settings or Settings.from_env()
     client = maestro_client or MaestroClient(current_settings)
-    return dispatch_csv(current_settings.input_csv, client, logger=logger)
+
+    ambiente = "runner" if current_settings.runner_context else "local"
+
+    return dispatch_csv(
+        current_settings.input_csv,
+        client,
+        logger=logger,
+        ambiente=ambiente,
+    )
 
 
 def main() -> int:

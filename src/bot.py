@@ -74,7 +74,6 @@ class LotePerformer:
                         "formulario": "FilaAuditoriaLotes",
                         "status": "FAILED",
                         "usuario": "sistema",
-                        "ambiente": "local",
                     },
                 )
                 raise QueueItemFetchError("Falha tecnica ao obter item da fila") from exc
@@ -87,7 +86,6 @@ class LotePerformer:
                         "formulario": "FilaAuditoriaLotes",
                         "status": "SUCCESS",
                         "usuario": "sistema",
-                        "ambiente": "local",
                     },
                 )
                 break
@@ -121,7 +119,6 @@ class LotePerformer:
                         "formulario": "Auditoria de Lotes",
                         "status": "FAILED",
                         "usuario": "sistema",
-                        "ambiente": "local",
                     },
                 )
                 self.queue.mark_system_error(item, str(exc))
@@ -138,6 +135,5 @@ class LotePerformer:
                 "formulario": "Login ERP",
                 "status": "SUCCESS",
                 "usuario": credential.username,
-                "ambiente": "local",
             },
         )

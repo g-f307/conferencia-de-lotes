@@ -178,7 +178,6 @@ def run(
                 "formulario": "Inicializacao",
                 "status": "FAILED",
                 "usuario": "sistema",
-                "ambiente": "local",
             },
         )
         return result.fail(str(exc))
@@ -192,7 +191,6 @@ def run(
             "formulario": "Inicializacao",
             "status": "FAILED",
             "usuario": "sistema",
-            "ambiente": "local",
         },
     )
         gateway = resolve_alert_gateway(current_settings, alert_gateway, maestro_client)
@@ -217,7 +215,6 @@ def run(
                 "formulario": "Vault",
                 "status": "SUCCESS",
                 "usuario": "sistema",
-                "ambiente": "local",
             },
         )
         if current_settings.web_automation_enabled:
@@ -235,7 +232,6 @@ def run(
                 "formulario": "Dispatcher",
                 "status": "SUCCESS",
                 "usuario": "sistema",
-                "ambiente": "local",
             },
         )
         current_logger.info(
@@ -245,7 +241,6 @@ def run(
                 "formulario": "DataPool",
                 "status": "STARTED",
                 "usuario": "sistema",
-                "ambiente": "local",
             },
         )
         performer = LotePerformer(
@@ -269,7 +264,6 @@ def run(
                 "formulario": "Resumo",
                 "status": result.status,
                 "usuario": "sistema",
-                "ambiente": "local",
             },
         )
         current_logger.info(
@@ -279,7 +273,6 @@ def run(
                 "formulario": "Sistema",
                 "status": "SUCCESS",
                 "usuario": "sistema",
-                "ambiente": "local",
             },
         )
         return result
@@ -291,7 +284,6 @@ def run(
                 "formulario": "Sistema",
                 "status": "FAILED",
                 "usuario": "sistema",
-                "ambiente": "local",
             },
         )
         failed_result = result.fail(str(exc))
