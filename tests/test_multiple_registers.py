@@ -1,6 +1,15 @@
 import json
 
+from src.config import Settings
 from src.logging_config import configure_logging
+
+
+def configured_logger(tmp_path, monkeypatch, **environment):
+    for name, value in environment.items():
+        monkeypatch.setenv(name, value)
+    settings = Settings.from_env(tmp_path)
+    return configure_logging(tmp_path / "execucao.log", settings)
+
 
 def test_log_contem_multiplos_registros(tmp_path):
     log_file = tmp_path / "execucao.log"
@@ -18,10 +27,14 @@ def test_log_contem_multiplos_registros(tmp_path):
     for linha in linhas:
         json.loads(linha)
 
-def test_log_possui_campos_obrigatorios(tmp_path):
+def test_log_possui_campos_obrigatorios(tmp_path, monkeypatch):
     log_file = tmp_path / "execucao.log"
-
-    logger = configure_logging(log_file)
+    logger = configured_logger(
+        tmp_path,
+        monkeypatch,
+        BOT_ID="auditor-lotes",
+        EXECUTION_ID="exec-123",
+    )
 
     logger.info(
         "Mensagem",
@@ -38,6 +51,8 @@ def test_log_possui_campos_obrigatorios(tmp_path):
 
     assert "timestamp" in registro
     assert "level" in registro
+    assert registro["bot_id"] == "auditor-lotes"
+    assert registro["execution_id"] == "exec-123"
     assert "evento" in registro
     assert "aplicacao" in registro
     assert "ambiente" in registro
@@ -48,9 +63,11 @@ def test_log_possui_campos_obrigatorios(tmp_path):
     assert "status" in registro["detalhes"]
     assert "mensagem" in registro["detalhes"]
 
-def test_log_usa_valores_padrao(tmp_path):
+def test_log_usa_valores_padrao(tmp_path, monkeypatch):
     log_file = tmp_path / "execucao.log"
-
+    monkeypatch.delenv("BOT_ID", raising=False)
+    monkeypatch.delenv("EXECUTION_ID", raising=False)
+    monkeypatch.setattr("sys.argv", ["bot.py"])
     logger = configure_logging(log_file)
 
     logger.info("Teste")
@@ -61,6 +78,8 @@ def test_log_usa_valores_padrao(tmp_path):
 
     assert registro["evento"] == "LOG"
     assert registro["usuario"] == "sistema"
+    assert registro["bot_id"] == "bot-conferencia-de-lotes-v1"
+    assert registro["execution_id"] == "execucao-local"
 
     assert registro["detalhes"]["formulario"] is None
     assert registro["detalhes"]["status"] is None
@@ -80,18 +99,27 @@ def test_log_vai_para_arquivo_e_console(tmp_path, capsys):
 
     assert "Teste console" in texto
 
-def test_log_nao_expoe_senha(tmp_path):
+def test_log_nao_expoe_dados_sensiveis(tmp_path, monkeypatch):
     log_file = tmp_path / "execucao.log"
-
+    senha = "SenhaSuperSecreta123"
+    token = "TokenSuperSecreto456"
+    maestro_key = "ChaveMaestro789"
+    monkeypatch.setenv("MAESTRO_KEY", maestro_key)
     logger = configure_logging(log_file)
 
-    senha = "SenhaSuperSecreta123"
-
-    logger.info("Login realizado")
+    logger.info(
+        "Login: senha=%s token=%s chave=%s",
+        senha,
+        token,
+        maestro_key,
+    )
 
     texto = log_file.read_text()
 
     assert senha not in texto
+    assert token not in texto
+    assert maestro_key not in texto
+    assert texto.count("[REDACTED]") == 3
 
 def test_log_preserva_excecao(tmp_path):
     log_file = tmp_path / "execucao.log"
