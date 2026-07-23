@@ -9,3 +9,4 @@ logs/*.log
 relatorios/*.json
 dist/
 Atividade.pdf
+.mydocs/

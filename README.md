@@ -188,6 +188,8 @@ mkdir -p dados_entrada logs relatorios
 | `INPUT_DIR` | Diretório de entrada. | `dados_entrada` |
 | `LOG_FILE` | Arquivo de log. | `logs/execucao.log` |
 | `REPORT_DIR` | Diretório dos relatórios JSON. | `relatorios` |
+| `WEB_AUTOMATION_ENABLED` | Habilita o preenchimento do formulário web de teste. | `false` |
+| `WEB_TEST_URL` | URL HTTP, `file://` ou caminho local da página de teste. | `docs/index-lotes/index.html` |
 
 O `.env` não deve ser versionado. A senha do ERP não pertence ao `.env` nem ao código; deve ser recuperada pelo provedor de credenciais em tempo de execução.
 
@@ -204,6 +206,33 @@ Com a pasta `dados_entrada/` e o CSV configurado disponíveis, o comando publica
 O Dispatcher e o Performer também podem ser consumidos programaticamente pelas funções e classes `dispatch_csv` e `LotePerformer`.
 
 A execução real no Maestro exige `MAESTRO_ENABLED=true`, configuração técnica válida, DataPool existente e `task_id` não vazio.
+
+## Automação web com Playwright
+
+A automação web é opcional e permanece desabilitada por padrão. Instale o
+navegador usado pelo Playwright depois das dependências Python:
+
+```bash
+python -m playwright install chromium
+```
+
+Configure no `.env`:
+
+```dotenv
+WEB_AUTOMATION_ENABLED=true
+WEB_TEST_URL=docs/index-lotes/index.html
+```
+
+`WEB_TEST_URL` aceita uma URL HTTP, uma URL `file://` ou um caminho relativo à
+raiz do projeto. Para testar a página local sem acessar o Maestro:
+
+```bash
+MAESTRO_ENABLED=false VAULT_ENABLED=false PROCESSING_DELAY_SECONDS=0 python bot.py
+```
+
+O módulo abre a página, preenche o número do lote, seleciona produto e status e
+aciona o botão de processamento. Quando `WEB_AUTOMATION_ENABLED=false`, nenhuma
+instância de navegador é criada e o fluxo original permanece inalterado.
 
 ## Execução com Docker
 

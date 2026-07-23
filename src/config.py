@@ -54,6 +54,8 @@ class Settings:
     log_file: Path
     report_dir: Path
     processing_delay_seconds: float
+    web_automation_enabled: bool
+    web_test_url: str
     runner_context: bool
 
     @classmethod
@@ -95,6 +97,12 @@ class Settings:
             log_file=project_path("LOG_FILE", "logs/execucao.log"),
             report_dir=project_path("REPORT_DIR", "relatorios"),
             processing_delay_seconds=float(os.getenv("PROCESSING_DELAY_SECONDS", "1")),
+            web_automation_enabled=as_bool(
+                os.getenv("WEB_AUTOMATION_ENABLED"), False
+            ),
+            web_test_url=env_or_default(
+                "WEB_TEST_URL", "docs/index-lotes/index.html"
+            ),
             runner_context=runner_context,
         )
 
