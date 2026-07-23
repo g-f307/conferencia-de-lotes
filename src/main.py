@@ -164,7 +164,10 @@ def run(
 ) -> ExecutionResult:
     """Executa o ciclo principal: valida ambiente, consome DataPool e reporta."""
     current_settings = settings or Settings.from_env()
-    current_logger = logger or configure_logging(current_settings.log_file)
+    current_logger = logger or configure_logging(
+        current_settings.log_file,
+        current_settings,
+    )
     result = ExecutionResult()
 
     try:
@@ -185,14 +188,14 @@ def run(
     if not current_settings.input_dir.is_dir():
         message = f"Pasta de entrada inexistente: {current_settings.input_dir}"
         current_logger.error(
-        message,
-        extra={
-            "evento": "VALIDACAO_ENTRADA",
-            "formulario": "Inicializacao",
-            "status": "FAILED",
-            "usuario": "sistema",
-        },
-    )
+            message,
+            extra={
+                "evento": "VALIDACAO_ENTRADA",
+                "formulario": "Inicializacao",
+                "status": "FAILED",
+                "usuario": "sistema",
+            },
+        )
         gateway = resolve_alert_gateway(current_settings, alert_gateway, maestro_client)
         if gateway is not None:
             try:
