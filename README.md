@@ -251,14 +251,22 @@ docker build -t conferencia-de-lotes:local .
 Para executar o fluxo local com Docker Compose:
 
 ```bash
-mkdir -p logs relatorios
+mkdir -p logs relatorios artefatos
 docker compose up --build --abort-on-container-exit
 ```
 
+Para executar uma rodada pontual do bot:
+
+```bash
+docker compose run --rm conferencia-de-lotes
+```
+
 O Compose monta `dados_entrada/` como somente leitura e persiste no host os
-arquivos criados em `logs/` e `relatorios/`. A execução local desabilita Maestro
-e Vault e reduz o atraso entre itens para zero. Por padrão, o container usa UID e
-GID `1000`; em outro ambiente Linux, informe os identificadores do usuário local:
+arquivos criados em `logs/`, `relatorios/` e `artefatos/`. A execução local
+desabilita Maestro e Vault e reduz o atraso entre itens para zero. Para testar o
+preenchimento web dentro do container, execute com `WEB_AUTOMATION_ENABLED=true`.
+Por padrão, o container usa UID e GID `1000`; em outro ambiente Linux, informe
+os identificadores do usuário local:
 
 ```bash
 LOCAL_UID=$(id -u) LOCAL_GID=$(id -g) docker compose up --build --abort-on-container-exit

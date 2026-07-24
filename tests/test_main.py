@@ -254,6 +254,9 @@ def test_run_falha_sem_publicar_csv_quando_vault_esta_invalido(tmp_path):
 
 
 def test_run_executa_automacao_web_quando_habilitada(monkeypatch, tmp_path):
+    web_page = tmp_path / "docs" / "index-lotes" / "index.html"
+    web_page.parent.mkdir(parents=True)
+    web_page.write_text("<html></html>", encoding="utf-8")
     settings = replace(
         settings_for(tmp_path),
         web_automation_enabled=True,
@@ -288,3 +291,41 @@ def test_run_executa_automacao_web_quando_habilitada(monkeypatch, tmp_path):
             settings.web_artifact_dir,
         )
     ]
+
+
+def test_run_registra_evento_estruturado_da_automacao_web(monkeypatch, tmp_path):
+    web_page = tmp_path / "docs" / "index-lotes" / "index.html"
+    web_page.parent.mkdir(parents=True)
+    web_page.write_text("<html></html>", encoding="utf-8")
+    settings = replace(
+        settings_for(tmp_path),
+        web_automation_enabled=True,
+        web_test_url="docs/index-lotes/index.html",
+    )
+    client = FakeMaestroClient([])
+    vault = VaultClient(FakeVaultProvider())
+    log_file = tmp_path / "logs" / "execucao.log"
+    logger = configure_logging(log_file, settings)
+
+    def fake_run_web_automation(url, base_dir, artifact_dir):
+        return WebAutomationResult(
+            url=(base_dir / url).as_uri(),
+            evidence_path=artifact_dir / "comprovante.png",
+        )
+
+    monkeypatch.setattr(
+        "src.main.run_web_automation", fake_run_web_automation
+    )
+
+    run(
+        settings=settings,
+        maestro_client=client,
+        vault_client=vault,
+        logger=logger,
+    )
+
+    events = [
+        json.loads(line)["evento"]
+        for line in log_file.read_text(encoding="utf-8").splitlines()
+    ]
+    assert "AUTOMACAO_WEB" in events

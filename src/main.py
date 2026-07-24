@@ -230,6 +230,12 @@ def run(
                 "Automacao web executada em %s; evidencia salva em %s",
                 web_result.url,
                 web_result.evidence_path,
+                extra={
+                    "evento": "AUTOMACAO_WEB",
+                    "formulario": "Index Lotes",
+                    "status": "SUCCESS",
+                    "usuario": "sistema",
+                },
             )
         published = dispatch_csv(current_settings.input_csv, client, logger=current_logger)
         current_logger.info(

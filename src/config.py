@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import os
 from pathlib import Path
 import sys
+from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 
@@ -118,24 +119,38 @@ class Settings:
         )
 
     def validate(self) -> None:
-        """Valida apenas os valores necessários quando o Maestro está ativo."""
-        if not self.maestro_enabled:
+        """Valida valores dependentes das integrações habilitadas."""
+        if self.maestro_enabled:
+            required = {"MAESTRO_SERVER": self.maestro_server}
+            if not self.runner_context:
+                required.update(
+                    {
+                        "MAESTRO_LOGIN": self.maestro_login,
+                        "MAESTRO_KEY": self.maestro_key,
+                    }
+                )
+            missing = [name for name, value in required.items() if not value]
+            if missing:
+                raise ValueError(
+                    "Configuração obrigatória ausente: " + ", ".join(missing)
+                )
+            if not self.vault_enabled:
+                raise ValueError(
+                    "VAULT_ENABLED deve ser true quando MAESTRO_ENABLED=true"
+                )
+
+        if self.web_automation_enabled:
+            self._validate_web_test_url()
+
+    def _validate_web_test_url(self) -> None:
+        """Garante que a pagina web local exista quando Playwright estiver ativo."""
+        if not self.web_test_url.strip():
+            raise ValueError("WEB_TEST_URL deve ser informado")
+        if urlparse(self.web_test_url).scheme:
             return
 
-        required = {"MAESTRO_SERVER": self.maestro_server}
-        if not self.runner_context:
-            required.update(
-                {
-                    "MAESTRO_LOGIN": self.maestro_login,
-                    "MAESTRO_KEY": self.maestro_key,
-                }
-            )
-        missing = [name for name, value in required.items() if not value]
-        if missing:
-            raise ValueError(
-                "Configuração obrigatória ausente: " + ", ".join(missing)
-            )
-        if not self.vault_enabled:
-            raise ValueError(
-                "VAULT_ENABLED deve ser true quando MAESTRO_ENABLED=true"
-            )
+        path = Path(self.web_test_url).expanduser()
+        if not path.is_absolute():
+            path = self.base_dir / path
+        if not path.is_file():
+            raise ValueError(f"WEB_TEST_URL local inexistente: {path}")
