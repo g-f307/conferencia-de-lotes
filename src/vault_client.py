@@ -4,8 +4,10 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from src.logging_config import LOGGER_NAME
 
-LOGGER = logging.getLogger(__name__)
+
+LOGGER = logging.getLogger(LOGGER_NAME)
 DEFAULT_CREDENTIAL_LABEL = "credencial_erp2"
 
 
@@ -72,6 +74,15 @@ class VaultClient:
                 f"{self.credential_label} deve conter username e password"
             )
 
-        LOGGER.info("Credencial ERP recuperada para usuario %s", username)
+        LOGGER.info(
+            "Credencial ERP recuperada para usuario %s",
+            username,
+            extra={
+                "evento": "RECUPERACAO_CREDENCIAL",
+                "formulario": "Vault",
+                "status": "SUCCESS",
+                "usuario": username,
+            },
+        )
         self._cached_credential = ErpCredential(username=username, password=password)
         return self._cached_credential

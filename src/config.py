@@ -46,6 +46,8 @@ class Settings:
     maestro_login: str
     maestro_key: str
     maestro_task_id: str
+    bot_id: str
+    execution_id: str
     datapool_label: str
     vault_label: str
     reference_lotes: tuple[str, ...]
@@ -84,6 +86,11 @@ class Settings:
             maestro_login=env_or_default("MAESTRO_LOGIN"),
             maestro_key=env_or_default("MAESTRO_KEY"),
             maestro_task_id=env_or_default("MAESTRO_TASK_ID", runner_task_id),
+            bot_id=env_or_default("BOT_ID", "bot-conferencia-de-lotes-v1"),
+            execution_id=env_or_default(
+                "EXECUTION_ID",
+                runner_task_id or "execucao-local",
+            ),
             datapool_label=os.getenv(
                 "DATAPOOL_LABEL", "FilaAuditoriaLotes2"
             ).strip(),

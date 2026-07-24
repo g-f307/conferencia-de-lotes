@@ -5,11 +5,13 @@ import time
 from dataclasses import dataclass, field
 from typing import Callable, Iterable, Protocol
 
+from src.logging_config import LOGGER_NAME
 from src.validation import HumanReviewRequired, HumanReviewStatus, ValidationError, validate_lote
 from src.vault_client import ErpCredential, VaultClient
 
 
-LOGGER = logging.getLogger(__name__)
+LOGGER = logging.getLogger(LOGGER_NAME)
+DATAPOOL_LOG_LABEL = "FilaAuditoriaLotes2"
 
 
 class QueueAdapter(Protocol):
@@ -67,11 +69,27 @@ class LotePerformer:
             try:
                 item = self.queue.next()
             except Exception as exc:
-                LOGGER.exception("Falha tecnica ao obter item da fila")
+                LOGGER.exception(
+                    "Falha tecnica ao obter item da fila",
+                    extra={
+                        "evento": "LEITURA_DATAPOOL",
+                        "formulario": DATAPOOL_LOG_LABEL,
+                        "status": "FAILED",
+                        "usuario": "sistema",
+                    },
+                )
                 raise QueueItemFetchError("Falha tecnica ao obter item da fila") from exc
 
             if item is None:
-                LOGGER.info("DataPool retornou item vazio; encerrando consumo")
+                LOGGER.info(
+                    "DataPool retornou item vazio; encerrando consumo",
+                    extra={
+                        "evento": "FIM_DATAPOOL",
+                        "formulario": DATAPOOL_LOG_LABEL,
+                        "status": "SUCCESS",
+                        "usuario": "sistema",
+                    },
+                )
                 break
 
             result.total += 1
@@ -96,11 +114,28 @@ class LotePerformer:
                 self.queue.mark_business_error(item, str(exc))
                 result.business_errors += 1
             except Exception as exc:
-                LOGGER.exception("Falha tecnica ao processar item da fila")
+                LOGGER.exception(
+                    "Falha tecnica ao processar item da fila",
+                    extra={
+                        "evento": "PROCESSAMENTO_LOTE",
+                        "formulario": "Auditoria de Lotes",
+                        "status": "FAILED",
+                        "usuario": "sistema",
+                    },
+                )
                 self.queue.mark_system_error(item, str(exc))
                 result.system_errors += 1
 
         return result
 
     def _log_erp_user(self, credential: ErpCredential) -> None:
-        LOGGER.info("ERP autenticado com usuario %s", credential.username)
+        LOGGER.info(
+            "ERP autenticado com usuario %s",
+            credential.username,
+            extra={
+                "evento": "AUTENTICACAO_ERP",
+                "formulario": "Login ERP",
+                "status": "SUCCESS",
+                "usuario": credential.username,
+            },
+        )

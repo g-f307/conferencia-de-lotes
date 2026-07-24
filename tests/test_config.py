@@ -42,6 +42,41 @@ def test_settings_carrega_maestro_task_id(monkeypatch, tmp_path: Path):
     assert settings.maestro_task_id == "123"
 
 
+def test_settings_carrega_identificadores_de_log(monkeypatch, tmp_path: Path):
+    monkeypatch.setenv("BOT_ID", "auditor-lotes")
+    monkeypatch.setenv("EXECUTION_ID", "exec-123")
+
+    settings = Settings.from_env(tmp_path)
+
+    assert settings.bot_id == "auditor-lotes"
+    assert settings.execution_id == "exec-123"
+
+
+def test_settings_usa_identificadores_locais_padrao(monkeypatch, tmp_path: Path):
+    monkeypatch.delenv("BOT_ID", raising=False)
+    monkeypatch.delenv("EXECUTION_ID", raising=False)
+    monkeypatch.setattr("sys.argv", ["bot.py"])
+
+    settings = Settings.from_env(tmp_path)
+
+    assert settings.bot_id == "bot-conferencia-de-lotes-v1"
+    assert settings.execution_id == "execucao-local"
+
+
+def test_settings_usa_task_id_do_runner_como_execution_id(
+    monkeypatch, tmp_path: Path
+):
+    monkeypatch.delenv("EXECUTION_ID", raising=False)
+    monkeypatch.setattr(
+        "sys.argv",
+        ["bot.py", "https://maestro.example", "task-456", "token"],
+    )
+
+    settings = Settings.from_env(tmp_path)
+
+    assert settings.execution_id == "task-456"
+
+
 def test_botcity_runner_args_reconhece_server_e_task_id():
     assert botcity_runner_args(["bot.py", "https://maestro.example", "123", "token"]) == (
         "https://maestro.example",

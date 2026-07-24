@@ -10,4 +10,5 @@ relatorios/*.json
 artefatos/*.png
 dist/
 Atividade.pdf
+.pytest_tmp/
 .mydocs/

@@ -164,18 +164,38 @@ def run(
 ) -> ExecutionResult:
     """Executa o ciclo principal: valida ambiente, consome DataPool e reporta."""
     current_settings = settings or Settings.from_env()
-    current_logger = logger or configure_logging(current_settings.log_file)
+    current_logger = logger or configure_logging(
+        current_settings.log_file,
+        current_settings,
+    )
     result = ExecutionResult()
 
     try:
         current_settings.validate()
     except ValueError as exc:
-        current_logger.error("Configuracao invalida: %s", exc)
+        current_logger.error(
+            "Configuracao invalida: %s",
+            exc,
+            extra={
+                "evento": "VALIDACAO_CONFIGURACAO",
+                "formulario": "Inicializacao",
+                "status": "FAILED",
+                "usuario": "sistema",
+            },
+        )
         return result.fail(str(exc))
 
     if not current_settings.input_dir.is_dir():
         message = f"Pasta de entrada inexistente: {current_settings.input_dir}"
-        current_logger.error(message)
+        current_logger.error(
+            message,
+            extra={
+                "evento": "VALIDACAO_ENTRADA",
+                "formulario": "Inicializacao",
+                "status": "FAILED",
+                "usuario": "sistema",
+            },
+        )
         gateway = resolve_alert_gateway(current_settings, alert_gateway, maestro_client)
         if gateway is not None:
             try:
@@ -191,7 +211,14 @@ def run(
         client.send_start_alert()
         current_vault_client.get_erp_credential()
         current_logger.info(
-            "Vault validado para a credencial %s", current_settings.vault_label
+            "Vault validado para a credencial %s",
+            current_settings.vault_label,
+            extra={
+                "evento": "VALIDACAO_VAULT",
+                "formulario": "Vault",
+                "status": "SUCCESS",
+                "usuario": "sistema",
+            },
         )
         if current_settings.web_automation_enabled:
             web_result = run_web_automation(
@@ -205,8 +232,25 @@ def run(
                 web_result.evidence_path,
             )
         published = dispatch_csv(current_settings.input_csv, client, logger=current_logger)
-        current_logger.info("Dispatcher publicou %s itens do CSV configurado", published)
-        current_logger.info("Estrutura inicial validada; iniciando consumo do DataPool")
+        current_logger.info(
+            "Dispatcher publicou %s itens do CSV configurado",
+            published,
+            extra={
+                "evento": "PUBLICACAO_CSV",
+                "formulario": "Dispatcher",
+                "status": "SUCCESS",
+                "usuario": "sistema",
+            },
+        )
+        current_logger.info(
+            "Estrutura inicial validada; iniciando consumo do DataPool",
+            extra={
+                "evento": "INICIO_PROCESSAMENTO",
+                "formulario": "DataPool",
+                "status": "STARTED",
+                "usuario": "sistema",
+            },
+        )
         performer = LotePerformer(
             client,
             reference_lotes or current_settings.reference_lotes,
@@ -223,11 +267,33 @@ def run(
             result.processed_items,
             result.failed_items,
             result.ambiguous_items,
+            extra={
+                "evento": "FIM_PROCESSAMENTO",
+                "formulario": "Resumo",
+                "status": result.status,
+                "usuario": "sistema",
+            },
         )
-        current_logger.info("Automacao encerrada com sucesso operacional")
+        current_logger.info(
+            "Automacao encerrada com sucesso operacional",
+            extra={
+                "evento": "ENCERRAMENTO",
+                "formulario": "Sistema",
+                "status": "SUCCESS",
+                "usuario": "sistema",
+            },
+        )
         return result
     except Exception as exc:
-        current_logger.exception("Falha fatal no ciclo principal")
+        current_logger.exception(
+            "Falha fatal no ciclo principal",
+            extra={
+                "evento": "ERRO_FATAL",
+                "formulario": "Sistema",
+                "status": "FAILED",
+                "usuario": "sistema",
+            },
+        )
         failed_result = result.fail(str(exc))
         finish_maestro_task(client, failed_result, current_logger)
         return failed_result

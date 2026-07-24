@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Iterable
 
 from src.config import Settings
+from src.logging_config import LOGGER_NAME
 from src.maestro_client import MaestroClient
 
 
@@ -52,18 +53,39 @@ def iter_csv_rows(csv_path: Path) -> Iterable[dict[str, str]]:
 def dispatch_csv(
     csv_path: Path,
     maestro_client: MaestroClient,
+    ambiente: str | None = None,
     logger: logging.Logger | None = None,
 ) -> int:
     """Publica cada linha do CSV como item em FilaAuditoriaLotes2."""
-    current_logger = logger or logging.getLogger(__name__)
-    current_logger.info("Iniciando auditoria de acessos")
+    current_logger = logger or logging.getLogger(LOGGER_NAME)
+    current_logger.info(
+        "Iniciando auditoria de acessos",
+        extra={
+            "evento": "INICIO_AUDITORIA",
+            "formulario": "Dispatcher",
+            "status": "STARTED",
+            "usuario": "sistema",
+            "ambiente": ambiente,
+        },
+    )
 
     published = 0
     for item in iter_csv_rows(csv_path):
         maestro_client.create_entry(item)
         published += 1
 
-    current_logger.info("Itens publicados no DataPool: %s", published)
+    current_logger.info(
+        "Itens publicados no DataPool: %s",
+        published,
+        extra={
+            "evento": "PUBLICACAO_DATAPOOL",
+            "formulario": "Dispatcher",
+            "status": "SUCCESS",
+            "usuario": "sistema",
+            "ambiente": ambiente,
+        },
+    )
+
     return published
 
 
@@ -75,7 +97,15 @@ def run(
     """Executa o Dispatcher usando o INPUT_CSV configurado."""
     current_settings = settings or Settings.from_env()
     client = maestro_client or MaestroClient(current_settings)
-    return dispatch_csv(current_settings.input_csv, client, logger=logger)
+
+    ambiente = "runner" if current_settings.runner_context else "local"
+
+    return dispatch_csv(
+        current_settings.input_csv,
+        client,
+        logger=logger,
+        ambiente=ambiente,
+    )
 
 
 def main() -> int:
