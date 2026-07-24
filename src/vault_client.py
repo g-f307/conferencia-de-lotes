@@ -4,7 +4,10 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-LOGGER = logging.getLogger(__name__)
+from src.logging_config import LOGGER_NAME
+
+
+LOGGER = logging.getLogger(LOGGER_NAME)
 DEFAULT_CREDENTIAL_LABEL = "credencial_erp2"
 
 

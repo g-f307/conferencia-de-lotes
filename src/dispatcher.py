@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Iterable
 
 from src.config import Settings
+from src.logging_config import LOGGER_NAME
 from src.maestro_client import MaestroClient
 
 
@@ -56,7 +57,7 @@ def dispatch_csv(
     logger: logging.Logger | None = None,
 ) -> int:
     """Publica cada linha do CSV como item em FilaAuditoriaLotes2."""
-    current_logger = logger or logging.getLogger(__name__)
+    current_logger = logger or logging.getLogger(LOGGER_NAME)
     current_logger.info(
         "Iniciando auditoria de acessos",
         extra={

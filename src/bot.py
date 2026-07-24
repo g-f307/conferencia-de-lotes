@@ -5,11 +5,13 @@ import time
 from dataclasses import dataclass, field
 from typing import Callable, Iterable, Protocol
 
+from src.logging_config import LOGGER_NAME
 from src.validation import HumanReviewRequired, HumanReviewStatus, ValidationError, validate_lote
 from src.vault_client import ErpCredential, VaultClient
 
 
-LOGGER = logging.getLogger(__name__)
+LOGGER = logging.getLogger(LOGGER_NAME)
+DATAPOOL_LOG_LABEL = "FilaAuditoriaLotes2"
 
 
 class QueueAdapter(Protocol):
@@ -71,7 +73,7 @@ class LotePerformer:
                     "Falha tecnica ao obter item da fila",
                     extra={
                         "evento": "LEITURA_DATAPOOL",
-                        "formulario": "FilaAuditoriaLotes",
+                        "formulario": DATAPOOL_LOG_LABEL,
                         "status": "FAILED",
                         "usuario": "sistema",
                     },
@@ -83,7 +85,7 @@ class LotePerformer:
                     "DataPool retornou item vazio; encerrando consumo",
                     extra={
                         "evento": "FIM_DATAPOOL",
-                        "formulario": "FilaAuditoriaLotes",
+                        "formulario": DATAPOOL_LOG_LABEL,
                         "status": "SUCCESS",
                         "usuario": "sistema",
                     },

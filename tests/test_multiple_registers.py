@@ -1,7 +1,9 @@
 import json
 
+from src.bot import DATAPOOL_LOG_LABEL, LOGGER as BOT_LOGGER
 from src.config import Settings
-from src.logging_config import configure_logging
+from src.logging_config import LOGGER_NAME, configure_logging
+from src.vault_client import LOGGER as VAULT_LOGGER
 
 
 def configured_logger(tmp_path, monkeypatch, **environment):
@@ -155,3 +157,38 @@ def test_log_identifica_ambiente_runner(tmp_path, monkeypatch):
     )
 
     assert registro["ambiente"] == "runner"
+
+
+def test_modulos_usam_logger_estruturado_central(tmp_path):
+    log_file = tmp_path / "execucao.log"
+    configure_logging(log_file)
+
+    BOT_LOGGER.info(
+        "Leitura da fila",
+        extra={
+            "evento": "LEITURA_DATAPOOL",
+            "formulario": DATAPOOL_LOG_LABEL,
+            "status": "SUCCESS",
+        },
+    )
+    VAULT_LOGGER.info(
+        "Credencial recuperada",
+        extra={
+            "evento": "RECUPERACAO_CREDENCIAL",
+            "formulario": "Vault",
+            "status": "SUCCESS",
+        },
+    )
+
+    registros = [
+        json.loads(linha)
+        for linha in log_file.read_text(encoding="utf-8").splitlines()
+    ]
+
+    assert BOT_LOGGER.name == LOGGER_NAME
+    assert VAULT_LOGGER.name == LOGGER_NAME
+    assert [registro["evento"] for registro in registros] == [
+        "LEITURA_DATAPOOL",
+        "RECUPERACAO_CREDENCIAL",
+    ]
+    assert registros[0]["detalhes"]["formulario"] == "FilaAuditoriaLotes2"
