@@ -225,6 +225,7 @@ def run(
                 current_settings.web_test_url,
                 current_settings.base_dir,
                 current_settings.web_artifact_dir,
+                timeout_seconds=current_settings.web_timeout_seconds,
             )
             current_logger.info(
                 "Automacao web executada em %s; evidencia salva em %s",

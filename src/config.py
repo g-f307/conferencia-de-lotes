@@ -60,6 +60,7 @@ class Settings:
     web_automation_enabled: bool
     web_test_url: str
     web_artifact_dir: Path
+    web_timeout_seconds: float
     runner_context: bool
 
     @classmethod
@@ -115,6 +116,9 @@ class Settings:
             web_artifact_dir=project_path(
                 "WEB_ARTIFACT_DIR", "artefatos"
             ),
+            web_timeout_seconds=float(
+                os.getenv("WEB_TIMEOUT_SECONDS", "15")
+            ),
             runner_context=runner_context,
         )
 
@@ -143,7 +147,9 @@ class Settings:
             self._validate_web_test_url()
 
     def _validate_web_test_url(self) -> None:
-        """Garante que a pagina web local exista quando Playwright estiver ativo."""
+        """Garante que a página web e o timeout do Selenium sejam válidos."""
+        if self.web_timeout_seconds <= 0:
+            raise ValueError("WEB_TIMEOUT_SECONDS deve ser maior que zero")
         if not self.web_test_url.strip():
             raise ValueError("WEB_TEST_URL deve ser informado")
         if urlparse(self.web_test_url).scheme:
