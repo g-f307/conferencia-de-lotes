@@ -80,6 +80,8 @@ def build_chrome_driver(*, headless: bool = True) -> Any:
         options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-crash-reporter")
+    options.add_argument("--disable-gpu")
     options.add_argument("--window-size=1440,1200")
 
     chrome_binary = os.getenv("CHROME_BIN", "").strip()
@@ -94,9 +96,12 @@ def build_chrome_driver(*, headless: bool = True) -> Any:
     )
 
 
-def _status_selector(status: str) -> str:
-    escaped = status.replace("\\", "\\\\").replace('"', '\\"')
-    return f'input[name="status"][value="{escaped}"]'
+def _status_label_xpath(status: str) -> str:
+    if '"' in status:
+        raise ValueError("Status contém caractere inválido para o seletor")
+    return (
+        f'//label[.//input[@name="status" and @value="{status}"]]'
+    )
 
 
 def fill_and_submit_lote(
@@ -117,8 +122,8 @@ def fill_and_submit_lote(
     lote_input.send_keys(data.lote_id)
     driver.find_element(By.ID, "produto").send_keys(data.produto)
     driver.find_element(
-        By.CSS_SELECTOR,
-        _status_selector(data.status),
+        By.XPATH,
+        _status_label_xpath(data.status),
     ).click()
 
     wait = wait_factory(driver, timeout_seconds)

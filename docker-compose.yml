@@ -8,6 +8,7 @@ services:
     environment:
       MAESTRO_ENABLED: "false"
       VAULT_ENABLED: "false"
+      HOME: /tmp
       BOT_ID: bot-conferencia-de-lotes-v1
       EXECUTION_ID: docker-compose-local
       INPUT_DIR: dados_entrada

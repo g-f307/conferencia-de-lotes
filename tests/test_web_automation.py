@@ -57,12 +57,12 @@ class FakeDriver:
             (By.ID, "numero-lote"): FakeElement(),
             (By.ID, "produto"): FakeElement(),
             (
-                By.CSS_SELECTOR,
-                'input[name="status"][value="Concluído"]',
+                By.XPATH,
+                '//label[.//input[@name="status" and @value="Concluído"]]',
             ): FakeElement(),
             (
-                By.CSS_SELECTOR,
-                'input[name="status"][value="Pendente"]',
+                By.XPATH,
+                '//label[.//input[@name="status" and @value="Pendente"]]',
             ): FakeElement(),
             (By.ID, "botao-processar"): FakeElement(enabled=button_enabled),
             (By.ID, "mensagem"): FakeElement(
@@ -133,6 +133,7 @@ def test_build_chrome_driver_configura_headless_e_webdriver_manager(
     assert "--headless=new" in captured["options"].arguments
     assert "--no-sandbox" in captured["options"].arguments
     assert "--disable-dev-shm-usage" in captured["options"].arguments
+    assert "--disable-crash-reporter" in captured["options"].arguments
 
 
 def test_resolve_web_url_converte_caminho_relativo_em_file_url(tmp_path: Path):
@@ -177,8 +178,8 @@ def test_fill_and_submit_lote_usa_selenium_e_waits_explicitos(tmp_path):
     ]
     assert driver.elements[
         (
-            By.CSS_SELECTOR,
-            'input[name="status"][value="Concluído"]',
+            By.XPATH,
+            '//label[.//input[@name="status" and @value="Concluído"]]',
         )
     ].actions == [("click",)]
     assert driver.elements[(By.ID, "botao-processar")].actions == [
