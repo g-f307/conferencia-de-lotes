@@ -149,6 +149,28 @@ def test_settings_carrega_configuracao_da_automacao_web(
     assert settings.web_artifact_dir == tmp_path / "artefatos"
 
 
+def test_settings_valida_url_web_local_quando_playwright_habilitado(
+    monkeypatch, tmp_path: Path
+):
+    page = tmp_path / "docs" / "index-lotes" / "index.html"
+    page.parent.mkdir(parents=True)
+    page.write_text("<html></html>", encoding="utf-8")
+    monkeypatch.setenv("WEB_AUTOMATION_ENABLED", "true")
+    monkeypatch.setenv("WEB_TEST_URL", "docs/index-lotes/index.html")
+
+    Settings.from_env(tmp_path).validate()
+
+
+def test_settings_rejeita_url_web_local_inexistente_quando_playwright_habilitado(
+    monkeypatch, tmp_path: Path
+):
+    monkeypatch.setenv("WEB_AUTOMATION_ENABLED", "true")
+    monkeypatch.setenv("WEB_TEST_URL", "docs/index-lotes/index.html")
+
+    with pytest.raises(ValueError, match="WEB_TEST_URL local inexistente"):
+        Settings.from_env(tmp_path).validate()
+
+
 def test_maestro_ativado_exige_chaves(monkeypatch, tmp_path: Path):
     monkeypatch.setenv("MAESTRO_ENABLED", "true")
     monkeypatch.delenv("MAESTRO_SERVER", raising=False)

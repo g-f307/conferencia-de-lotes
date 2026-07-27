@@ -1,5 +1,5 @@
 services:
-  conferencia-lotes:
+  conferencia-de-lotes:
     build:
       context: .
       dockerfile: Dockerfile
@@ -8,12 +8,18 @@ services:
     environment:
       MAESTRO_ENABLED: "false"
       VAULT_ENABLED: "false"
+      BOT_ID: bot-conferencia-de-lotes-v1
+      EXECUTION_ID: docker-compose-local
       INPUT_DIR: dados_entrada
       INPUT_CSV: dados_entrada/lotes_auditoria.csv
       LOG_FILE: logs/execucao.log
       REPORT_DIR: relatorios
+      WEB_AUTOMATION_ENABLED: "${WEB_AUTOMATION_ENABLED:-false}"
+      WEB_TEST_URL: docs/index-lotes/index.html
+      WEB_ARTIFACT_DIR: artefatos
       PROCESSING_DELAY_SECONDS: "0"
     volumes:
       - ./dados_entrada:/app/dados_entrada:ro
       - ./logs:/app/logs
       - ./relatorios:/app/relatorios
+      - ./artefatos:/app/artefatos

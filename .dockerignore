@@ -14,7 +14,10 @@ htmlcov
 dist
 logs
 relatorios
-docs
+artefatos
+docs/*
+!docs/index-lotes
+!docs/index-lotes/**
 tests
 requirements-dev.txt
 *.zip
