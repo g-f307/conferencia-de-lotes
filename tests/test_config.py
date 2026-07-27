@@ -141,15 +141,17 @@ def test_settings_carrega_configuracao_da_automacao_web(
 ):
     monkeypatch.setenv("WEB_AUTOMATION_ENABLED", "true")
     monkeypatch.setenv("WEB_TEST_URL", "docs/index-lotes/index.html")
+    monkeypatch.setenv("WEB_TIMEOUT_SECONDS", "20")
 
     settings = Settings.from_env(tmp_path)
 
     assert settings.web_automation_enabled is True
     assert settings.web_test_url == "docs/index-lotes/index.html"
     assert settings.web_artifact_dir == tmp_path / "artefatos"
+    assert settings.web_timeout_seconds == 20
 
 
-def test_settings_valida_url_web_local_quando_playwright_habilitado(
+def test_settings_valida_url_web_local_quando_selenium_habilitado(
     monkeypatch, tmp_path: Path
 ):
     page = tmp_path / "docs" / "index-lotes" / "index.html"
@@ -161,13 +163,24 @@ def test_settings_valida_url_web_local_quando_playwright_habilitado(
     Settings.from_env(tmp_path).validate()
 
 
-def test_settings_rejeita_url_web_local_inexistente_quando_playwright_habilitado(
+def test_settings_rejeita_url_web_local_inexistente_quando_selenium_habilitado(
     monkeypatch, tmp_path: Path
 ):
     monkeypatch.setenv("WEB_AUTOMATION_ENABLED", "true")
     monkeypatch.setenv("WEB_TEST_URL", "docs/index-lotes/index.html")
 
     with pytest.raises(ValueError, match="WEB_TEST_URL local inexistente"):
+        Settings.from_env(tmp_path).validate()
+
+
+def test_settings_rejeita_timeout_web_invalido(monkeypatch, tmp_path: Path):
+    page = tmp_path / "docs" / "index-lotes" / "index.html"
+    page.parent.mkdir(parents=True)
+    page.write_text("<html></html>", encoding="utf-8")
+    monkeypatch.setenv("WEB_AUTOMATION_ENABLED", "true")
+    monkeypatch.setenv("WEB_TIMEOUT_SECONDS", "0")
+
+    with pytest.raises(ValueError, match="WEB_TIMEOUT_SECONDS"):
         Settings.from_env(tmp_path).validate()
 
 
