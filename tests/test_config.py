@@ -2,7 +2,12 @@ from pathlib import Path
 
 import pytest
 
-from src.config import Settings, as_bool, botcity_runner_args
+from src.config import (
+    Settings,
+    as_bool,
+    as_optional_float,
+    botcity_runner_args,
+)
 
 
 @pytest.mark.parametrize(
@@ -11,6 +16,22 @@ from src.config import Settings, as_bool, botcity_runner_args
 )
 def test_as_bool(value, expected):
     assert as_bool(value) is expected
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (None, 15.0),
+        ("20", 20.0),
+        ("2.5", 2.5),
+        ("", None),
+        ("abc", None),
+        ("nan", None),
+        ("inf", None),
+    ],
+)
+def test_as_optional_float(value, expected):
+    assert as_optional_float(value, 15.0) == expected
 
 
 def test_settings_resolve_caminhos_relativos(monkeypatch, tmp_path: Path):
@@ -182,6 +203,42 @@ def test_settings_rejeita_timeout_web_invalido(monkeypatch, tmp_path: Path):
 
     with pytest.raises(ValueError, match="WEB_TIMEOUT_SECONDS"):
         Settings.from_env(tmp_path).validate()
+
+
+@pytest.mark.parametrize("invalid_timeout", ["", "abc"])
+def test_settings_rejeita_timeout_web_nao_numerico_no_validate(
+    monkeypatch,
+    tmp_path: Path,
+    invalid_timeout: str,
+):
+    page = tmp_path / "docs" / "index-lotes" / "index.html"
+    page.parent.mkdir(parents=True)
+    page.write_text("<html></html>", encoding="utf-8")
+    monkeypatch.setenv("WEB_AUTOMATION_ENABLED", "true")
+    monkeypatch.setenv("WEB_TEST_URL", "docs/index-lotes/index.html")
+    monkeypatch.setenv("WEB_TIMEOUT_SECONDS", invalid_timeout)
+
+    settings = Settings.from_env(tmp_path)
+
+    assert settings.web_timeout_seconds is None
+    with pytest.raises(
+        ValueError,
+        match="WEB_TIMEOUT_SECONDS deve ser um número maior que zero",
+    ):
+        settings.validate()
+
+
+def test_settings_ignora_timeout_web_invalido_quando_automacao_desabilitada(
+    monkeypatch,
+    tmp_path: Path,
+):
+    monkeypatch.setenv("WEB_AUTOMATION_ENABLED", "false")
+    monkeypatch.setenv("WEB_TIMEOUT_SECONDS", "invalido")
+
+    settings = Settings.from_env(tmp_path)
+
+    assert settings.web_timeout_seconds is None
+    settings.validate()
 
 
 def test_maestro_ativado_exige_chaves(monkeypatch, tmp_path: Path):

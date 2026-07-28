@@ -1,6 +1,7 @@
 """Configuração central do bot carregada por variáveis de ambiente."""
 
 from dataclasses import dataclass
+import math
 import os
 from pathlib import Path
 import sys
@@ -17,6 +18,20 @@ def as_bool(value: str | None, default: bool = False) -> bool:
     if value is None:
         return default
     return value.strip().lower() in TRUE_VALUES
+
+
+def as_optional_float(
+    value: str | None,
+    default: float,
+) -> float | None:
+    """Converte número textual sem interromper o carregamento da configuração."""
+    if value is None:
+        return default
+    try:
+        converted = float(value.strip())
+    except ValueError:
+        return None
+    return converted if math.isfinite(converted) else None
 
 
 def botcity_runner_args(argv: list[str] | None = None) -> tuple[str, str]:
@@ -60,7 +75,7 @@ class Settings:
     web_automation_enabled: bool
     web_test_url: str
     web_artifact_dir: Path
-    web_timeout_seconds: float
+    web_timeout_seconds: float | None
     runner_context: bool
 
     @classmethod
@@ -116,8 +131,9 @@ class Settings:
             web_artifact_dir=project_path(
                 "WEB_ARTIFACT_DIR", "artefatos"
             ),
-            web_timeout_seconds=float(
-                os.getenv("WEB_TIMEOUT_SECONDS", "15")
+            web_timeout_seconds=as_optional_float(
+                os.getenv("WEB_TIMEOUT_SECONDS"),
+                15.0,
             ),
             runner_context=runner_context,
         )
@@ -148,8 +164,13 @@ class Settings:
 
     def _validate_web_test_url(self) -> None:
         """Garante que a página web e o timeout do Selenium sejam válidos."""
-        if self.web_timeout_seconds <= 0:
-            raise ValueError("WEB_TIMEOUT_SECONDS deve ser maior que zero")
+        if (
+            self.web_timeout_seconds is None
+            or self.web_timeout_seconds <= 0
+        ):
+            raise ValueError(
+                "WEB_TIMEOUT_SECONDS deve ser um número maior que zero"
+            )
         if not self.web_test_url.strip():
             raise ValueError("WEB_TEST_URL deve ser informado")
         if urlparse(self.web_test_url).scheme:
