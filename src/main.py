@@ -15,7 +15,7 @@ from src.logging_config import configure_logging
 from src.maestro_client import MaestroClient
 from src.models import ExecutionResult
 from src.vault_client import BotCityVaultProvider, VaultClient
-from src.web_automation import run_web_automation
+from src.web_automation import describe_selenium_environment, run_web_automation
 
 
 class AlertGateway(Protocol):
@@ -221,6 +221,20 @@ def run(
             },
         )
         if current_settings.web_automation_enabled:
+            selenium_environment = describe_selenium_environment()
+            current_logger.info(
+                "Ambiente Selenium: chrome=%s (%s), chromedriver=%s (%s)",
+                selenium_environment["chrome_bin"],
+                selenium_environment["chrome_version"],
+                selenium_environment["chromedriver_path"],
+                selenium_environment["chromedriver_version"],
+                extra={
+                    "evento": "SELENIUM_AMBIENTE",
+                    "formulario": "Index Lotes",
+                    "status": "SUCCESS",
+                    "usuario": "sistema",
+                },
+            )
             web_result = run_web_automation(
                 current_settings.web_test_url,
                 current_settings.base_dir,

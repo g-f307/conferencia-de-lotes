@@ -80,7 +80,7 @@ def test_log_usa_valores_padrao(tmp_path, monkeypatch):
 
     assert registro["evento"] == "LOG"
     assert registro["usuario"] == "sistema"
-    assert registro["bot_id"] == "bot-conferencia-de-lotes-v1"
+    assert registro["bot_id"] == "bot-conferencia-de-lotes-v2"
     assert registro["execution_id"] == "execucao-local"
 
     assert registro["detalhes"]["formulario"] is None

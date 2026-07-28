@@ -6,12 +6,18 @@ from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
 
 from src.web_automation import (
+    WebAutomationEnvironmentError,
     WebAutomationEvidenceError,
     WebAutomationTimeoutError,
     WebFormData,
     build_chrome_driver,
     build_evidence_path,
+    describe_selenium_environment,
+    executable_version,
     fill_and_submit_lote,
+    resolve_chrome_binary,
+    resolve_chromedriver_binary,
+    resolve_configured_executable,
     resolve_web_url,
     run_web_automation,
 )
@@ -123,6 +129,8 @@ def test_build_chrome_driver_configura_headless_e_webdriver_manager(
     captured = {}
     monkeypatch.delenv("CHROMEDRIVER_PATH", raising=False)
     monkeypatch.delenv("CHROME_BIN", raising=False)
+    monkeypatch.setattr("src.web_automation.DEFAULT_CHROME_BIN_CANDIDATES", ())
+    monkeypatch.setattr("src.web_automation.DEFAULT_CHROMEDRIVER_CANDIDATES", ())
     monkeypatch.setattr(
         "src.web_automation.ChromeDriverManager.install",
         lambda self: "/tmp/chromedriver",
@@ -146,6 +154,128 @@ def test_build_chrome_driver_configura_headless_e_webdriver_manager(
     assert "--no-sandbox" in captured["options"].arguments
     assert "--disable-dev-shm-usage" in captured["options"].arguments
     assert "--disable-crash-reporter" in captured["options"].arguments
+
+
+def test_build_chrome_driver_usa_binarios_configurados(monkeypatch, tmp_path):
+    chrome = tmp_path / "chrome"
+    driver = tmp_path / "chromedriver"
+    chrome.write_text("#!/bin/sh\n", encoding="utf-8")
+    driver.write_text("#!/bin/sh\n", encoding="utf-8")
+    chrome.chmod(0o755)
+    driver.chmod(0o755)
+    monkeypatch.setenv("CHROME_BIN", str(chrome))
+    monkeypatch.setenv("CHROMEDRIVER_PATH", str(driver))
+    monkeypatch.setattr(
+        "src.web_automation.Service",
+        lambda path: type("FakeService", (), {"path": path})(),
+    )
+    monkeypatch.setattr(
+        "src.web_automation.ChromeDriverManager.install",
+        lambda self: pytest.fail("webdriver-manager nao deveria ser chamado"),
+    )
+    captured = {}
+
+    def fake_chrome(*, service, options):
+        captured["service"] = service
+        captured["options"] = options
+        return object()
+
+    monkeypatch.setattr("src.web_automation.webdriver.Chrome", fake_chrome)
+
+    build_chrome_driver()
+
+    assert captured["service"].path == str(driver)
+    assert captured["options"].binary_location == str(chrome)
+
+
+def test_resolve_configured_executable_rejeita_caminho_invalido(monkeypatch, tmp_path):
+    missing = tmp_path / "chromedriver"
+    monkeypatch.setenv("CHROMEDRIVER_PATH", str(missing))
+
+    with pytest.raises(WebAutomationEnvironmentError, match="inexistente"):
+        resolve_configured_executable("CHROMEDRIVER_PATH")
+
+
+def test_resolve_configured_executable_rejeita_sem_permissao(monkeypatch, tmp_path):
+    driver = tmp_path / "chromedriver"
+    driver.write_text("#!/bin/sh\n", encoding="utf-8")
+    driver.chmod(0o644)
+    monkeypatch.setenv("CHROMEDRIVER_PATH", str(driver))
+
+    with pytest.raises(WebAutomationEnvironmentError, match="permissão de execução"):
+        resolve_configured_executable("CHROMEDRIVER_PATH")
+
+
+def test_resolve_chrome_binary_usa_caminho_padrao_quando_env_ausente(
+    monkeypatch,
+    tmp_path,
+):
+    chrome = tmp_path / "google-chrome"
+    chrome.write_text("#!/bin/sh\n", encoding="utf-8")
+    chrome.chmod(0o755)
+    monkeypatch.delenv("CHROME_BIN", raising=False)
+    monkeypatch.setattr("src.web_automation.DEFAULT_CHROME_BIN_CANDIDATES", (chrome,))
+
+    assert resolve_chrome_binary() == chrome
+
+
+def test_resolve_chromedriver_binary_usa_caminho_padrao_quando_env_ausente(
+    monkeypatch,
+    tmp_path,
+):
+    driver = tmp_path / "chromedriver"
+    driver.write_text("#!/bin/sh\n", encoding="utf-8")
+    driver.chmod(0o755)
+    monkeypatch.delenv("CHROMEDRIVER_PATH", raising=False)
+    monkeypatch.setattr(
+        "src.web_automation.DEFAULT_CHROMEDRIVER_CANDIDATES",
+        (driver,),
+    )
+
+    assert resolve_chromedriver_binary() == driver
+
+
+def test_describe_selenium_environment_inclui_versoes_configuradas(
+    monkeypatch,
+    tmp_path,
+):
+    chrome = tmp_path / "chrome"
+    driver = tmp_path / "chromedriver"
+    chrome.write_text("#!/bin/sh\n", encoding="utf-8")
+    driver.write_text("#!/bin/sh\n", encoding="utf-8")
+    chrome.chmod(0o755)
+    driver.chmod(0o755)
+    monkeypatch.setenv("CHROME_BIN", str(chrome))
+    monkeypatch.setenv("CHROMEDRIVER_PATH", str(driver))
+    monkeypatch.setattr(
+        "src.web_automation.executable_version",
+        lambda path: f"{path.name} 1.0",
+    )
+
+    environment = describe_selenium_environment()
+
+    assert environment == {
+        "chrome_bin": str(chrome),
+        "chrome_version": "chrome 1.0",
+        "chromedriver_path": str(driver),
+        "chromedriver_version": "chromedriver 1.0",
+    }
+
+
+def test_executable_version_retorna_primeira_linha(monkeypatch, tmp_path):
+    binary = tmp_path / "chrome"
+    binary.write_text("#!/bin/sh\n", encoding="utf-8")
+
+    class Completed:
+        stdout = "Chrome 120\nsegunda linha"
+        stderr = ""
+
+    monkeypatch.setattr(
+        "src.web_automation.subprocess.run",
+        lambda *args, **kwargs: Completed(),
+    )
+
+    assert executable_version(binary) == "Chrome 120"
 
 
 def test_resolve_web_url_converte_caminho_relativo_em_file_url(tmp_path: Path):

@@ -52,6 +52,7 @@ def test_settings_nao_contem_senha_do_erp(tmp_path: Path):
 
 def test_maestro_desativado_nao_exige_chaves(monkeypatch, tmp_path: Path):
     monkeypatch.setenv("MAESTRO_ENABLED", "false")
+    monkeypatch.setenv("WEB_AUTOMATION_ENABLED", "false")
     Settings.from_env(tmp_path).validate()
 
 
@@ -80,7 +81,7 @@ def test_settings_usa_identificadores_locais_padrao(monkeypatch, tmp_path: Path)
 
     settings = Settings.from_env(tmp_path)
 
-    assert settings.bot_id == "bot-conferencia-de-lotes-v1"
+    assert settings.bot_id == "bot-conferencia-de-lotes-v2"
     assert settings.execution_id == "execucao-local"
 
 
@@ -106,6 +107,9 @@ def test_botcity_runner_args_reconhece_server_e_task_id():
 
 
 def test_settings_usa_contexto_do_runner_sem_chaves_tecnicas(monkeypatch, tmp_path: Path):
+    page = tmp_path / "docs" / "index-lotes" / "index.html"
+    page.parent.mkdir(parents=True)
+    page.write_text("<html></html>", encoding="utf-8")
     monkeypatch.delenv("MAESTRO_ENABLED", raising=False)
     monkeypatch.delenv("VAULT_ENABLED", raising=False)
     monkeypatch.delenv("MAESTRO_SERVER", raising=False)
@@ -124,6 +128,41 @@ def test_settings_usa_contexto_do_runner_sem_chaves_tecnicas(monkeypatch, tmp_pa
     assert settings.vault_enabled is True
     assert settings.maestro_server == "https://maestro.example"
     assert settings.maestro_task_id == "23831639"
+    settings.validate()
+
+
+def test_settings_habilita_automacao_web_por_padrao_no_runner(
+    monkeypatch,
+    tmp_path: Path,
+):
+    page = tmp_path / "docs" / "index-lotes" / "index.html"
+    page.parent.mkdir(parents=True)
+    page.write_text("<html></html>", encoding="utf-8")
+    monkeypatch.delenv("WEB_AUTOMATION_ENABLED", raising=False)
+    monkeypatch.setattr(
+        "sys.argv",
+        ["bot.py", "https://maestro.example", "23831639", "token"],
+    )
+
+    settings = Settings.from_env(tmp_path)
+
+    assert settings.web_automation_enabled is True
+    settings.validate()
+
+
+def test_settings_permite_desabilitar_automacao_web_no_runner(
+    monkeypatch,
+    tmp_path: Path,
+):
+    monkeypatch.setenv("WEB_AUTOMATION_ENABLED", "false")
+    monkeypatch.setattr(
+        "sys.argv",
+        ["bot.py", "https://maestro.example", "23831639", "token"],
+    )
+
+    settings = Settings.from_env(tmp_path)
+
+    assert settings.web_automation_enabled is False
     settings.validate()
 
 
