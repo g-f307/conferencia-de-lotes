@@ -224,7 +224,7 @@ bot.py
 requirements.txt
 src/
 dados_entrada/
-docs/index-lotes/
+web/index-lotes/
 ```
 
 Chrome e ChromeDriver são dependências do host do Runner, não do ZIP. O pacote

@@ -110,7 +110,15 @@ def settings_for(tmp_path, input_exists=True):
             "lote_id,produto,linha,turno,status,responsavel,data,observacao\n",
             encoding="utf-8",
         )
-    return replace(settings, processing_delay_seconds=0)
+    return replace(
+        settings,
+        maestro_enabled=False,
+        vault_enabled=False,
+        processing_delay_seconds=0,
+        web_automation_enabled=False,
+        web_test_url="web/index-lotes/index.html",
+        runner_context=False,
+    )
 
 
 def test_fail_fast_quando_pasta_de_entrada_nao_existe(tmp_path):
@@ -254,13 +262,13 @@ def test_run_falha_sem_publicar_csv_quando_vault_esta_invalido(tmp_path):
 
 
 def test_run_executa_automacao_web_quando_habilitada(monkeypatch, tmp_path):
-    web_page = tmp_path / "docs" / "index-lotes" / "index.html"
+    web_page = tmp_path / "web" / "index-lotes" / "index.html"
     web_page.parent.mkdir(parents=True)
     web_page.write_text("<html></html>", encoding="utf-8")
     settings = replace(
         settings_for(tmp_path),
         web_automation_enabled=True,
-        web_test_url="docs/index-lotes/index.html",
+        web_test_url="web/index-lotes/index.html",
     )
     client = FakeMaestroClient([])
     vault = VaultClient(FakeVaultProvider())
@@ -292,7 +300,7 @@ def test_run_executa_automacao_web_quando_habilitada(monkeypatch, tmp_path):
     assert result.status == "SUCCESS"
     assert calls == [
         (
-            "docs/index-lotes/index.html",
+            "web/index-lotes/index.html",
             settings.base_dir,
             settings.web_artifact_dir,
             settings.web_timeout_seconds,
@@ -301,13 +309,13 @@ def test_run_executa_automacao_web_quando_habilitada(monkeypatch, tmp_path):
 
 
 def test_run_registra_evento_estruturado_da_automacao_web(monkeypatch, tmp_path):
-    web_page = tmp_path / "docs" / "index-lotes" / "index.html"
+    web_page = tmp_path / "web" / "index-lotes" / "index.html"
     web_page.parent.mkdir(parents=True)
     web_page.write_text("<html></html>", encoding="utf-8")
     settings = replace(
         settings_for(tmp_path),
         web_automation_enabled=True,
-        web_test_url="docs/index-lotes/index.html",
+        web_test_url="web/index-lotes/index.html",
     )
     client = FakeMaestroClient([])
     vault = VaultClient(FakeVaultProvider())

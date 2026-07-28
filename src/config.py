@@ -131,7 +131,7 @@ class Settings:
                 env.get("WEB_AUTOMATION_ENABLED"), runner_context
             ),
             web_test_url=env_or_default(
-                "WEB_TEST_URL", "docs/index-lotes/index.html"
+                "WEB_TEST_URL", "web/index-lotes/index.html"
             ),
             web_artifact_dir=project_path(
                 "WEB_ARTIFACT_DIR", "artefatos"

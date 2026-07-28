@@ -14,7 +14,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 DEFAULT_VERSION = "2"
 DEFAULT_PACKAGE_NAME = "bot-conferencia-de-lotes"
 PACKAGE_ROOT_FILES = ("bot.py", "requirements.txt")
-PACKAGE_DIRS = ("src", "dados_entrada", "docs/index-lotes")
+PACKAGE_DIRS = ("src", "dados_entrada", "web/index-lotes")
 IGNORED_DIRS = {"__pycache__"}
 IGNORED_SUFFIXES = {".pyc", ".pyo"}
 

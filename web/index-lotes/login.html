@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Autenticação do ambiente controlado de cadastro de lotes."
+    />
+    <title>Acesso | Cadastro de Lotes</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="login.js" defer></script>
+  </head>
+
+  <body class="login-page">
+    <div class="background-grid" aria-hidden="true"></div>
+
+    <main class="login-shell">
+      <section class="login-brand" aria-labelledby="login-title">
+        <span class="hero__badge">AMBIENTE DE TESTE</span>
+        <h1 id="login-title">Conferência de lotes</h1>
+        <p>Acesso ao ambiente controlado de processamento.</p>
+      </section>
+
+      <section class="panel login-panel" aria-label="Autenticação">
+        <header class="panel__header">
+          <div>
+            <h2>Entrar</h2>
+            <p>Informe suas credenciais de acesso.</p>
+          </div>
+        </header>
+
+        <form id="login-form" novalidate>
+          <div class="field">
+            <label for="usuario">Usuário</label>
+            <input
+              id="usuario"
+              name="usuario"
+              type="text"
+              autocomplete="username"
+              placeholder="Usuário"
+              required
+            />
+            <small class="field__error" id="erro-usuario"></small>
+          </div>
+
+          <div class="field">
+            <label for="senha">Senha</label>
+            <input
+              id="senha"
+              name="senha"
+              type="password"
+              autocomplete="current-password"
+              placeholder="Senha"
+              required
+            />
+            <small class="field__error" id="erro-senha"></small>
+          </div>
+
+          <button id="botao-login" class="primary-button" type="submit">
+            Entrar
+          </button>
+
+          <div
+            id="mensagem-login"
+            class="message"
+            role="status"
+            aria-live="polite"
+            hidden
+          ></div>
+        </form>
+      </section>
+    </main>
+  </body>
+</html>
