@@ -16,8 +16,9 @@ logs
 relatorios
 artefatos
 docs/*
-!docs/index-lotes
-!docs/index-lotes/**
+web/*
+!web/index-lotes
+!web/index-lotes/**
 tests
 requirements-dev.txt
 *.zip

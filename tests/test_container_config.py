@@ -13,7 +13,7 @@ def test_dockerfile_instala_selenium_chromium_e_chromedriver():
     assert "HOME=/tmp" in content
     assert "chromium chromium-driver" in content
     assert "playwright" not in content.lower()
-    assert "docs/index-lotes/" in content
+    assert "web/index-lotes/" in content
     assert "artefatos" in content
 
 
@@ -21,8 +21,9 @@ def test_dockerignore_mantem_pagina_web_no_contexto():
     content = (PROJECT_ROOT / ".dockerignore").read_text(encoding="utf-8")
 
     assert "docs/*" in content
-    assert "!docs/index-lotes" in content
-    assert "!docs/index-lotes/**" in content
+    assert "web/*" in content
+    assert "!web/index-lotes" in content
+    assert "!web/index-lotes/**" in content
 
 
 def test_compose_mapeia_volumes_operacionais():
@@ -44,7 +45,9 @@ def test_pacote_botcity_inclui_pagina_web_local():
         for path in iter_package_files(PROJECT_ROOT)
     }
 
-    assert "docs/index-lotes/index.html" in package_files
+    assert "web/index-lotes/index.html" in package_files
+    assert "web/index-lotes/login.html" in package_files
+    assert "web/index-lotes/login.js" in package_files
 
 
 def test_requirements_do_pacote_usa_selenium_sem_playwright():
@@ -82,7 +85,7 @@ def test_pacote_botcity_exclui_arquivos_locais_e_caches():
 def test_build_botcity_package_usa_versao_no_nome_do_artefato(tmp_path):
     from scripts.build_botcity_package import build_package
 
-    for directory in ("src", "dados_entrada", "docs/index-lotes"):
+    for directory in ("src", "dados_entrada", "web/index-lotes"):
         (tmp_path / directory).mkdir(parents=True)
         (tmp_path / directory / ".gitkeep").write_text("", encoding="utf-8")
     (tmp_path / "bot.py").write_text("print('bot')\n", encoding="utf-8")

@@ -107,7 +107,7 @@ def test_botcity_runner_args_reconhece_server_e_task_id():
 
 
 def test_settings_usa_contexto_do_runner_sem_chaves_tecnicas(monkeypatch, tmp_path: Path):
-    page = tmp_path / "docs" / "index-lotes" / "index.html"
+    page = tmp_path / "web" / "index-lotes" / "index.html"
     page.parent.mkdir(parents=True)
     page.write_text("<html></html>", encoding="utf-8")
     monkeypatch.delenv("MAESTRO_ENABLED", raising=False)
@@ -116,6 +116,7 @@ def test_settings_usa_contexto_do_runner_sem_chaves_tecnicas(monkeypatch, tmp_pa
     monkeypatch.delenv("MAESTRO_LOGIN", raising=False)
     monkeypatch.delenv("MAESTRO_KEY", raising=False)
     monkeypatch.delenv("MAESTRO_TASK_ID", raising=False)
+    monkeypatch.delenv("WEB_TEST_URL", raising=False)
     monkeypatch.setattr(
         "sys.argv",
         ["bot.py", "https://maestro.example", "23831639", "token"],
@@ -135,10 +136,11 @@ def test_settings_habilita_automacao_web_por_padrao_no_runner(
     monkeypatch,
     tmp_path: Path,
 ):
-    page = tmp_path / "docs" / "index-lotes" / "index.html"
+    page = tmp_path / "web" / "index-lotes" / "index.html"
     page.parent.mkdir(parents=True)
     page.write_text("<html></html>", encoding="utf-8")
     monkeypatch.delenv("WEB_AUTOMATION_ENABLED", raising=False)
+    monkeypatch.delenv("WEB_TEST_URL", raising=False)
     monkeypatch.setattr(
         "sys.argv",
         ["bot.py", "https://maestro.example", "23831639", "token"],
@@ -200,13 +202,13 @@ def test_settings_carrega_configuracao_da_automacao_web(
     monkeypatch, tmp_path: Path
 ):
     monkeypatch.setenv("WEB_AUTOMATION_ENABLED", "true")
-    monkeypatch.setenv("WEB_TEST_URL", "docs/index-lotes/index.html")
+    monkeypatch.setenv("WEB_TEST_URL", "web/index-lotes/index.html")
     monkeypatch.setenv("WEB_TIMEOUT_SECONDS", "20")
 
     settings = Settings.from_env(tmp_path)
 
     assert settings.web_automation_enabled is True
-    assert settings.web_test_url == "docs/index-lotes/index.html"
+    assert settings.web_test_url == "web/index-lotes/index.html"
     assert settings.web_artifact_dir == tmp_path / "artefatos"
     assert settings.web_timeout_seconds == 20
 
@@ -214,11 +216,11 @@ def test_settings_carrega_configuracao_da_automacao_web(
 def test_settings_valida_url_web_local_quando_selenium_habilitado(
     monkeypatch, tmp_path: Path
 ):
-    page = tmp_path / "docs" / "index-lotes" / "index.html"
+    page = tmp_path / "web" / "index-lotes" / "index.html"
     page.parent.mkdir(parents=True)
     page.write_text("<html></html>", encoding="utf-8")
     monkeypatch.setenv("WEB_AUTOMATION_ENABLED", "true")
-    monkeypatch.setenv("WEB_TEST_URL", "docs/index-lotes/index.html")
+    monkeypatch.setenv("WEB_TEST_URL", "web/index-lotes/index.html")
 
     Settings.from_env(tmp_path).validate()
 
@@ -227,14 +229,14 @@ def test_settings_rejeita_url_web_local_inexistente_quando_selenium_habilitado(
     monkeypatch, tmp_path: Path
 ):
     monkeypatch.setenv("WEB_AUTOMATION_ENABLED", "true")
-    monkeypatch.setenv("WEB_TEST_URL", "docs/index-lotes/index.html")
+    monkeypatch.setenv("WEB_TEST_URL", "web/index-lotes/index.html")
 
     with pytest.raises(ValueError, match="WEB_TEST_URL local inexistente"):
         Settings.from_env(tmp_path).validate()
 
 
 def test_settings_rejeita_timeout_web_invalido(monkeypatch, tmp_path: Path):
-    page = tmp_path / "docs" / "index-lotes" / "index.html"
+    page = tmp_path / "web" / "index-lotes" / "index.html"
     page.parent.mkdir(parents=True)
     page.write_text("<html></html>", encoding="utf-8")
     monkeypatch.setenv("WEB_AUTOMATION_ENABLED", "true")
@@ -250,11 +252,11 @@ def test_settings_rejeita_timeout_web_nao_numerico_no_validate(
     tmp_path: Path,
     invalid_timeout: str,
 ):
-    page = tmp_path / "docs" / "index-lotes" / "index.html"
+    page = tmp_path / "web" / "index-lotes" / "index.html"
     page.parent.mkdir(parents=True)
     page.write_text("<html></html>", encoding="utf-8")
     monkeypatch.setenv("WEB_AUTOMATION_ENABLED", "true")
-    monkeypatch.setenv("WEB_TEST_URL", "docs/index-lotes/index.html")
+    monkeypatch.setenv("WEB_TEST_URL", "web/index-lotes/index.html")
     monkeypatch.setenv("WEB_TIMEOUT_SECONDS", invalid_timeout)
 
     settings = Settings.from_env(tmp_path)

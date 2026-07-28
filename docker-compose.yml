@@ -16,7 +16,7 @@ services:
       LOG_FILE: logs/execucao.log
       REPORT_DIR: relatorios
       WEB_AUTOMATION_ENABLED: "${WEB_AUTOMATION_ENABLED:-false}"
-      WEB_TEST_URL: docs/index-lotes/index.html
+      WEB_TEST_URL: web/index-lotes/index.html
       WEB_ARTIFACT_DIR: artefatos
       WEB_TIMEOUT_SECONDS: "${WEB_TIMEOUT_SECONDS:-15}"
       PROCESSING_DELAY_SECONDS: "0"

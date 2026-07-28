@@ -62,7 +62,7 @@ Não fazem parte da implementação atual:
 - Selenium Grid ou execução distribuída do navegador;
 - gestão de agenda, capacidade e infraestrutura produtiva do Runner.
 
-O formulário web presente em `docs/index-lotes/` é um ambiente controlado de
+O formulário web presente em `web/index-lotes/` é um ambiente controlado de
 validação e evidência. Ele não representa um ERP produtivo.
 
 ## Processo de negócio
@@ -156,8 +156,11 @@ Exceções inesperadas durante um item são classificadas como erro de sistema.
 │   ├── GUIA_COLABORACAO_GIT.md    # processo de colaboração da equipe
 │   ├── REVISAO_BPMN_PDD.md        # aderência entre processo e código
 │   ├── diagrama_pdd.bpmn          # fonte editável do processo
-│   ├── diagrama_pdd.svg           # visualização do BPMN
-│   └── index-lotes/               # formulário web controlado
+│   └── diagrama_pdd.svg           # visualização do BPMN
+├── web/
+│   └── index-lotes/
+│       ├── login.html              # autenticação web controlada
+│       └── index.html              # formulário de lotes
 ├── logs/                          # logs JSON Lines
 ├── relatorios/                    # resumos JSON
 ├── scripts/
@@ -170,6 +173,8 @@ Exceções inesperadas durante um item são classificadas como erro de sistema.
 │   ├── maestro_client.py          # gateways local e BotCity
 │   ├── main.py                    # orquestração do ciclo
 │   ├── models.py                  # ExecutionResult
+│   ├── pages/
+│   │   └── login_page.py          # Page Object da autenticação web
 │   ├── validation.py              # RN01–RN07
 │   ├── vault_client.py            # Credentials Vault
 │   └── web_automation.py          # Selenium e evidências
@@ -258,7 +263,7 @@ Copy-Item .env.example .env
 | `REPORT_DIR` | Destino do resumo JSON. | `relatorios` |
 | `PROCESSING_DELAY_SECONDS` | Atraso simulado entre itens. | `1` |
 | `WEB_AUTOMATION_ENABLED` | Ativa Selenium; no Runner é `true` quando ausente. | `false` local |
-| `WEB_TEST_URL` | URL ou caminho da página controlada. | `docs/index-lotes/index.html` |
+| `WEB_TEST_URL` | URL ou caminho da página controlada. | `web/index-lotes/index.html` |
 | `WEB_ARTIFACT_DIR` | Destino das evidências PNG. | `artefatos` |
 | `WEB_TIMEOUT_SECONDS` | Limite dos waits explícitos. | `15` |
 | `CHROME_BIN` | Caminho explícito do Chrome/Chromium. | vazio |

@@ -22,7 +22,7 @@ RUN apt-get update \
 COPY --chown=botcity:botcity bot.py ./
 COPY --chown=botcity:botcity src/ ./src/
 COPY --chown=botcity:botcity dados_entrada/ ./dados_entrada/
-COPY --chown=botcity:botcity docs/index-lotes/ ./docs/index-lotes/
+COPY --chown=botcity:botcity web/index-lotes/ ./web/index-lotes/
 
 RUN mkdir -p logs relatorios artefatos \
     && chown -R botcity:botcity logs relatorios artefatos

@@ -1,6 +1,6 @@
 # Deploy no BotCity Maestro
 
-Este roteiro prepara o deploy da automacao como um bot Python customizado. O pacote gerado contem `bot.py`, `requirements.txt`, `src/`, `dados_entrada/` e `docs/index-lotes/` na raiz do arquivo zip.
+Este roteiro prepara o deploy da automacao como um bot Python customizado. O pacote gerado contem `bot.py`, `requirements.txt`, `src/`, `dados_entrada/` e `web/index-lotes/` na raiz do arquivo zip.
 
 Para a visao dos componentes e da sequencia de execucao, consulte
 [`ARQUITETURA.md`](ARQUITETURA.md).
@@ -63,7 +63,7 @@ LOG_FILE=logs/execucao.log
 REPORT_DIR=relatorios
 PROCESSING_DELAY_SECONDS=1
 WEB_AUTOMATION_ENABLED=true
-WEB_TEST_URL=docs/index-lotes/index.html
+WEB_TEST_URL=web/index-lotes/index.html
 WEB_ARTIFACT_DIR=artefatos
 WEB_TIMEOUT_SECONDS=15
 CHROME_BIN=<opcional-se-estiver-em-caminho-padrao>
@@ -177,7 +177,7 @@ bot.py
 requirements.txt
 src/
 dados_entrada/
-docs/index-lotes/
+web/index-lotes/
 ```
 
 Confirme a ausencia de:
