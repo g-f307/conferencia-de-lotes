@@ -266,8 +266,14 @@ def test_run_executa_automacao_web_quando_habilitada(monkeypatch, tmp_path):
     vault = VaultClient(FakeVaultProvider())
     calls = []
 
-    def fake_run_web_automation(url, base_dir, artifact_dir):
-        calls.append((url, base_dir, artifact_dir))
+    def fake_run_web_automation(
+        url,
+        base_dir,
+        artifact_dir,
+        *,
+        timeout_seconds,
+    ):
+        calls.append((url, base_dir, artifact_dir, timeout_seconds))
         return WebAutomationResult(
             url=(base_dir / url).as_uri(),
             evidence_path=artifact_dir / "comprovante.png",
@@ -289,6 +295,7 @@ def test_run_executa_automacao_web_quando_habilitada(monkeypatch, tmp_path):
             "docs/index-lotes/index.html",
             settings.base_dir,
             settings.web_artifact_dir,
+            settings.web_timeout_seconds,
         )
     ]
 
@@ -307,7 +314,13 @@ def test_run_registra_evento_estruturado_da_automacao_web(monkeypatch, tmp_path)
     log_file = tmp_path / "logs" / "execucao.log"
     logger = configure_logging(log_file, settings)
 
-    def fake_run_web_automation(url, base_dir, artifact_dir):
+    def fake_run_web_automation(
+        url,
+        base_dir,
+        artifact_dir,
+        *,
+        timeout_seconds,
+    ):
         return WebAutomationResult(
             url=(base_dir / url).as_uri(),
             evidence_path=artifact_dir / "comprovante.png",

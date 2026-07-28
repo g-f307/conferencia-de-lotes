@@ -4,11 +4,14 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_dockerfile_instala_chromium_e_copia_pagina_web():
+def test_dockerfile_instala_selenium_chromium_e_chromedriver():
     content = (PROJECT_ROOT / "Dockerfile").read_text(encoding="utf-8")
 
-    assert "PLAYWRIGHT_BROWSERS_PATH=/ms-playwright" in content
-    assert "playwright install --with-deps chromium" in content
+    assert "CHROME_BIN=/usr/bin/chromium" in content
+    assert "CHROMEDRIVER_PATH=/usr/bin/chromedriver" in content
+    assert "HOME=/tmp" in content
+    assert "chromium chromium-driver" in content
+    assert "playwright" not in content.lower()
     assert "docs/index-lotes/" in content
     assert "artefatos" in content
 
@@ -28,6 +31,8 @@ def test_compose_mapeia_volumes_operacionais():
     assert "./relatorios:/app/relatorios" in content
     assert "./artefatos:/app/artefatos" in content
     assert "WEB_AUTOMATION_ENABLED" in content
+    assert "WEB_TIMEOUT_SECONDS" in content
+    assert "HOME: /tmp" in content
 
 
 def test_pacote_botcity_inclui_pagina_web_local():

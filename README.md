@@ -191,6 +191,7 @@ mkdir -p dados_entrada logs relatorios
 | `WEB_AUTOMATION_ENABLED` | Habilita o preenchimento do formulário web de teste. | `false` |
 | `WEB_TEST_URL` | URL HTTP, `file://` ou caminho local da página de teste. | `docs/index-lotes/index.html` |
 | `WEB_ARTIFACT_DIR` | Diretório das evidências visuais da automação web. | `artefatos` |
+| `WEB_TIMEOUT_SECONDS` | Limite dos waits explícitos do Selenium, em segundos. | `15` |
 
 O `.env` não deve ser versionado. A senha do ERP não pertence ao `.env` nem ao código; deve ser recuperada pelo provedor de credenciais em tempo de execução.
 
@@ -208,14 +209,13 @@ O Dispatcher e o Performer também podem ser consumidos programaticamente pelas 
 
 A execução real no Maestro exige `MAESTRO_ENABLED=true`, configuração técnica válida, DataPool existente e `task_id` não vazio.
 
-## Automação web com Playwright
+## Automação web com Selenium
 
-A automação web é opcional e permanece desabilitada por padrão. Instale o
-navegador usado pelo Playwright depois das dependências Python:
-
-```bash
-python -m playwright install chromium
-```
+A automação web é opcional e permanece desabilitada por padrão. Para a execução
+local, instale Google Chrome ou Chromium. O `webdriver-manager` baixa o
+ChromeDriver compatível quando `CHROMEDRIVER_PATH` não estiver definido. A
+imagem Docker já contém Chromium e ChromeDriver e não faz downloads durante a
+execução.
 
 Configure no `.env`:
 
@@ -223,6 +223,7 @@ Configure no `.env`:
 WEB_AUTOMATION_ENABLED=true
 WEB_TEST_URL=docs/index-lotes/index.html
 WEB_ARTIFACT_DIR=artefatos
+WEB_TIMEOUT_SECONDS=15
 ```
 
 `WEB_TEST_URL` aceita uma URL HTTP, uma URL `file://` ou um caminho relativo à
@@ -232,12 +233,18 @@ raiz do projeto. Para testar a página local sem acessar o Maestro:
 MAESTRO_ENABLED=false VAULT_ENABLED=false PROCESSING_DELAY_SECONDS=0 python bot.py
 ```
 
-O módulo abre a página, preenche o número do lote, seleciona produto e status,
-aciona o botão e aguarda a confirmação visível. Em seguida, salva em
-`artefatos/` um screenshot focado na mensagem de confirmação, identificado pelo
-lote e pelo horário da execução. Se a confirmação não aparecer dentro do tempo
-do Playwright, a execução informa claramente o lote afetado. Quando
-`WEB_AUTOMATION_ENABLED=false`, nenhuma instância de navegador é criada e o
+O módulo abre a página, preenche o número do lote com `send_keys`, seleciona
+produto e status e usa `WebDriverWait` antes de interagir com elementos
+assíncronos. O botão é protegido por `element_to_be_clickable` e a confirmação
+por `visibility_of_element_located`; não são utilizados sleeps fixos para
+sincronizar a página.
+
+Depois da validação do texto de sucesso, a automação salva em `artefatos/` um
+screenshot focado na mensagem de confirmação, identificado pelo lote e pelo
+horário. Se o botão ou a confirmação não estiverem disponíveis dentro de
+`WEB_TIMEOUT_SECONDS`, a execução informa claramente o lote e o prazo
+esgotado. O `driver.quit()` é executado tanto no sucesso quanto na falha. Quando
+`WEB_AUTOMATION_ENABLED=false`, nenhuma instância do navegador é criada e o
 fluxo original permanece inalterado.
 
 ## Execução com Docker
@@ -264,7 +271,12 @@ docker compose run --rm conferencia-de-lotes
 O Compose monta `dados_entrada/` como somente leitura e persiste no host os
 arquivos criados em `logs/`, `relatorios/` e `artefatos/`. A execução local
 desabilita Maestro e Vault e reduz o atraso entre itens para zero. Para testar o
-preenchimento web dentro do container, execute com `WEB_AUTOMATION_ENABLED=true`.
+Selenium e gerar uma evidência real dentro do container:
+
+```bash
+WEB_AUTOMATION_ENABLED=true docker compose run --rm conferencia-de-lotes
+```
+
 Por padrão, o container usa UID e GID `1000`; em outro ambiente Linux, informe
 os identificadores do usuário local:
 
