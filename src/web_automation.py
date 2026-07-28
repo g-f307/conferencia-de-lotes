@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 import os
 from pathlib import Path
 import re
+import subprocess
 from typing import Any
 from urllib.parse import urlparse
 
@@ -22,6 +23,16 @@ from webdriver_manager.chrome import ChromeDriverManager
 
 
 DEFAULT_WEB_TIMEOUT_SECONDS = 15.0
+DEFAULT_CHROME_BIN_CANDIDATES = (
+    Path("/usr/bin/google-chrome"),
+    Path("/usr/bin/google-chrome-stable"),
+    Path("/usr/bin/chromium"),
+    Path("/usr/bin/chromium-browser"),
+)
+DEFAULT_CHROMEDRIVER_CANDIDATES = (
+    Path("/usr/local/bin/chromedriver"),
+    Path("/usr/bin/chromedriver"),
+)
 
 
 @dataclass(frozen=True)
@@ -47,6 +58,82 @@ class WebAutomationTimeoutError(RuntimeError):
 
 class WebAutomationEvidenceError(RuntimeError):
     """A captura visual obrigatória não pôde ser persistida."""
+
+
+class WebAutomationEnvironmentError(RuntimeError):
+    """O ambiente Selenium não possui binários executáveis válidos."""
+
+
+def resolve_configured_executable(env_var: str) -> Path | None:
+    """Valida um executável informado por variável de ambiente."""
+    configured = os.getenv(env_var, "").strip()
+    if not configured:
+        return None
+
+    path = Path(configured).expanduser()
+    if not path.is_file():
+        raise WebAutomationEnvironmentError(
+            f"{env_var} aponta para um arquivo inexistente: {path}"
+        )
+    if not os.access(path, os.X_OK):
+        raise WebAutomationEnvironmentError(
+            f"{env_var} não possui permissão de execução: {path}"
+        )
+    return path
+
+
+def resolve_first_executable(candidates: tuple[Path, ...]) -> Path | None:
+    """Retorna o primeiro executável existente dentre caminhos conhecidos."""
+    for path in candidates:
+        if path.is_file() and os.access(path, os.X_OK):
+            return path
+    return None
+
+
+def resolve_chrome_binary() -> Path | None:
+    """Resolve o Chrome configurado ou instalado em caminho padrão do Runner."""
+    return resolve_configured_executable("CHROME_BIN") or resolve_first_executable(
+        DEFAULT_CHROME_BIN_CANDIDATES
+    )
+
+
+def resolve_chromedriver_binary() -> Path | None:
+    """Resolve o ChromeDriver configurado ou instalado em caminho padrão."""
+    return resolve_configured_executable("CHROMEDRIVER_PATH") or resolve_first_executable(
+        DEFAULT_CHROMEDRIVER_CANDIDATES
+    )
+
+
+def executable_version(path: Path) -> str:
+    """Consulta a versão de um binário sem interromper a automação."""
+    try:
+        completed = subprocess.run(
+            [str(path), "--version"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except Exception as exc:
+        return f"versao indisponivel ({exc.__class__.__name__})"
+
+    output = (completed.stdout or completed.stderr).strip()
+    first_line = output.splitlines()[0] if output else "versao indisponivel"
+    return first_line
+
+
+def describe_selenium_environment() -> dict[str, str]:
+    """Descreve binários configurados para evidência de homologação."""
+    chrome = resolve_chrome_binary()
+    chromedriver = resolve_chromedriver_binary()
+    return {
+        "chrome_bin": str(chrome) if chrome else "auto",
+        "chrome_version": executable_version(chrome) if chrome else "auto",
+        "chromedriver_path": str(chromedriver) if chromedriver else "webdriver-manager",
+        "chromedriver_version": (
+            executable_version(chromedriver) if chromedriver else "download sob demanda"
+        ),
+    }
 
 
 def resolve_web_url(configured_url: str, base_dir: Path) -> str:
@@ -88,12 +175,12 @@ def build_chrome_driver(*, headless: bool = True) -> Any:
     options.add_argument("--disable-gpu")
     options.add_argument("--window-size=1440,1200")
 
-    chrome_binary = os.getenv("CHROME_BIN", "").strip()
+    chrome_binary = resolve_chrome_binary()
     if chrome_binary:
-        options.binary_location = chrome_binary
+        options.binary_location = str(chrome_binary)
 
-    configured_driver = os.getenv("CHROMEDRIVER_PATH", "").strip()
-    driver_path = configured_driver or ChromeDriverManager().install()
+    configured_driver = resolve_chromedriver_binary()
+    driver_path = str(configured_driver) if configured_driver else ChromeDriverManager().install()
     return webdriver.Chrome(
         service=Service(driver_path),
         options=options,

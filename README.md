@@ -188,10 +188,12 @@ mkdir -p dados_entrada logs relatorios
 | `INPUT_DIR` | Diretório de entrada. | `dados_entrada` |
 | `LOG_FILE` | Arquivo de log. | `logs/execucao.log` |
 | `REPORT_DIR` | Diretório dos relatórios JSON. | `relatorios` |
-| `WEB_AUTOMATION_ENABLED` | Habilita o preenchimento do formulário web de teste. | `false` |
+| `WEB_AUTOMATION_ENABLED` | Habilita o preenchimento do formulário web de teste; no Runner fica ativo por padrão se ausente. | `false` local, `true` no Runner |
 | `WEB_TEST_URL` | URL HTTP, `file://` ou caminho local da página de teste. | `docs/index-lotes/index.html` |
 | `WEB_ARTIFACT_DIR` | Diretório das evidências visuais da automação web. | `artefatos` |
 | `WEB_TIMEOUT_SECONDS` | Limite dos waits explícitos do Selenium, em segundos. | `15` |
+| `CHROME_BIN` | Caminho do Chrome/Chromium quando o Runner exigir configuração explícita. | vazio ou `/usr/bin/google-chrome` |
+| `CHROMEDRIVER_PATH` | Caminho do ChromeDriver para evitar download em runtime. | vazio ou `/usr/local/bin/chromedriver` |
 
 O `.env` não deve ser versionado. A senha do ERP não pertence ao `.env` nem ao código; deve ser recuperada pelo provedor de credenciais em tempo de execução.
 
@@ -211,11 +213,12 @@ A execução real no Maestro exige `MAESTRO_ENABLED=true`, configuração técni
 
 ## Automação web com Selenium
 
-A automação web é opcional e permanece desabilitada por padrão. Para a execução
-local, instale Google Chrome ou Chromium. O `webdriver-manager` baixa o
-ChromeDriver compatível quando `CHROMEDRIVER_PATH` não estiver definido. A
-imagem Docker já contém Chromium e ChromeDriver e não faz downloads durante a
-execução.
+A automação web é opcional e permanece desabilitada por padrão em execução
+local. No BotCity Runner, ela fica habilitada por padrão quando a variável não
+é informada, para manter a homologação web ativa. Para a execução local,
+instale Google Chrome ou Chromium. O `webdriver-manager` baixa o ChromeDriver
+compatível quando `CHROMEDRIVER_PATH` não estiver definido. A imagem Docker já
+contém Chromium e ChromeDriver e não faz downloads durante a execução.
 
 Configure no `.env`:
 
@@ -307,10 +310,10 @@ O workflow utiliza apenas o modo de teste e não depende de credenciais do Maest
 O BotCity Runner espera um bot Python customizado com `bot.py` e `requirements.txt` no pacote. Gere o zip de deploy com:
 
 ```bash
-python scripts/build_botcity_package.py --version 0.1.0
+python scripts/build_botcity_package.py --version 2
 ```
 
-O arquivo será criado em `dist/bot-conferencia-de-lotes-v1.zip`. O roteiro operacional completo está em [`docs/DEPLOY_BOTCITY.md`](docs/DEPLOY_BOTCITY.md).
+O arquivo será criado em `dist/bot-conferencia-de-lotes-v2.zip`. O roteiro operacional completo está em [`docs/DEPLOY_BOTCITY.md`](docs/DEPLOY_BOTCITY.md).
 
 ## Configuração no BotCity Maestro
 
@@ -362,7 +365,7 @@ Execute com relatório de cobertura:
 python -m pytest --cov=src --cov-report=term-missing --cov-fail-under=80
 ```
 
-Na versão documentada, a suíte contém 66 testes. Os testes usam gateways e provedores controlados; nenhuma credencial real é necessária.
+Na versão documentada, a suíte contém 122 testes. Os testes usam gateways e provedores controlados; nenhuma credencial real é necessária.
 
 ## Logs e evidências
 

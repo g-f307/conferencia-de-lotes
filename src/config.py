@@ -7,7 +7,7 @@ from pathlib import Path
 import sys
 from urllib.parse import urlparse
 
-from dotenv import load_dotenv
+from dotenv import dotenv_values
 
 
 TRUE_VALUES = {"1", "true", "yes", "sim", "on"}
@@ -82,48 +82,53 @@ class Settings:
     def from_env(cls, base_dir: Path | None = None) -> "Settings":
         """Carrega `.env` e resolve caminhos relativos a partir do projeto."""
         root = (base_dir or Path(__file__).resolve().parents[1]).resolve()
-        load_dotenv(root / ".env")
+        dotenv_env = {
+            key: value
+            for key, value in dotenv_values(root / ".env").items()
+            if value is not None
+        }
+        env = {**dotenv_env, **os.environ}
         runner_server, runner_task_id = botcity_runner_args()
         runner_context = bool(runner_server and runner_task_id)
 
         def project_path(variable: str, default: str) -> Path:
-            configured = Path(os.getenv(variable, default)).expanduser()
+            configured = Path(env.get(variable, default)).expanduser()
             if configured.is_absolute():
                 return configured
             return (root / configured).resolve()
 
         def env_or_default(variable: str, default: str = "") -> str:
-            return (os.getenv(variable, "").strip() or default).strip()
+            return (env.get(variable, "").strip() or default).strip()
 
         return cls(
             base_dir=root,
-            maestro_enabled=as_bool(os.getenv("MAESTRO_ENABLED"), runner_context),
-            vault_enabled=as_bool(os.getenv("VAULT_ENABLED"), runner_context),
+            maestro_enabled=as_bool(env.get("MAESTRO_ENABLED"), runner_context),
+            vault_enabled=as_bool(env.get("VAULT_ENABLED"), runner_context),
             maestro_server=env_or_default("MAESTRO_SERVER", runner_server),
             maestro_login=env_or_default("MAESTRO_LOGIN"),
             maestro_key=env_or_default("MAESTRO_KEY"),
             maestro_task_id=env_or_default("MAESTRO_TASK_ID", runner_task_id),
-            bot_id=env_or_default("BOT_ID", "bot-conferencia-de-lotes-v1"),
+            bot_id=env_or_default("BOT_ID", "bot-conferencia-de-lotes-v2"),
             execution_id=env_or_default(
                 "EXECUTION_ID",
                 runner_task_id or "execucao-local",
             ),
-            datapool_label=os.getenv(
+            datapool_label=env.get(
                 "DATAPOOL_LABEL", "FilaAuditoriaLotes2"
             ).strip(),
-            vault_label=os.getenv("VAULT_LABEL", "credencial_erp2").strip(),
+            vault_label=env.get("VAULT_LABEL", "credencial_erp2").strip(),
             reference_lotes=tuple(
                 lote.strip()
-                for lote in os.getenv("REFERENCE_LOTES", "L001,L002").split(",")
+                for lote in env.get("REFERENCE_LOTES", "L001,L002").split(",")
                 if lote.strip()
             ),
             input_dir=project_path("INPUT_DIR", "dados_entrada"),
             input_csv=project_path("INPUT_CSV", "dados_entrada/lotes_auditoria.csv"),
             log_file=project_path("LOG_FILE", "logs/execucao.log"),
             report_dir=project_path("REPORT_DIR", "relatorios"),
-            processing_delay_seconds=float(os.getenv("PROCESSING_DELAY_SECONDS", "1")),
+            processing_delay_seconds=float(env.get("PROCESSING_DELAY_SECONDS", "1")),
             web_automation_enabled=as_bool(
-                os.getenv("WEB_AUTOMATION_ENABLED"), False
+                env.get("WEB_AUTOMATION_ENABLED"), runner_context
             ),
             web_test_url=env_or_default(
                 "WEB_TEST_URL", "docs/index-lotes/index.html"
@@ -132,7 +137,7 @@ class Settings:
                 "WEB_ARTIFACT_DIR", "artefatos"
             ),
             web_timeout_seconds=as_optional_float(
-                os.getenv("WEB_TIMEOUT_SECONDS"),
+                env.get("WEB_TIMEOUT_SECONDS"),
                 15.0,
             ),
             runner_context=runner_context,

@@ -11,8 +11,8 @@ from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
 
 
-DEFAULT_VERSION = "0.1.0"
-DEFAULT_PACKAGE_NAME = "bot-conferencia-de-lotes-v1"
+DEFAULT_VERSION = "2"
+DEFAULT_PACKAGE_NAME = "bot-conferencia-de-lotes"
 PACKAGE_ROOT_FILES = ("bot.py", "requirements.txt")
 PACKAGE_DIRS = ("src", "dados_entrada", "docs/index-lotes")
 IGNORED_DIRS = {"__pycache__"}
@@ -48,9 +48,13 @@ def build_package(
     version: str = DEFAULT_VERSION,
     package_name: str = DEFAULT_PACKAGE_NAME,
 ) -> Path:
+    normalized_version = version.strip()
+    if not normalized_version:
+        raise ValueError("version deve ser informada")
+
     dist_dir = base_dir / "dist"
     dist_dir.mkdir(parents=True, exist_ok=True)
-    artifact = dist_dir / f"{package_name}.zip"
+    artifact = dist_dir / f"{package_name}-v{normalized_version}.zip"
 
     with ZipFile(artifact, "w", compression=ZIP_DEFLATED) as package:
         for path in iter_package_files(base_dir):

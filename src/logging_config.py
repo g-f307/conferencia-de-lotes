@@ -67,7 +67,7 @@ class StructuredJsonFormatter(logging.Formatter):
             "aplicacao": getattr(
                 record,
                 "aplicacao",
-                "bot-conferencia-de-lotes-v1",
+                "bot-conferencia-de-lotes-v2",
             ),
             "ambiente": resolve_log_environment(record, self.settings),
             "usuario": getattr(record, "usuario", "sistema"),
