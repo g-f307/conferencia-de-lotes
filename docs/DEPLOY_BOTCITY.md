@@ -2,6 +2,9 @@
 
 Este roteiro prepara o deploy da automacao como um bot Python customizado. O pacote gerado contem `bot.py`, `requirements.txt`, `src/`, `dados_entrada/` e `docs/index-lotes/` na raiz do arquivo zip.
 
+Para a visao dos componentes e da sequencia de execucao, consulte
+[`ARQUITETURA.md`](ARQUITETURA.md).
+
 ## Pre-requisitos
 
 - Acesso ao workspace BotCity Maestro.
@@ -144,16 +147,10 @@ Antes de empacotar:
 .venv/bin/python bot.py
 ```
 
-O resultado local esperado com o CSV de exemplo atual e:
-
-```text
-122 passed
-status PARTIALLY_COMPLETED
-16 itens totais
-4 sucessos
-9 erros
-3 revisoes humanas
-```
+A suite deve concluir integralmente, sem depender de credenciais reais. A
+quantidade de testes nao e fixada neste documento porque evolui com o projeto.
+Com a massa de exemplo, confirme tambem a geracao do log e do resumo
+operacional.
 
 ## Gerar pacote
 
@@ -206,6 +203,10 @@ artefatos/
    - Arquivo: `dist/bot-conferencia-de-lotes-v2.zip`
 4. Marque a versao como released.
 5. Execute um smoke test com poucos registros.
+
+Na rastreabilidade do projeto, essa implantacao corresponde a GitHub Release
+`v1.2.0`. O Bot ID, a versao do Maestro e a versao semantica do repositorio sao
+identificadores distintos.
 
 ## Smoke test
 

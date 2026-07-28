@@ -1,6 +1,8 @@
-# Guia de colaboração Git — Auditor de Lotes v1.0
+# Guia de colaboração Git — Conferência de Lotes
 
-Este repositório começa apenas com os documentos do processo. O código deve ser construído pela equipe usando GitHub Flow, de modo que o histórico mostre claramente o trabalho de Gabriel, Marcelo e Rebecca.
+Este documento registra o GitHub Flow utilizado por Gabriel, Marcelo e Rebecca
+na construção e evolução do projeto. Ele preserva o roteiro inicial e define as
+práticas que continuam válidas para manutenção, correções e novas releases.
 
 ## 1. Antes de programar: revisão conjunta do BPMN e PDD
 
@@ -238,7 +240,15 @@ git diff
 
 Evitar que um PR altere arquivos pertencentes à entrega de outro integrante. Quando uma interface entre módulos for necessária, os envolvidos combinam primeiro na Issue.
 
-### 5.4 Fazer commits pequenos
+### 5.4 Fazer commits por blocos lógicos
+
+Cada commit deve representar uma unidade coerente e verificável. Mensagens vagas
+como `ajustes`, `mudanças` ou `fix` não são aceitas. Também não se deve
+concentrar uma funcionalidade ampla em um único commit quando implementação,
+testes, build e documentação formam blocos independentes.
+
+O objetivo não é produzir muitos commits pequenos, mas um histórico claro,
+descritivo e proporcional ao trabalho realizado.
 
 Exemplos para Gabriel:
 
@@ -465,7 +475,9 @@ Guardar prints ou exportações de:
 
 ## 12. Release
 
-Somente depois de todos os critérios aprovados:
+Somente depois de todos os critérios aprovados. O exemplo abaixo representa a
+primeira release; versões posteriores devem usar o marco semântico definido para
+cada entrega:
 
 ```bash
 git switch main
