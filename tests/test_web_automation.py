@@ -6,6 +6,7 @@ from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
 
 from src.web_automation import (
+    WebAutomationEvidenceError,
     WebAutomationTimeoutError,
     WebFormData,
     build_chrome_driver,
@@ -17,11 +18,20 @@ from src.web_automation import (
 
 
 class FakeElement:
-    def __init__(self, text="", displayed=True, enabled=True):
+    def __init__(
+        self,
+        text="",
+        displayed=True,
+        enabled=True,
+        screenshot_succeeds=True,
+        screenshot_writes_file=True,
+    ):
         self.actions = []
         self.text = text
         self.displayed = displayed
         self.enabled = enabled
+        self.screenshot_succeeds = screenshot_succeeds
+        self.screenshot_writes_file = screenshot_writes_file
 
     def clear(self):
         self.actions.append(("clear",))
@@ -34,7 +44,9 @@ class FakeElement:
 
     def screenshot(self, path):
         self.actions.append(("screenshot", path))
-        return True
+        if self.screenshot_succeeds and self.screenshot_writes_file:
+            Path(path).write_bytes(b"fake-png")
+        return self.screenshot_succeeds
 
     def is_displayed(self):
         return self.displayed
@@ -257,6 +269,32 @@ def test_fill_and_submit_lote_rejeita_confirmacao_sem_sucesso(tmp_path):
     with pytest.raises(
         WebAutomationTimeoutError,
         match="Mensagem de confirmação inválida",
+    ):
+        fill_and_submit_lote(
+            driver,
+            "file:///tmp/index.html",
+            tmp_path,
+            wait_factory=ImmediateWait,
+        )
+
+
+@pytest.mark.parametrize(
+    ("screenshot_succeeds", "screenshot_writes_file"),
+    [(False, False), (True, False)],
+)
+def test_fill_and_submit_lote_falha_quando_evidencia_nao_e_criada(
+    tmp_path,
+    screenshot_succeeds,
+    screenshot_writes_file,
+):
+    driver = FakeDriver()
+    confirmation = driver.elements[(By.ID, "mensagem")]
+    confirmation.screenshot_succeeds = screenshot_succeeds
+    confirmation.screenshot_writes_file = screenshot_writes_file
+
+    with pytest.raises(
+        WebAutomationEvidenceError,
+        match="Não foi possível gerar a evidência.*LOTE-2026-0001",
     ):
         fill_and_submit_lote(
             driver,

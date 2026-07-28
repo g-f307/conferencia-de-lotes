@@ -45,6 +45,10 @@ class WebAutomationTimeoutError(RuntimeError):
     """A confirmação esperada não apareceu dentro do prazo configurado."""
 
 
+class WebAutomationEvidenceError(RuntimeError):
+    """A captura visual obrigatória não pôde ser persistida."""
+
+
 def resolve_web_url(configured_url: str, base_dir: Path) -> str:
     """Converte um caminho local configurado em uma URL aceita pelo navegador."""
     value = configured_url.strip()
@@ -156,7 +160,12 @@ def fill_and_submit_lote(
 
     artifact_dir.mkdir(parents=True, exist_ok=True)
     evidence_path = build_evidence_path(artifact_dir, data.lote_id)
-    confirmation.screenshot(str(evidence_path))
+    screenshot_created = confirmation.screenshot(str(evidence_path))
+    if not screenshot_created or not evidence_path.is_file():
+        raise WebAutomationEvidenceError(
+            "Não foi possível gerar a evidência da automação para o lote "
+            f"{data.lote_id}: {evidence_path}"
+        )
     return evidence_path
 
 
