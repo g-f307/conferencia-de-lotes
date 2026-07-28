@@ -104,11 +104,13 @@ CHROME_BIN=/usr/bin/google-chrome
 CHROME_VERSION=Google Chrome 149.0.7827.102
 ```
 
-O ChromeDriver compativel foi encontrado no cache do `webdriver-manager`. Para nao depender de caminho pessoal nem de novo download em runtime, instale-o em um caminho global do Runner:
+O ChromeDriver compativel foi encontrado no cache do `webdriver-manager`.
+Localize o executavel obtido no Runner e copie-o para um caminho global. No
+comando abaixo, substitua `/caminho/para/chromedriver` pelo caminho encontrado:
 
 ```bash
 sudo install -m 0755 \
-  /home/marcelo/.wdm/drivers/chromedriver/linux64/149.0.7827.155/chromedriver-linux64/chromedriver \
+  /caminho/para/chromedriver \
   /usr/local/bin/chromedriver
 ```
 
@@ -123,6 +125,11 @@ Configure apenas se o caminho nao for um dos padroes autodetectados:
 ```text
 CHROMEDRIVER_PATH=/usr/local/bin/chromedriver
 ```
+
+Na homologacao, o executavel obtido pelo `webdriver-manager` foi instalado em
+`/usr/local/bin/chromedriver`. Esse e o caminho operacional usado pelo Runner;
+o caminho de origem no cache e especifico do usuario e nao faz parte da
+configuracao permanente.
 
 Se o Runner nao possuir ChromeDriver local, o `webdriver-manager` pode baixar o driver em execucao local. Para homologacao no Runner, prefira sempre `CHROMEDRIVER_PATH` configurado para evitar dependencia de acesso externo. O bot valida se os caminhos configurados existem e possuem permissao de execucao antes de iniciar o navegador.
 
