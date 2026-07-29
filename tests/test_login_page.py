@@ -1,86 +1,66 @@
 import pytest
-from selenium.common.exceptions import TimeoutException
-from selenium.webdriver.common.by import By
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from src.pages.login_page import LoginPage, LoginPageTimeoutError
 
 
-class FakeElement:
-    def __init__(self, *, displayed=True, enabled=True):
+class FakeLocator:
+    def __init__(self, *, timeout=False):
         self.actions = []
-        self.displayed = displayed
-        self.enabled = enabled
-
-    def clear(self):
-        self.actions.append(("clear",))
-
-    def send_keys(self, value):
-        self.actions.append(("send_keys", value))
-
-    def click(self):
-        self.actions.append(("click",))
-
-    def is_displayed(self):
-        return self.displayed
-
-    def is_enabled(self):
-        return self.enabled
-
-
-class FakeDriver:
-    def __init__(self, *, form_visible=True, button_enabled=True):
-        self.elements = {
-            (By.ID, "usuario"): FakeElement(),
-            (By.ID, "senha"): FakeElement(),
-            (By.ID, "botao-login"): FakeElement(enabled=button_enabled),
-            (By.ID, "lote-form"): FakeElement(displayed=form_visible),
-        }
-
-    def find_element(self, by, value):
-        return self.elements[(by, value)]
-
-
-class ImmediateWait:
-    def __init__(self, driver, timeout):
-        self.driver = driver
         self.timeout = timeout
 
-    def until(self, condition):
-        result = condition(self.driver)
-        if not result:
-            raise TimeoutException("timeout de teste")
-        return result
+    def fill(self, value, timeout=None):
+        self.actions.append(("fill", value, timeout))
+
+    def click(self, timeout=None):
+        self.actions.append(("click", timeout))
+
+    def wait_for(self, state=None, timeout=None):
+        self.actions.append(("wait_for", state, timeout))
+        if self.timeout:
+            raise PlaywrightTimeoutError("timeout de teste")
 
 
-def build_login_page(driver, timeout=15):
-    return LoginPage(
-        driver,
-        timeout_seconds=timeout,
-        wait_factory=ImmediateWait,
-    )
+class FakePage:
+    def __init__(self, *, form_timeout=False):
+        self.usuario = FakeLocator()
+        self.senha = FakeLocator()
+        self.botao = FakeLocator()
+        self.formulario = FakeLocator(timeout=form_timeout)
+        self.calls = []
+
+    def get_by_label(self, name, exact=False):
+        self.calls.append(("label", name, exact))
+        return {
+            LoginPage.ROTULO_USUARIO: self.usuario,
+            LoginPage.ROTULO_SENHA: self.senha,
+        }[name]
+
+    def get_by_role(self, role, name=None, exact=False):
+        self.calls.append(("role", role, name, exact))
+        if role == "button":
+            return self.botao
+        return self.formulario
 
 
-def test_login_page_centraliza_locators():
-    assert LoginPage.CAMPO_USUARIO == (By.ID, "usuario")
-    assert LoginPage.CAMPO_SENHA == (By.ID, "senha")
-    assert LoginPage.BOTAO_LOGIN == (By.ID, "botao-login")
-    assert LoginPage.FORMULARIO_LOTE == (By.ID, "lote-form")
+def test_login_page_centraliza_locators_semanticos():
+    assert LoginPage.ROTULO_USUARIO == "Usuário"
+    assert LoginPage.ROTULO_SENHA == "Senha"
+    assert LoginPage.NOME_BOTAO_LOGIN == "Entrar"
+    assert LoginPage.TITULO_FORMULARIO == "Processar novo lote"
 
 
-def test_fazer_login_preenche_campos_e_clica_no_botao():
-    driver = FakeDriver()
+def test_fazer_login_preenche_campos_e_valida_formulario():
+    page = FakePage()
 
-    build_login_page(driver).fazer_login(" usuario.teste ", "senha-efemera")
+    LoginPage(page).fazer_login(" usuario.teste ", "senha-efemera")
 
-    assert driver.elements[LoginPage.CAMPO_USUARIO].actions == [
-        ("clear",),
-        ("send_keys", "usuario.teste"),
-    ]
-    assert driver.elements[LoginPage.CAMPO_SENHA].actions == [
-        ("clear",),
-        ("send_keys", "senha-efemera"),
-    ]
-    assert driver.elements[LoginPage.BOTAO_LOGIN].actions == [("click",)]
+    assert page.usuario.actions[0][:2] == ("fill", "usuario.teste")
+    assert page.senha.actions[0][:2] == ("fill", "senha-efemera")
+    assert page.botao.actions[0][0] == "click"
+    assert page.formulario.actions[0][0] == "wait_for"
+    assert ("label", "Usuário", True) in page.calls
+    assert ("role", "button", "Entrar", True) in page.calls
 
 
 @pytest.mark.parametrize(
@@ -92,22 +72,22 @@ def test_fazer_login_preenche_campos_e_clica_no_botao():
     ],
 )
 def test_fazer_login_exige_usuario_e_senha(usuario, senha):
-    driver = FakeDriver()
+    page = FakePage()
 
     with pytest.raises(ValueError, match="Usuário e senha devem ser informados"):
-        build_login_page(driver).fazer_login(usuario, senha)
+        LoginPage(page).fazer_login(usuario, senha)
 
-    assert driver.elements[LoginPage.CAMPO_USUARIO].actions == []
-    assert driver.elements[LoginPage.CAMPO_SENHA].actions == []
+    assert page.usuario.actions == []
+    assert page.senha.actions == []
 
 
 def test_fazer_login_trata_timeout_sem_expor_credenciais():
-    driver = FakeDriver(form_visible=False)
+    page = FakePage(form_timeout=True)
     usuario = "usuario-confidencial"
     senha = "senha-confidencial"
 
     with pytest.raises(LoginPageTimeoutError) as captured:
-        build_login_page(driver).fazer_login(usuario, senha)
+        LoginPage(page).fazer_login(usuario, senha)
 
     error_message = str(captured.value)
     assert usuario not in error_message
@@ -117,4 +97,4 @@ def test_fazer_login_trata_timeout_sem_expor_credenciais():
 
 def test_login_page_rejeita_timeout_invalido():
     with pytest.raises(ValueError, match="timeout_seconds"):
-        build_login_page(FakeDriver(), timeout=0)
+        LoginPage(FakePage(), timeout_seconds=0)

@@ -213,7 +213,7 @@ def test_settings_carrega_configuracao_da_automacao_web(
     assert settings.web_timeout_seconds == 20
 
 
-def test_settings_valida_url_web_local_quando_selenium_habilitado(
+def test_settings_valida_url_web_local_quando_playwright_habilitado(
     monkeypatch, tmp_path: Path
 ):
     page = tmp_path / "web" / "index-lotes" / "index.html"
@@ -225,7 +225,7 @@ def test_settings_valida_url_web_local_quando_selenium_habilitado(
     Settings.from_env(tmp_path).validate()
 
 
-def test_settings_rejeita_url_web_local_inexistente_quando_selenium_habilitado(
+def test_settings_rejeita_url_web_local_inexistente_quando_playwright_habilitado(
     monkeypatch, tmp_path: Path
 ):
     monkeypatch.setenv("WEB_AUTOMATION_ENABLED", "true")

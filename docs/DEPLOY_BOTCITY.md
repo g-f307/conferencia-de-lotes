@@ -1,23 +1,17 @@
 # Deploy no BotCity Maestro
 
-Este roteiro prepara o deploy da automacao como um bot Python customizado. O pacote gerado contem `bot.py`, `requirements.txt`, `src/`, `dados_entrada/` e `web/index-lotes/` na raiz do arquivo zip.
+## Pré-requisitos
 
-Para a visao dos componentes e da sequencia de execucao, consulte
-[`ARQUITETURA.md`](ARQUITETURA.md).
-
-## Pre-requisitos
-
-- Acesso ao workspace BotCity Maestro.
-- Runner ativo no ambiente de execucao.
-- DataPool `FilaAuditoriaLotes2` criado.
-- Credencial `credencial_erp2` criada no Credentials Vault.
-- Python disponivel no host do Runner.
-- Google Chrome ou Chromium disponivel no host do Runner.
-- ChromeDriver compativel com a versao do navegador.
+- workspace e Runner ativos;
+- DataPool `FilaAuditoriaLotes2`;
+- credencial `credencial_erp2`;
+- Python disponível no Runner;
+- Chrome ou Chromium compatível;
+- permissão para alertas, artefatos e `finish_task`.
 
 ## DataPool
 
-Crie o DataPool `FilaAuditoriaLotes2` com estes campos de texto:
+Crie onze campos de texto:
 
 ```text
 lote_id
@@ -28,32 +22,30 @@ status
 responsavel
 data
 observacao
+resultado_validacao
+evidencia
+mensagem_resultado
 ```
+
+Os três últimos são preenchidos antes da finalização de cada item.
 
 ## Credentials Vault
 
-Crie uma credencial com label `credencial_erp2` contendo:
+Crie `credencial_erp2` com:
 
 ```text
 username
 password
 ```
 
-A senha nao deve ficar em `.env`, codigo, log ou relatorio.
+As chaves devem estar em minúsculo. A senha não pode estar no `.env`, código,
+log, imagem, relatório ou pacote.
 
-As chaves devem estar exatamente em minusculo, sem espacos: `username` e `password`. Se o Runner mostrar `Server returned 400. Key not found`, revise se a automacao esta com `VAULT_LABEL=credencial_erp2` e se a credencial possui essas duas chaves.
-
-## Variaveis de ambiente
-
-No ambiente do Maestro/Runner, configure:
+## Ambiente
 
 ```text
 MAESTRO_ENABLED=true
 VAULT_ENABLED=true
-MAESTRO_SERVER=<url-do-workspace>
-MAESTRO_LOGIN=<login-tecnico>
-MAESTRO_KEY=<chave-tecnica>
-MAESTRO_TASK_ID=
 DATAPOOL_LABEL=FilaAuditoriaLotes2
 VAULT_LABEL=credencial_erp2
 REFERENCE_LOTES=L001,L002
@@ -61,116 +53,84 @@ INPUT_DIR=dados_entrada
 INPUT_CSV=dados_entrada/lotes_auditoria.csv
 LOG_FILE=logs/execucao.log
 REPORT_DIR=relatorios
-PROCESSING_DELAY_SECONDS=1
+PROCESSING_DELAY_SECONDS=0
 WEB_AUTOMATION_ENABLED=true
 WEB_TEST_URL=web/index-lotes/index.html
 WEB_ARTIFACT_DIR=artefatos
 WEB_TIMEOUT_SECONDS=15
-CHROME_BIN=<opcional-se-estiver-em-caminho-padrao>
-CHROMEDRIVER_PATH=<opcional-se-estiver-em-caminho-padrao>
+PLAYWRIGHT_CHROMIUM_PATH=<opcional>
 ```
 
-Quando a execucao vier do Runner, o `task_id` deve ser fornecido pelos argumentos do proprio Runner. Use `MAESTRO_TASK_ID` apenas em teste controlado fora do Runner.
-
-O bot reconhece automaticamente a chamada do Runner no formato:
+O Runner fornece `server`, `task_id` e `token` no formato:
 
 ```text
 bot.py <maestro-server> <task-id> <token>
 ```
 
-Nesse contexto, `MAESTRO_ENABLED`, `VAULT_ENABLED` e `WEB_AUTOMATION_ENABLED` ficam ativos por padrao se as variaveis nao forem informadas. Use `WEB_AUTOMATION_ENABLED=false` apenas como contingencia para desabilitar Selenium. Ainda assim, mantenha `DATAPOOL_LABEL=FilaAuditoriaLotes2` e `VAULT_LABEL=credencial_erp2` configurados no ambiente da automacao.
+Não configure o token como variável e não o registre.
 
-## Selenium no Runner
+## Playwright no Runner
 
-O pacote Python nao instala dependencias de sistema operacional. Antes de publicar a versao com `WEB_AUTOMATION_ENABLED=true`, valide os binarios no host do Runner:
+O pacote instala a biblioteca Playwright, mas o host precisa disponibilizar um
+Chromium compatível ou o bundle instalado. Verifique:
 
 ```bash
 command -v google-chrome
 command -v chromium
-command -v chromedriver
 google-chrome --version
 chromium --version
-chromedriver --version
 ```
 
-O bot tenta autodetectar Chrome/Chromium e ChromeDriver nos caminhos padrao do Linux, incluindo `/usr/bin/google-chrome` e `/usr/local/bin/chromedriver`. Se o host usar outro caminho, configure `CHROME_BIN` e `CHROMEDRIVER_PATH` explicitamente. Exemplo:
+Se o navegador estiver fora dos caminhos padrão, configure:
 
 ```text
-CHROME_BIN=/usr/bin/google-chrome
-CHROMEDRIVER_PATH=/usr/local/bin/chromedriver
+PLAYWRIGHT_CHROMIUM_PATH=/caminho/absoluto/chromium
 ```
 
-No Runner de homologacao atual, o Chrome ja esta instalado globalmente:
+O arquivo precisa existir e possuir permissão de execução. Não configure
+caminho pessoal de outro usuário. Prefira um executável global e estável
+administrado no Runner.
 
-```text
-CHROME_BIN=/usr/bin/google-chrome
-CHROME_VERSION=Google Chrome 149.0.7827.102
-```
-
-O ChromeDriver compativel foi encontrado no cache do `webdriver-manager`.
-Localize o executavel obtido no Runner e copie-o para um caminho global. No
-comando abaixo, substitua `/caminho/para/chromedriver` pelo caminho encontrado:
+Se o ambiente permitir instalar o bundle:
 
 ```bash
-sudo install -m 0755 \
-  /caminho/para/chromedriver \
-  /usr/local/bin/chromedriver
+python -m playwright install chromium
 ```
 
-Depois valide:
+O evento `PLAYWRIGHT_AMBIENTE` informa engine, caminho, versão e modo headless,
+sem credenciais.
+
+## Validação local
 
 ```bash
-/usr/local/bin/chromedriver --version
+python -m pytest -q
+MAESTRO_ENABLED=false \
+VAULT_ENABLED=false \
+WEB_AUTOMATION_ENABLED=false \
+PROCESSING_DELAY_SECONDS=0 \
+python bot.py
 ```
 
-Configure apenas se o caminho nao for um dos padroes autodetectados:
-
-```text
-CHROMEDRIVER_PATH=/usr/local/bin/chromedriver
-```
-
-Na homologacao, o executavel obtido pelo `webdriver-manager` foi instalado em
-`/usr/local/bin/chromedriver`. Esse e o caminho operacional usado pelo Runner;
-o caminho de origem no cache e especifico do usuario e nao faz parte da
-configuracao permanente.
-
-Se o Runner nao possuir ChromeDriver local, o `webdriver-manager` pode baixar o driver em execucao local. Para homologacao no Runner, prefira sempre `CHROMEDRIVER_PATH` configurado para evitar dependencia de acesso externo. O bot valida se os caminhos configurados existem e possuem permissao de execucao antes de iniciar o navegador.
-
-Quando a automacao web estiver habilitada, o log estruturado registra o evento `SELENIUM_AMBIENTE` com os caminhos e versoes dos binarios usados. Esse registro nao contem senhas, tokens ou chaves.
-
-## Validacao local
-
-Antes de empacotar:
+Para validar a integração web:
 
 ```bash
-.venv/bin/python -m pytest -q
-.venv/bin/python bot.py
+MAESTRO_ENABLED=false \
+VAULT_ENABLED=false \
+WEB_AUTOMATION_ENABLED=true \
+PROCESSING_DELAY_SECONDS=0 \
+python bot.py
 ```
 
-A suite deve concluir integralmente, sem depender de credenciais reais. A
-quantidade de testes nao e fixada neste documento porque evolui com o projeto.
-Com a massa de exemplo, confirme tambem a geracao do log e do resumo
-operacional.
+Confirme PNG de aprovação e divergência, log e resumo.
 
-## Gerar pacote
+## Pacote
 
 ```bash
-.venv/bin/python scripts/build_botcity_package.py --version 2
-```
-
-O artefato sera criado em:
-
-```text
-dist/bot-conferencia-de-lotes-v2.zip
-```
-
-Inspecione o conteudo antes do deploy:
-
-```bash
+python scripts/build_botcity_package.py --version 2
 unzip -l dist/bot-conferencia-de-lotes-v2.zip
 ```
 
-Confirme a presenca de:
+Presença obrigatória:
 
 ```text
 bot.py
@@ -180,7 +140,7 @@ dados_entrada/
 web/index-lotes/
 ```
 
-Confirme a ausencia de:
+Ausência obrigatória:
 
 ```text
 .env
@@ -190,49 +150,40 @@ __pycache__/
 logs/
 relatorios/
 artefatos/
+dist/
 ```
 
-## Deploy no Maestro
+## Publicação
 
-1. Acesse o menu de Bots no Maestro.
-2. Faça deploy de uma nova versao.
-3. Use:
-   - Bot ID: `bot-conferencia-de-lotes-v2`
-   - Versao: `2`
-   - Tecnologia: `Python`
-   - Arquivo: `dist/bot-conferencia-de-lotes-v2.zip`
-4. Marque a versao como released.
-5. Execute um smoke test com poucos registros.
-
-Na rastreabilidade do projeto, essa implantacao corresponde a GitHub Release
-`v1.2.0`. O Bot ID, a versao do Maestro e a versao semantica do repositorio sao
-identificadores distintos.
+1. Acesse o bot `bot-conferencia-de-lotes-v2`.
+2. Crie uma nova versão Python.
+3. Envie `dist/bot-conferencia-de-lotes-v2.zip`.
+4. Configure as variáveis não sigilosas.
+5. Marque a versão como released.
+6. Execute um smoke test com poucos itens controlados.
 
 ## Smoke test
 
-Valide no Maestro:
+Valide:
 
-- alerta informativo de inicio;
-- evento `SELENIUM_AMBIENTE` com versoes de Chrome/Chromium e ChromeDriver;
-- evento `AUTOMACAO_WEB` com evidencia PNG em `artefatos/`;
-- itens criados/consumidos no DataPool;
-- status individual de sucesso, erro de negocio, erro de sistema ou revisao;
-- artefato `resumo_execucao.json`;
-- artefato `relatorio_evidencias.pdf`;
-- evento `PUBLICACAO_RESULTADOS` confirmando a geracao dos dois resultados;
-- task finalizada como `SUCCESS` quando o processamento termina, mesmo com itens de negocio rejeitados;
-- log do Runner contendo `Automacao encerrada com sucesso operacional`;
-- ausencia de senha nos logs.
-
-Se o log do Runner mostrar `UnknownHostException` ou `A rede está fora de alcance`, a falha esta na conectividade do Runner com o workspace Maestro, nao no pacote Python. Verifique rede, DNS, proxy/VPN e acesso a `https://lgcmdi.botcity.dev` no host do Runner.
+- alerta inicial;
+- `VALIDACAO_VAULT`;
+- `PLAYWRIGHT_AMBIENTE` e `INICIO_PLAYWRIGHT`;
+- itens criados e consumidos;
+- `resultado_validacao`, `evidencia` e `mensagem_resultado`;
+- pelo menos uma aprovação e uma divergência;
+- PNG por item com caminho relativo;
+- continuidade após falha isolada;
+- resumo JSON e PDF publicados;
+- `FIM_PLAYWRIGHT` e `ENCERRAMENTO`;
+- task finalizada com sucesso operacional;
+- ausência de senha e token nos logs.
 
 ## Rollback
 
-Se a versao falhar em homologacao:
-
-1. desative o agendamento ou pare novas execucoes;
-2. volte a versao released anterior;
+1. interrompa novas execuções;
+2. reative a versão released anterior;
 3. preserve logs e artefatos da falha;
-4. mantenha `WEB_AUTOMATION_ENABLED=false` apenas como contingencia documentada;
-5. corrija Chrome/Chromium, ChromeDriver ou permissoes no host;
-6. limpe apenas dados de teste do DataPool, quando aplicavel.
+4. use `WEB_AUTOMATION_ENABLED=false` somente como contingência documentada;
+5. corrija navegador, permissão ou configuração;
+6. publique uma nova versão e repita o smoke test.

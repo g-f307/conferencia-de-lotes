@@ -126,7 +126,7 @@ class Settings:
             input_csv=project_path("INPUT_CSV", "dados_entrada/lotes_auditoria.csv"),
             log_file=project_path("LOG_FILE", "logs/execucao.log"),
             report_dir=project_path("REPORT_DIR", "relatorios"),
-            processing_delay_seconds=float(env.get("PROCESSING_DELAY_SECONDS", "1")),
+            processing_delay_seconds=float(env.get("PROCESSING_DELAY_SECONDS", "0")),
             web_automation_enabled=as_bool(
                 env.get("WEB_AUTOMATION_ENABLED"), runner_context
             ),
@@ -168,7 +168,7 @@ class Settings:
             self._validate_web_test_url()
 
     def _validate_web_test_url(self) -> None:
-        """Garante que a página web e o timeout do Selenium sejam válidos."""
+        """Garante que a página web e o timeout do Playwright sejam válidos."""
         if (
             self.web_timeout_seconds is None
             or self.web_timeout_seconds <= 0

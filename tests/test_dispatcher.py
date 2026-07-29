@@ -6,7 +6,13 @@ import pytest
 
 from src.bot import LotePerformer
 from src.config import Settings
-from src.dispatcher import DATAPOOL_FIELDS, dispatch_csv, iter_csv_rows, run as run_dispatcher
+from src.dispatcher import (
+    DATAPOOL_FIELDS,
+    DATAPOOL_OUTPUT_FIELDS,
+    dispatch_csv,
+    iter_csv_rows,
+    run as run_dispatcher,
+)
 from src.maestro_client import BotCityMaestroGateway, DataPoolWorkItem, MaestroClient
 from src.validation import HumanReviewRequired
 from src.vault_client import VaultClient
@@ -46,14 +52,17 @@ class FakeGateway:
     def mark_done(self, item, result):
         self.done.append((item, result))
 
-    def mark_business_error(self, item, error):
-        self.business_errors.append((item, error))
+    def mark_business_error(self, item, error, result):
+        item.update(result)
+        self.business_errors.append((item, error, result))
 
-    def mark_system_error(self, item, error):
-        self.system_errors.append((item, error))
+    def mark_system_error(self, item, error, result):
+        item.update(result)
+        self.system_errors.append((item, error, result))
 
-    def mark_human_review(self, item, review):
-        self.human_reviews.append((item, review))
+    def mark_human_review(self, item, review, result):
+        item.update(result)
+        self.human_reviews.append((item, review, result))
 
 
 def settings_for(tmp_path):
@@ -92,6 +101,9 @@ def test_dispatcher_publica_uma_entrada_por_linha_no_datapool(tmp_path):
         "responsavel": "Ana",
         "data": "14/06/2026",
         "observacao": "",
+        "resultado_validacao": "",
+        "evidencia": "",
+        "mensagem_resultado": "",
     }
 
 
@@ -116,6 +128,27 @@ def test_dispatcher_usa_cabecalho_sem_posicoes_magicas(tmp_path):
             "observacao": "Aguardando",
         }
     ]
+
+
+def test_dispatcher_reserva_campos_de_saida_no_item_publicado(tmp_path):
+    csv_path = write_csv(
+        tmp_path,
+        "lote_id,produto,linha,turno,status,responsavel,data,observacao\n"
+        "LG-1,TV,L1,A,APROVADO,Ana,14/06/2026,\n",
+    )
+    gateway = FakeGateway()
+    client = MaestroClient(settings_for(tmp_path), gateway=gateway)
+
+    dispatch_csv(csv_path, client)
+
+    assert {
+        field: gateway.created[0][1][field]
+        for field in DATAPOOL_OUTPUT_FIELDS
+    } == {
+        "resultado_validacao": "",
+        "evidencia": "",
+        "mensagem_resultado": "",
+    }
 
 
 def test_dispatcher_exige_campos_para_publicar_no_datapool(tmp_path):
@@ -396,13 +429,39 @@ def test_gateway_real_finaliza_itens_com_done_e_erros():
     gateway = gateway_for(sdk)
     item = FakeDataPoolEntry({"lote_id": "LG-1"})
 
-    gateway.mark_done(item, {"status": "APROVADO"})
-    gateway.mark_business_error(item, "campo obrigatorio vazio")
-    gateway.mark_system_error(item, "Maestro indisponivel")
+    approved = {
+        "resultado_validacao": "APROVADO",
+        "evidencia": "artefatos/aprovado-LG-1.png",
+        "mensagem_resultado": "Lote aprovado",
+    }
+    divergence = {
+        "resultado_validacao": "DIVERGENCIA",
+        "evidencia": "artefatos/divergencia-LG-1.png",
+        "mensagem_resultado": "campo obrigatorio vazio",
+    }
+    system_error = {
+        "resultado_validacao": "ERRO",
+        "evidencia": "artefatos/erro-LG-1.png",
+        "mensagem_resultado": "Maestro indisponivel",
+    }
+    review = {
+        "resultado_validacao": "REVISAO",
+        "evidencia": "artefatos/divergencia-LG-1.png",
+        "mensagem_resultado": "revisao humana",
+    }
+
+    gateway.mark_done(item, approved)
+    assert item.values == {"lote_id": "LG-1", **approved}
+    gateway.mark_business_error(item, "campo obrigatorio vazio", divergence)
+    assert item.values == {"lote_id": "LG-1", **divergence}
+    gateway.mark_system_error(item, "Maestro indisponivel", system_error)
+    assert item.values == {"lote_id": "LG-1", **system_error}
     gateway.mark_human_review(
         item,
         HumanReviewRequired(lote_id="LG-1", status_original="EM ANALISE"),
+        review,
     )
+    assert item.values == {"lote_id": "LG-1", **review}
 
     assert item.done_messages == ["Lote processado com sucesso"]
     assert item.error_reports == [

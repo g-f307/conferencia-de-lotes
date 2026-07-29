@@ -39,3 +39,13 @@ jobs:
 
       - name: Construir imagem
         run: docker build --tag conferencia-de-lotes:ci .
+
+      - name: Executar smoke test Playwright
+        run: >-
+          docker run --rm --shm-size=1g
+          --env MAESTRO_ENABLED=false
+          --env VAULT_ENABLED=false
+          --env WEB_AUTOMATION_ENABLED=true
+          --env PROCESSING_DELAY_SECONDS=0
+          --env REFERENCE_LOTES=L001,L002
+          conferencia-de-lotes:ci

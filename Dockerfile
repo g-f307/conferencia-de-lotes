@@ -4,8 +4,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     HOME=/tmp \
-    CHROME_BIN=/usr/bin/chromium \
-    CHROMEDRIVER_PATH=/usr/bin/chromedriver
+    PLAYWRIGHT_CHROMIUM_PATH=/usr/bin/chromium
 
 WORKDIR /app
 
@@ -14,7 +13,7 @@ RUN addgroup --system botcity \
 
 COPY requirements.txt ./
 RUN apt-get update \
-    && apt-get install --yes --no-install-recommends chromium chromium-driver \
+    && apt-get install --yes --no-install-recommends chromium \
     && rm -rf /var/lib/apt/lists/* \
     && python -m pip install --upgrade pip \
     && python -m pip install --requirement requirements.txt

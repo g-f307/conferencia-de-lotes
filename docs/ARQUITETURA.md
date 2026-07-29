@@ -2,24 +2,22 @@
 
 ## Finalidade
 
-Este documento descreve a arquitetura técnica do projeto Conferência de Lotes,
-os limites entre os componentes e o comportamento nos modos local, Docker e
-BotCity Runner.
-
-O BPMN representa o processo de negócio. Este documento representa a solução de
-software que executa a parte automatizada do fluxo.
+Este documento descreve a solução que executa a conferência de lotes nos modos
+local, Docker e BotCity Runner. O BPMN representa o processo de negócio; esta
+visão registra componentes, responsabilidades e integração técnica.
 
 ## Princípios
 
-- configuração externa ao código;
-- credenciais recuperadas somente em tempo de execução;
-- fail-fast antes da criação de trabalho na fila;
-- isolamento de falhas por item;
-- dependências externas acessadas por adaptadores;
-- evidências e resultados correlacionados por execução;
-- comportamento local reproduzível sem serviços reais.
+- configuração externa e caminhos portáveis;
+- credenciais recuperadas somente em runtime;
+- falha imediata antes da fila quando o ambiente não é seguro;
+- isolamento de divergências e falhas por item;
+- regras de negócio independentes da interface;
+- locators e ações encapsulados em Page Objects;
+- evidência visual e resultado correlacionados ao lote;
+- integrações externas acessadas por adaptadores.
 
-## Visão de componentes
+## Componentes
 
 ```mermaid
 flowchart TB
@@ -36,88 +34,88 @@ flowchart TB
         RESULT[ExecutionResult]
     end
 
-    subgraph Integrações
-        MC[MaestroClient]
-        IM[Gateway em memória]
-        BM[Gateway BotCity]
+    subgraph BotCity
+        CLIENT[MaestroClient]
         DP[FilaAuditoriaLotes2]
         VAULT[credencial_erp2]
+        TASK[Alertas, artefatos e task]
     end
 
     subgraph Processamento
-        WEB[Selenium]
-        LOGIN[LoginPage]
-        FORM[FormPage]
         DISPATCHER[Dispatcher]
         PERFORMER[LotePerformer]
         RULES[RN01–RN07]
     end
 
+    subgraph Web
+        PW[Sessão Playwright]
+        LOGIN[LoginPage]
+        FORM[FormPage]
+        APP[Aplicação controlada]
+        PNG[PNG por item]
+    end
+
     subgraph Observabilidade
         LOG[Logs JSON Lines]
-        REPORT[Resumo JSON]
-        PNG[Evidência PNG]
-        ALERT[Alertas e finish_task]
+        JSON[Resumo JSON]
+        PDF[Relatório PDF]
     end
 
     ENV --> CONFIG
     ARGS --> CONFIG
     ENTRY --> MAIN
     CONFIG --> MAIN
-    MAIN --> MC
-    MC --> IM
-    MC --> BM
-    BM --> DP
-    BM --> VAULT
+    MAIN --> VAULT
+    MAIN --> PW
+    PW --> LOGIN
+    LOGIN --> APP
     CSV --> DISPATCHER
-    MAIN --> WEB
-    WEB --> LOGIN
-    LOGIN --> FORM
-    FORM --> PNG
-    MAIN --> DISPATCHER
-    DISPATCHER --> MC
-    MAIN --> PERFORMER
-    PERFORMER --> MC
+    DISPATCHER --> CLIENT
+    CLIENT --> DP
+    DP --> PERFORMER
     PERFORMER --> RULES
+    PERFORMER --> PW
+    PW --> FORM
+    FORM --> APP
+    FORM --> PNG
+    PERFORMER --> CLIENT
     MAIN --> RESULT
-    RESULT --> REPORT
+    RESULT --> JSON
+    MAIN --> PDF
     MAIN --> LOG
-    MAIN --> ALERT
+    CLIENT --> TASK
 ```
 
 ## Responsabilidades
 
 | Componente | Responsabilidade |
 |---|---|
-| `bot.py` | Entry point usado localmente e pelo Runner. |
-| `src/config.py` | Carregar ambiente, reconhecer argumentos do Runner, resolver caminhos e validar dependências habilitadas. |
-| `src/main.py` | Coordenar fail-fast, Vault, Selenium, Dispatcher, Performer, relatório e finalização. |
-| `src/dispatcher.py` | Validar o cabeçalho do CSV e publicar uma entrada por linha. |
-| `src/maestro_client.py` | Expor uma fachada única para DataPool, alertas, artefatos e task. |
-| `src/bot.py` | Consumir a fila e isolar o tratamento de cada item. |
-| `src/validation.py` | Aplicar RN01–RN07 sem depender de infraestrutura. |
-| `src/vault_client.py` | Recuperar e validar `username` e `password`, com cache apenas em memória. |
-| `src/web_automation.py` | Gerenciar o WebDriver e orquestrar os Page Objects sem manipular elementos HTML. |
-| `src/pages/login_page.py` | Centralizar locators, waits e ações da autenticação web. |
-| `src/pages/form_page.py` | Centralizar locators, waits, preenchimento, validação e captura da evidência do formulário. |
+| `bot.py` | Entry point local e do Runner. |
+| `src/config.py` | Carregar ambiente, reconhecer o Runner, resolver caminhos e validar configurações. |
+| `src/main.py` | Coordenar fail-fast, Vault, sessão Playwright, Dispatcher, Performer, relatórios e task. |
+| `src/dispatcher.py` | Validar o CSV, publicar entradas e reservar os campos de saída. |
+| `src/bot.py` | Aplicar o ciclo individual de classificação, interação web e finalização. |
+| `src/validation.py` | Aplicar RN01–RN07 sem dependência da infraestrutura ou da interface. |
+| `src/web_automation.py` | Gerenciar Playwright, autenticar, delegar o item aos Page Objects e capturar falhas. |
+| `src/pages/login_page.py` | Encapsular locators semânticos, waits e autenticação. |
+| `src/pages/form_page.py` | Encapsular preenchimento, confirmação e captura da evidência. |
+| `src/maestro_client.py` | Adaptar DataPool, alertas, artefatos e finalização da task. |
+| `src/vault_client.py` | Recuperar e validar a credencial com cache apenas em memória. |
 | `src/logging_config.py` | Produzir JSON Lines e sanitizar dados sensíveis. |
-| `src/models.py` | Padronizar o resumo serializável da execução. |
+| `src/models.py` | Padronizar o resumo serializável. |
 
-## Padrão Page Object
+## Page Objects
 
 O limite da camada web segue estas regras:
 
-1. `src/main.py` não conhece locators nem comandos do Selenium;
-2. `src/web_automation.py` controla o ciclo de vida do WebDriver e a ordem das
-   ações, mas não manipula elementos HTML diretamente;
-3. `LoginPage` e `FormPage` recebem o mesmo WebDriver e o mesmo timeout;
-4. somente os Page Objects concentram locators, waits e operações da interface;
-5. RN01–RN07 continuam em `src/validation.py`, sem dependência do navegador;
-6. a credencial é recuperada antes da etapa web e não é persistida;
-7. `driver.quit()` é executado em `finally`, tanto no sucesso quanto na falha.
-
-Essa separação concentra mudanças de interface em `src/pages/` e preserva o
-fluxo principal e as regras de negócio quando um locator é alterado.
+1. `src/main.py` não conhece locators ou comandos de navegador;
+2. `src/web_automation.py` gerencia o runtime, mas não aplica RN01–RN07;
+3. `LoginPage` e `FormPage` recebem a mesma `Page` e o mesmo timeout;
+4. somente os Page Objects manipulam elementos HTML;
+5. os locators priorizam label, role e nome acessível;
+6. os waits observam condições, sem pausas fixas;
+7. a credencial permanece em memória;
+8. página, browser e Playwright são encerrados mesmo após falha.
 
 ## Sequência principal
 
@@ -127,144 +125,139 @@ sequenceDiagram
     participant R as Runner ou usuário
     participant M as main
     participant V as Vault
-    participant W as Selenium
+    participant W as PlaywrightWebSession
     participant L as LoginPage
-    participant F as FormPage
     participant D as Dispatcher
     participant Q as DataPool
     participant P as Performer
-    participant B as Maestro
+    participant F as FormPage
 
     R->>M: bot.py [server task_id token]
-    M->>M: carregar e validar Settings
-    M->>M: validar dados_entrada
-    M->>B: alerta de início
-    M->>V: recuperar credencial ERP
-
+    M->>M: validar Settings e dados_entrada
+    M->>V: recuperar credencial
     opt WEB_AUTOMATION_ENABLED
-        M->>W: iniciar fluxo com credencial em memória
+        M->>W: iniciar Chromium headless
         W->>L: fazer_login(username, password)
         L-->>W: formulário disponível
-        W->>F: preencher_lote(dados)
-        W->>F: is_sucesso()
-        W->>F: capturar_evidencia(path)
-        W-->>M: evidência PNG
     end
-
-    M->>D: ler INPUT_CSV
+    M->>D: publicar INPUT_CSV
     loop para cada linha
-        D->>Q: criar entrada
+        D->>Q: criar entrada com saídas vazias
     end
-
     loop enquanto houver item
         P->>Q: obter próximo item
         P->>P: aplicar RN01–RN07
-        alt válido
-            P->>Q: report_done
-        else erro de negócio
-            P->>Q: report_error BUSINESS
-        else revisão humana
-            P->>Q: report_error BUSINESS com motivo
-        else falha técnica do item
-            P->>Q: report_error SYSTEM
+        P->>W: process_item(item, resultado, mensagem)
+        W->>F: preencher_lote(dados)
+        F->>F: aguardar confirmação
+        F-->>W: capturar PNG
+        W-->>P: caminho da evidência
+        alt aprovado
+            P->>Q: atualizar saídas e report_done
+        else divergência ou revisão
+            P->>Q: atualizar saídas e report_error BUSINESS
+        else falha web isolada
+            P->>W: capture_error(item)
+            P->>Q: atualizar saídas e report_error SYSTEM
         end
     end
-
-    M->>B: publicar resumo JSON
-    M->>B: publicar relatório PDF
-    M->>B: finish_task
-    M-->>R: código de saída
+    M->>M: gerar JSON e PDF
+    M->>M: publicar artefatos e finish_task
+    M->>W: close()
 ```
 
-## Rastreabilidade das evidências
+## Contrato do DataPool
 
-As saídas possuem destinos diferentes e não devem ser confundidas:
+Campos de entrada:
 
-| Evidência | Origem | Destino | Relação com o Maestro |
-|---|---|---|---|
-| PNG da confirmação | `FormPage.capturar_evidencia()` | `artefatos/` | Evidência local; não é anexada diretamente ao item do DataPool. |
-| Resultado do item | `LotePerformer` | DataPool | Finalização individual como sucesso, erro de negócio, revisão ou erro de sistema. |
-| Resumo JSON | `ExecutionResult` | `relatorios/` | Publicado como artefato da task. |
-| Relatório PDF | `reporting.py` | `relatorios/` | Publicado como artefato da task e incorpora o PNG quando disponível. |
-| Log JSON Lines | `logging_config.py` | `logs/execucao.log` e console | Permite correlação por `execution_id` e `bot_id`. |
+```text
+lote_id, produto, linha, turno, status, responsavel, data, observacao
+```
 
-Capturas do painel do DataPool são evidências operacionais da entrega e devem
-ser anexadas ao Pull Request ou ao material acadêmico. Elas não fazem parte do
-código-fonte.
+Campos de saída:
+
+```text
+resultado_validacao, evidencia, mensagem_resultado
+```
+
+O gateway atualiza os campos de saída antes de chamar `report_done` ou
+`report_error`. O caminho da evidência é relativo ao projeto.
+
+## Evidências
+
+| Saída | Destino | Correlação |
+|---|---|---|
+| PNG aprovado | `artefatos/aprovado-<lote>-<timestamp>.png` | lote e item do DataPool |
+| PNG reprovado | `artefatos/reprovado-<lote>-<timestamp>.png` | lote e item do DataPool |
+| PNG divergente/revisão | `artefatos/divergencia-<lote>-<timestamp>.png` | lote e item do DataPool |
+| PNG de erro | `artefatos/erro-<lote>-<timestamp>.png` | falha técnica isolada |
+| Log | `logs/execucao.log` e console | `execution_id`, `bot_id` e evento |
+| Resumo | `relatorios/resumo_execucao.json` | execução e lista de evidências |
+| PDF | `relatorios/relatorio_evidencias.pdf` | artefato consolidado |
 
 ## Modos de execução
 
-| Modo | Gateway | Vault | Selenium | Finalidade |
+| Modo | Gateway | Vault | Navegador | Finalidade |
 |---|---|---|---|---|
-| Local básico | Em memória | Credencial efêmera | Desabilitado | Desenvolvimento das regras e do fluxo. |
-| Local com web | Em memória | Credencial efêmera | Chrome local | Validação do formulário e da evidência. |
-| Docker | Em memória por padrão | Credencial efêmera | Chromium da imagem | Reprodutibilidade e validação de container. |
-| BotCity Runner | BotCity Maestro | Credentials Vault | Binários homologados no host | Execução integrada e rastreável. |
+| Local básico | memória | credencial efêmera | desabilitado | regras e fluxo |
+| Local web | memória | credencial efêmera | Playwright Chromium | integração e PNG |
+| Docker | memória por padrão | credencial efêmera | `/usr/bin/chromium` | reprodutibilidade |
+| Runner | BotCity | Credentials Vault | Chromium configurado ou disponível | homologação |
 
-## Limites de segurança
+O ciclo completo de cada item — classificação, interação web e finalização no
+DataPool — é isolado. Uma falha inesperada é registrada como erro de sistema e
+o Performer tenta continuar o consumo da fila.
+
+## Segurança
 
 ```mermaid
 flowchart LR
     REPO[Repositório] -->|configuração não sigilosa| APP[Aplicação]
-    RUNNER[Ambiente do Runner] -->|server, task e configuração| APP
+    RUNNER[Runner] -->|server, task e token efêmero| APP
     VAULT[Credentials Vault] -->|username e password em memória| APP
     APP -->|mensagens sanitizadas| LOGS[Logs]
-    APP -->|contadores sem segredo| REPORT[Relatório]
+    APP -->|massa controlada| WEB[Aplicação local]
 ```
 
-- `.env` real não integra o pacote nem o repositório;
-- a senha não pertence à classe `Settings`;
-- apenas o nome do usuário pode aparecer no log;
-- o formatador mascara atribuições e valores sensíveis;
-- o pacote não inclui logs, relatórios, evidências ou caches locais.
+- `.env` real não integra o Git, a imagem ou o ZIP;
+- a senha não faz parte de `Settings`;
+- somente o usuário pode aparecer no log;
+- a aplicação web não acessa serviços produtivos;
+- arquivos gerados ficam fora do versionamento.
 
 ## Modelo de falhas
 
 ### Antes da fila
 
-Configuração inválida, entrada ausente, falha de Vault, Selenium ou Dispatcher
-impedem o ciclo normal. O resultado é `FAILED`, com log estruturado e tentativa
-de finalizar a task.
+Configuração inválida, entrada ausente, falha de Vault ou falha no login inicial
+produzem `FAILED` e impedem a criação do trabalho.
 
-### Durante o consumo
+### Durante a fila
 
-Cada item possui tratamento independente:
-
-- `ValidationError`: erro de negócio;
-- `HumanReviewStatus`: revisão humana;
-- exceção inesperada: erro de sistema;
-- falha ao obter o próximo item: erro técnico fatal, pois não existe uma
-  referência segura para finalizar no DataPool.
-
-### Resultado operacional
-
-Erros de negócio não transformam a automação em falha técnica. O resumo pode ser
-`PARTIALLY_COMPLETED`, enquanto a task é encerrada como sucesso operacional.
+- validação de negócio: divergência e continuidade;
+- status ambíguo: revisão e continuidade;
+- timeout ou falha web: captura de erro, erro de sistema e continuidade;
+- falha ao obter o próximo item: falha fatal, pois não há referência segura
+  para atualizar.
 
 ## Observabilidade
 
-Os eventos mais relevantes são:
-
 | Evento | Momento |
 |---|---|
-| `VALIDACAO_CONFIGURACAO` | Configuração inválida. |
-| `VALIDACAO_ENTRADA` | Fail-fast da pasta de entrada. |
-| `VALIDACAO_VAULT` | Credencial disponível. |
-| `SELENIUM_AMBIENTE` | Binários e versões usados no Runner. |
-| `AUTOMACAO_WEB` | Formulário confirmado e evidência gerada. |
-| `PUBLICACAO_DATAPOOL` | Linhas publicadas. |
-| `PROCESSAMENTO_LOTE` | Falha técnica de um item. |
-| `PUBLICACAO_RESULTADOS` | Resumo JSON e relatório PDF gerados e publicados. |
-| `FIM_PROCESSAMENTO` | Contadores consolidados. |
-| `ENCERRAMENTO` | Sucesso operacional do ciclo. |
-| `ERRO_FATAL` | Falha que encerra a execução. |
-
-`BOT_ID` identifica a automação e `EXECUTION_ID` correlaciona todos os eventos
-de uma execução. No Runner, o `task_id` é usado como `EXECUTION_ID`.
+| `VALIDACAO_ENTRADA` | fail-fast da pasta |
+| `VALIDACAO_VAULT` | credencial disponível |
+| `PLAYWRIGHT_AMBIENTE` | engine e navegador |
+| `INICIO_PLAYWRIGHT` / `FIM_PLAYWRIGHT` | ciclo da sessão |
+| `INICIO_ITEM` / `RESULTADO_ITEM` | ciclo do lote |
+| `EVIDENCIA_ITEM` | PNG associado |
+| `ERRO_WEB_ITEM` | falha isolada |
+| `PUBLICACAO_RESULTADOS` | JSON e PDF |
+| `ENCERRAMENTO` | sucesso operacional |
+| `ERRO_FATAL` | interrupção do ciclo |
 
 ## Empacotamento
 
-O pacote Python contém:
+O ZIP contém:
 
 ```text
 bot.py
@@ -274,19 +267,6 @@ dados_entrada/
 web/index-lotes/
 ```
 
-Chrome e ChromeDriver são dependências do host do Runner, não do ZIP. O pacote
-homologado utiliza `/usr/bin/google-chrome` e
-`/usr/local/bin/chromedriver`.
-
-## Manutenção
-
-Ao alterar uma regra ou integração:
-
-1. atualize os testes do módulo;
-2. confirme os efeitos no Dispatcher, Performer e resumo;
-3. revise os eventos de log;
-4. valide o modo local sem credenciais;
-5. valide Docker quando houver dependência de sistema;
-6. gere e inspecione o pacote quando houver impacto no Runner;
-7. atualize o BPMN somente se o processo de negócio mudar;
-8. atualize este documento quando limites ou sequências forem alterados.
+Playwright é dependência Python. No Docker, Chromium é instalado na imagem. No
+Runner, `PLAYWRIGHT_CHROMIUM_PATH` pode apontar para o navegador homologado; se
+ausente, a automação tenta um caminho padrão ou o bundle do Playwright.

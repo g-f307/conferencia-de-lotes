@@ -15,6 +15,11 @@ EXPECTED_COLUMNS = (
     "data",
     "observacao",
 )
+OUTPUT_COLUMNS = (
+    "resultado_validacao",
+    "evidencia",
+    "mensagem_resultado",
+)
 
 REQUIRED_COLUMNS = (
     "lote_id",
@@ -63,7 +68,8 @@ def normalize_status(status: object) -> str:
 
 def validate_columns(item: Mapping[str, object]) -> None:
     missing = [column for column in EXPECTED_COLUMNS if column not in item]
-    unexpected = [column for column in item if column not in EXPECTED_COLUMNS]
+    allowed_columns = {*EXPECTED_COLUMNS, *OUTPUT_COLUMNS}
+    unexpected = [column for column in item if column not in allowed_columns]
 
     if missing or unexpected:
         details = []

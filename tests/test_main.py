@@ -6,7 +6,6 @@ from src.logging_config import configure_logging
 from src.main import run, save_execution_report
 from src.models import ExecutionResult
 from src.vault_client import VaultClient
-from src.web_automation import WebAutomationResult
 
 
 class FakeAlertGateway:
@@ -38,14 +37,17 @@ class FakeMaestroClient:
     def mark_done(self, item, result):
         self.done.append((item, result))
 
-    def mark_business_error(self, item, error):
-        self.business_errors.append((item, error))
+    def mark_business_error(self, item, error, result):
+        item.update(result)
+        self.business_errors.append((item, error, result))
 
-    def mark_system_error(self, item, error):
-        self.system_errors.append((item, error))
+    def mark_system_error(self, item, error, result):
+        item.update(result)
+        self.system_errors.append((item, error, result))
 
-    def mark_human_review(self, item, review):
-        self.human_reviews.append((item, review))
+    def mark_human_review(self, item, review, result):
+        item.update(result)
+        self.human_reviews.append((item, review, result))
 
     def send_start_alert(self):
         self.info_alerts.append("Iniciando auditoria de acessos")
@@ -99,6 +101,72 @@ class FakeVaultProvider:
 class BrokenVaultProvider:
     def get_credential(self, label):
         raise RuntimeError(f"Credencial {label} nao contem username")
+
+
+def install_fake_playwright_session(monkeypatch):
+    instances = []
+
+    class FakePlaywrightWebSession:
+        def __init__(
+            self,
+            configured_url,
+            base_dir,
+            artifact_dir,
+            *,
+            timeout_seconds,
+        ):
+            self.configured_url = configured_url
+            self.base_dir = base_dir
+            self.artifact_dir = artifact_dir
+            self.timeout_seconds = timeout_seconds
+            self.credential = None
+            self.closed = False
+            instances.append(self)
+
+        def start(self, credential):
+            self.credential = credential
+
+        def process_item(
+            self,
+            item,
+            resultado_validacao,
+            mensagem_resultado,
+        ):
+            evidence = (
+                self.artifact_dir
+                / f"{resultado_validacao.lower()}-{item['lote_id']}.png"
+            )
+            evidence.parent.mkdir(parents=True, exist_ok=True)
+            evidence.write_bytes(b"fake-png")
+            return type(
+                "WebResult",
+                (),
+                {
+                    "evidence_path": evidence,
+                    "mensagem_resultado": mensagem_resultado,
+                },
+            )()
+
+        def capture_error(self, item):
+            evidence = self.artifact_dir / f"erro-{item['lote_id']}.png"
+            evidence.parent.mkdir(parents=True, exist_ok=True)
+            evidence.write_bytes(b"fake-png")
+            return evidence
+
+        def close(self):
+            self.closed = True
+
+    monkeypatch.setattr("src.main.PlaywrightWebSession", FakePlaywrightWebSession)
+    monkeypatch.setattr(
+        "src.main.describe_playwright_environment",
+        lambda: {
+            "engine": "playwright-chromium",
+            "browser_path": "playwright-bundled",
+            "browser_version": "gerenciada pelo Playwright",
+            "headless": "true",
+        },
+    )
+    return instances
 
 
 def lote_item(**overrides):
@@ -215,6 +283,7 @@ def test_run_consumindo_datapool_e_publicando_resumo(tmp_path):
     settings.input_csv.write_text(
         "lote_id,produto,linha,turno,status,responsavel,data,observacao\n"
         "L001,Monitor,Linha A,Manha,APROVADO,Marcelo,2026-07-20,\n"
+        "L002,Monitor,Linha A,Manha,REPROVADO,Marcelo,2026-07-20,Avaria\n"
         "L999,Monitor,Linha A,Manha,APROVADO,Marcelo,2026-07-20,\n"
         "L001,Monitor,Linha A,Manha,pendente,Marcelo,2026-07-20,\n",
         encoding="utf-8",
@@ -226,24 +295,30 @@ def test_run_consumindo_datapool_e_publicando_resumo(tmp_path):
         settings=settings,
         maestro_client=client,
         vault_client=vault,
-        reference_lotes={"L001"},
+        reference_lotes={"L001", "L002"},
     )
 
     assert result.status == "PARTIALLY_COMPLETED"
-    assert result.total_items == 3
-    assert result.processed_items == 1
+    assert result.total_items == 4
+    assert result.processed_items == 2
     assert result.failed_items == 1
     assert result.ambiguous_items == 1
+    assert result.approved_items == 1
+    assert result.rejected_items == 1
+    assert result.divergence_items == 1
+    assert result.technical_errors == 0
     assert client.info_alerts == ["Iniciando auditoria de acessos"]
-    assert len(client.done) == 1
+    assert len(client.done) == 2
+    assert client.done[1][1]["resultado_validacao"] == "REPROVADO"
     assert len(client.business_errors) == 1
     assert len(client.human_reviews) == 1
     assert client.artifacts[0][0] == "resumo_execucao.json"
-    assert client.artifacts[0][2]["total_items"] == 3
+    assert client.artifacts[0][2]["total_items"] == 4
+    assert client.artifacts[0][2]["rejected_items"] == 1
     assert client.artifacts[1][0] == "relatorio_evidencias.pdf"
     assert client.artifacts[1][1].read_bytes().startswith(b"%PDF-")
     assert client.finished_tasks[0][0] == "SUCCESS"
-    assert client.finished_tasks[0][2:] == (3, 1, 2)
+    assert client.finished_tasks[0][2:] == (4, 2, 2)
     log_events = [
         json.loads(line)["evento"]
         for line in settings.log_file.read_text(encoding="utf-8").splitlines()
@@ -259,7 +334,7 @@ def test_run_falha_quando_next_da_fila_quebra(tmp_path):
     result = run(settings=settings, maestro_client=client, vault_client=vault)
 
     assert result.status == "FAILED"
-    assert "Falha tecnica ao obter item da fila" in result.message
+    assert "Falha técnica ao obter item da fila" in result.message
     assert client.system_errors == []
     assert client.finished_tasks[0][0] == "FAILED"
 
@@ -293,34 +368,7 @@ def test_run_executa_automacao_web_quando_habilitada(monkeypatch, tmp_path):
     )
     client = FakeMaestroClient([])
     vault = VaultClient(FakeVaultProvider())
-    calls = []
-
-    def fake_run_web_automation(
-        url,
-        base_dir,
-        artifact_dir,
-        credential,
-        *,
-        timeout_seconds,
-    ):
-        calls.append(
-            (
-                url,
-                base_dir,
-                artifact_dir,
-                credential.username,
-                credential.password,
-                timeout_seconds,
-            )
-        )
-        return WebAutomationResult(
-            url=(base_dir / url).as_uri(),
-            evidence_path=artifact_dir / "comprovante.png",
-        )
-
-    monkeypatch.setattr(
-        "src.main.run_web_automation", fake_run_web_automation
-    )
+    instances = install_fake_playwright_session(monkeypatch)
 
     result = run(
         settings=settings,
@@ -329,16 +377,14 @@ def test_run_executa_automacao_web_quando_habilitada(monkeypatch, tmp_path):
     )
 
     assert result.status == "SUCCESS"
-    assert calls == [
-        (
-            "web/index-lotes/index.html",
-            settings.base_dir,
-            settings.web_artifact_dir,
-            "marcelo.erp",
-            "fake-password",
-            settings.web_timeout_seconds,
-        )
-    ]
+    assert len(instances) == 1
+    session = instances[0]
+    assert session.configured_url == "web/index-lotes/index.html"
+    assert session.base_dir == settings.base_dir
+    assert session.artifact_dir == settings.web_artifact_dir
+    assert session.credential.username == "marcelo.erp"
+    assert session.credential.password == "fake-password"
+    assert session.closed is True
 
 
 def test_run_usa_credencial_efemera_local_no_login_sem_expor_senha(
@@ -354,25 +400,9 @@ def test_run_usa_credencial_efemera_local_no_login_sem_expor_senha(
         web_test_url="web/index-lotes/index.html",
     )
     client = FakeMaestroClient([])
-    received_credentials = []
     log_file = tmp_path / "logs" / "execucao.log"
     logger = configure_logging(log_file, settings)
-
-    def fake_run_web_automation(
-        url,
-        base_dir,
-        artifact_dir,
-        credential,
-        *,
-        timeout_seconds,
-    ):
-        received_credentials.append(credential)
-        return WebAutomationResult(
-            url=(base_dir / url).as_uri(),
-            evidence_path=artifact_dir / "comprovante.png",
-        )
-
-    monkeypatch.setattr("src.main.run_web_automation", fake_run_web_automation)
+    instances = install_fake_playwright_session(monkeypatch)
 
     result = run(
         settings=settings,
@@ -381,9 +411,11 @@ def test_run_usa_credencial_efemera_local_no_login_sem_expor_senha(
     )
 
     assert result.status == "SUCCESS"
-    assert received_credentials[0].username == "local.erp"
-    assert received_credentials[0].password
-    assert received_credentials[0].password not in log_file.read_text(encoding="utf-8")
+    assert instances[0].credential.username == "local.erp"
+    assert instances[0].credential.password
+    assert instances[0].credential.password not in log_file.read_text(
+        encoding="utf-8"
+    )
 
 
 def test_run_registra_evento_estruturado_da_automacao_web(monkeypatch, tmp_path):
@@ -399,24 +431,15 @@ def test_run_registra_evento_estruturado_da_automacao_web(monkeypatch, tmp_path)
     vault = VaultClient(FakeVaultProvider())
     log_file = tmp_path / "logs" / "execucao.log"
     logger = configure_logging(log_file, settings)
-
-    def fake_run_web_automation(
-        url,
-        base_dir,
-        artifact_dir,
-        credential,
-        *,
-        timeout_seconds,
-    ):
-        assert credential.username == "marcelo.erp"
-        assert credential.password == "fake-password"
-        return WebAutomationResult(
-            url=(base_dir / url).as_uri(),
-            evidence_path=artifact_dir / "comprovante.png",
-        )
-
+    install_fake_playwright_session(monkeypatch)
     monkeypatch.setattr(
-        "src.main.run_web_automation", fake_run_web_automation
+        "src.main.describe_playwright_environment",
+        lambda: {
+            "engine": "playwright-chromium",
+            "browser_path": "playwright-bundled",
+            "browser_version": "gerenciada pelo Playwright",
+            "headless": "true",
+        },
     )
 
     run(
@@ -430,5 +453,7 @@ def test_run_registra_evento_estruturado_da_automacao_web(monkeypatch, tmp_path)
         json.loads(line)["evento"]
         for line in log_file.read_text(encoding="utf-8").splitlines()
     ]
-    assert "AUTOMACAO_WEB" in events
+    assert "PLAYWRIGHT_AMBIENTE" in events
+    assert "INICIO_PLAYWRIGHT" in events
+    assert "FIM_PLAYWRIGHT" in events
     assert "fake-password" not in log_file.read_text(encoding="utf-8")
