@@ -203,6 +203,35 @@ def test_maestro_client_publica_resumo_json_como_artefato(tmp_path):
     assert gateway.artifacts == [("resumo_execucao.json", artifact_path)]
 
 
+def test_maestro_client_publica_relatorio_pdf_como_artefato(tmp_path):
+    gateway = FakeGateway()
+    client = MaestroClient(settings_for(tmp_path), gateway=gateway)
+
+    artifact_path = client.post_evidence_report(
+        {
+            "status": "SUCCESS",
+            "message": "Processamento concluido",
+            "total_items": 2,
+            "processed_items": 2,
+            "failed_items": 0,
+            "ambiguous_items": 0,
+            "errors": [],
+        },
+        {
+            "bot_id": "bot-conferencia-de-lotes-v2",
+            "execution_id": "exec-123",
+            "datapool_label": "FilaAuditoriaLotes2",
+            "vault_label": "credencial_erp2",
+            "web_enabled": False,
+        },
+        report_dir=tmp_path / "relatorios",
+    )
+
+    assert artifact_path.name == "relatorio_evidencias.pdf"
+    assert artifact_path.read_bytes().startswith(b"%PDF-")
+    assert gateway.artifacts == [("relatorio_evidencias.pdf", artifact_path)]
+
+
 def test_maestro_client_usa_gateway_real_quando_maestro_esta_habilitado(tmp_path):
     settings = replace(
         settings_for(tmp_path),

@@ -60,6 +60,20 @@ class FakeMaestroClient:
         self.artifacts.append((artifact_name, path, summary))
         return path
 
+    def post_evidence_report(
+        self,
+        summary,
+        metadata,
+        report_dir=None,
+        evidence_path=None,
+        artifact_name="relatorio_evidencias.pdf",
+    ):
+        report_dir.mkdir(parents=True, exist_ok=True)
+        path = report_dir / artifact_name
+        path.write_bytes(b"%PDF-1.4 fake test report")
+        self.artifacts.append((artifact_name, path, summary))
+        return path
+
     def finish_task(self, status, message, total_items, processed_items, failed_items):
         self.finished_tasks.append(
             (status, message, total_items, processed_items, failed_items)
@@ -226,8 +240,15 @@ def test_run_consumindo_datapool_e_publicando_resumo(tmp_path):
     assert len(client.human_reviews) == 1
     assert client.artifacts[0][0] == "resumo_execucao.json"
     assert client.artifacts[0][2]["total_items"] == 3
+    assert client.artifacts[1][0] == "relatorio_evidencias.pdf"
+    assert client.artifacts[1][1].read_bytes().startswith(b"%PDF-")
     assert client.finished_tasks[0][0] == "SUCCESS"
     assert client.finished_tasks[0][2:] == (3, 1, 2)
+    log_events = [
+        json.loads(line)["evento"]
+        for line in settings.log_file.read_text(encoding="utf-8").splitlines()
+    ]
+    assert "PUBLICACAO_RESULTADOS" in log_events
 
 
 def test_run_falha_quando_next_da_fila_quebra(tmp_path):

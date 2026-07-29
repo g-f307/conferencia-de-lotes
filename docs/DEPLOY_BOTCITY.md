@@ -218,6 +218,8 @@ Valide no Maestro:
 - itens criados/consumidos no DataPool;
 - status individual de sucesso, erro de negocio, erro de sistema ou revisao;
 - artefato `resumo_execucao.json`;
+- artefato `relatorio_evidencias.pdf`;
+- evento `PUBLICACAO_RESULTADOS` confirmando a geracao dos dois resultados;
 - task finalizada como `SUCCESS` quando o processamento termina, mesmo com itens de negocio rejeitados;
 - log do Runner contendo `Automacao encerrada com sucesso operacional`;
 - ausencia de senha nos logs.

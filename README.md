@@ -43,7 +43,7 @@ Estão implementados:
 - validações RN01–RN07;
 - normalização de status e separação de casos ambíguos;
 - recuperação da credencial do ERP pelo Vault;
-- alertas, artefato JSON e finalização da task no Maestro;
+- alertas, artefatos JSON/PDF e finalização da task no Maestro;
 - logs estruturados em JSON Lines no arquivo e no console;
 - automação web opcional com Selenium, Page Objects e waits explícitos;
 - evidência PNG da confirmação apresentada pelo formulário;
@@ -90,7 +90,7 @@ flowchart LR
     DATAPOOL --> PERFORMER[Performer]
     PERFORMER --> RULES[RN01–RN07]
     PERFORMER --> DATAPOOL
-    MAIN --> REPORT[Resumo JSON]
+    MAIN --> REPORT[Resumo JSON e relatório PDF]
     MAIN --> LOGS[Logs JSON Lines]
     MAIN --> MAESTRO[Alertas, artefatos e finish_task]
 ```
@@ -129,8 +129,8 @@ incluída em logs, exceções, relatórios ou evidências.
 7. O Performer consome a fila e processa cada item em um `try/except` isolado.
 8. Cada item é concluído, rejeitado, marcado como falha técnica ou encaminhado
    para revisão humana.
-9. O resumo é persistido em `relatorios/resumo_execucao.json` e publicado como
-   artefato.
+9. O resumo JSON e o relatório PDF são persistidos em `relatorios/` e
+   publicados como artefatos da task.
 10. A task é finalizada e o encerramento operacional é registrado.
 
 ### Resultados da execução
@@ -181,7 +181,7 @@ Exceções inesperadas durante um item são classificadas como erro de sistema.
 │       ├── login.html              # autenticação web controlada
 │       └── index.html              # formulário de lotes
 ├── logs/                          # logs JSON Lines
-├── relatorios/                    # resumos JSON
+├── relatorios/                    # resumos JSON e relatórios PDF
 ├── scripts/
 │   └── build_botcity_package.py   # geração do pacote BotCity
 ├── src/
@@ -192,6 +192,7 @@ Exceções inesperadas durante um item são classificadas como erro de sistema.
 │   ├── maestro_client.py          # gateways local e BotCity
 │   ├── main.py                    # orquestração do ciclo
 │   ├── models.py                  # ExecutionResult
+│   ├── reporting.py               # relatório PDF de evidências
 │   ├── pages/
 │   │   ├── login_page.py          # Page Object da autenticação web
 │   │   └── form_page.py           # Page Object do formulário de lotes
@@ -207,8 +208,8 @@ Exceções inesperadas durante um item são classificadas como erro de sistema.
 └── requirements-dev.txt
 ```
 
-Arquivos gerados em `logs/`, `relatorios/`, `artefatos/` e `dist/` não são
-versionados.
+Logs, capturas PNG e pacotes de `dist/` não são versionados. Os resultados
+consolidados em `relatorios/` são preservados como evidências de homologação.
 
 ## Pré-requisitos
 
@@ -343,8 +344,9 @@ O Dispatcher exige exatamente esse cabeçalho. O Performer associa o item à tas
 do Runner e registra seu resultado individual no Maestro.
 
 A evidência PNG não é um campo do DataPool e não é anexada diretamente ao item.
-Ela é persistida em `artefatos/`. O resumo consolidado da execução é publicado
-separadamente no Maestro como `resumo_execucao.json`.
+Ela é persistida em `artefatos/`. O resumo consolidado e o relatório de
+evidências são publicados separadamente no Maestro como
+`resumo_execucao.json` e `relatorio_evidencias.pdf`.
 
 ## Execução local
 
@@ -371,7 +373,8 @@ python bot.py
 A execução usa o gateway em memória, processa o CSV e gera:
 
 - `logs/execucao.log`;
-- `relatorios/resumo_execucao.json`.
+- `relatorios/resumo_execucao.json`;
+- `relatorios/relatorio_evidencias.pdf`.
 
 ## Execução com Docker
 
@@ -497,7 +500,7 @@ Exemplo:
 O formatador mascara atribuições e valores associados a senha, token, chave e
 API key antes da persistência.
 
-### Relatório
+### Relatórios
 
 `relatorios/resumo_execucao.json` contém:
 
@@ -506,9 +509,15 @@ API key antes da persistência.
 - horários de início e término;
 - erros consolidados, quando existentes.
 
+`relatorios/relatorio_evidencias.pdf` apresenta os identificadores da
+execução, os contadores consolidados e o parecer operacional. Quando o Selenium
+está habilitado e produz uma captura, o PNG também é incorporado ao documento.
+O PDF não inclui senha, token ou chave.
+
 ### Artefatos
 
 - `resumo_execucao.json`: publicado no Maestro;
+- `relatorio_evidencias.pdf`: publicado no Maestro;
 - `comprovante-<lote>-<timestamp>.png`: evidência local da automação web,
   persistida em `artefatos/` e não anexada diretamente ao item do DataPool.
 
