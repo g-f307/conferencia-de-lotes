@@ -278,10 +278,20 @@ def test_run_executa_automacao_web_quando_habilitada(monkeypatch, tmp_path):
         url,
         base_dir,
         artifact_dir,
+        credential,
         *,
         timeout_seconds,
     ):
-        calls.append((url, base_dir, artifact_dir, timeout_seconds))
+        calls.append(
+            (
+                url,
+                base_dir,
+                artifact_dir,
+                credential.username,
+                credential.password,
+                timeout_seconds,
+            )
+        )
         return WebAutomationResult(
             url=(base_dir / url).as_uri(),
             evidence_path=artifact_dir / "comprovante.png",
@@ -303,9 +313,56 @@ def test_run_executa_automacao_web_quando_habilitada(monkeypatch, tmp_path):
             "web/index-lotes/index.html",
             settings.base_dir,
             settings.web_artifact_dir,
+            "marcelo.erp",
+            "fake-password",
             settings.web_timeout_seconds,
         )
     ]
+
+
+def test_run_usa_credencial_efemera_local_no_login_sem_expor_senha(
+    monkeypatch,
+    tmp_path,
+):
+    web_page = tmp_path / "web" / "index-lotes" / "index.html"
+    web_page.parent.mkdir(parents=True)
+    web_page.write_text("<html></html>", encoding="utf-8")
+    settings = replace(
+        settings_for(tmp_path),
+        web_automation_enabled=True,
+        web_test_url="web/index-lotes/index.html",
+    )
+    client = FakeMaestroClient([])
+    received_credentials = []
+    log_file = tmp_path / "logs" / "execucao.log"
+    logger = configure_logging(log_file, settings)
+
+    def fake_run_web_automation(
+        url,
+        base_dir,
+        artifact_dir,
+        credential,
+        *,
+        timeout_seconds,
+    ):
+        received_credentials.append(credential)
+        return WebAutomationResult(
+            url=(base_dir / url).as_uri(),
+            evidence_path=artifact_dir / "comprovante.png",
+        )
+
+    monkeypatch.setattr("src.main.run_web_automation", fake_run_web_automation)
+
+    result = run(
+        settings=settings,
+        maestro_client=client,
+        logger=logger,
+    )
+
+    assert result.status == "SUCCESS"
+    assert received_credentials[0].username == "local.erp"
+    assert received_credentials[0].password
+    assert received_credentials[0].password not in log_file.read_text(encoding="utf-8")
 
 
 def test_run_registra_evento_estruturado_da_automacao_web(monkeypatch, tmp_path):
@@ -326,9 +383,12 @@ def test_run_registra_evento_estruturado_da_automacao_web(monkeypatch, tmp_path)
         url,
         base_dir,
         artifact_dir,
+        credential,
         *,
         timeout_seconds,
     ):
+        assert credential.username == "marcelo.erp"
+        assert credential.password == "fake-password"
         return WebAutomationResult(
             url=(base_dir / url).as_uri(),
             evidence_path=artifact_dir / "comprovante.png",
@@ -350,3 +410,4 @@ def test_run_registra_evento_estruturado_da_automacao_web(monkeypatch, tmp_path)
         for line in log_file.read_text(encoding="utf-8").splitlines()
     ]
     assert "AUTOMACAO_WEB" in events
+    assert "fake-password" not in log_file.read_text(encoding="utf-8")

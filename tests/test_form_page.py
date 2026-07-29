@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 from selenium.common.exceptions import InvalidElementStateException, TimeoutException
 from selenium.webdriver.common.by import By
@@ -14,6 +16,7 @@ class FakeElement:
         enabled=True,
         tag_name="input",
         clear_allowed=True,
+        screenshot_succeeds=True,
     ):
         self.actions = []
         self.text = text
@@ -21,6 +24,7 @@ class FakeElement:
         self.enabled = enabled
         self.tag_name = tag_name
         self.clear_allowed = clear_allowed
+        self.screenshot_succeeds = screenshot_succeeds
 
     def clear(self):
         if not self.clear_allowed:
@@ -32,6 +36,12 @@ class FakeElement:
 
     def click(self):
         self.actions.append(("click",))
+
+    def screenshot(self, path):
+        self.actions.append(("screenshot", path))
+        if self.screenshot_succeeds:
+            Path(path).write_bytes(b"fake-png")
+        return self.screenshot_succeeds
 
     def is_displayed(self):
         return self.displayed
@@ -291,6 +301,19 @@ def test_is_sucesso_retorna_falso_para_mensagem_invalida():
     driver = FakeDriver(confirmation_text="Falha ao processar o lote.")
 
     assert build_form_page(driver).is_sucesso() is False
+
+
+def test_capturar_evidencia_usa_mensagem_final(tmp_path):
+    driver = FakeDriver()
+    evidence_path = tmp_path / "comprovante.png"
+
+    result = build_form_page(driver).capturar_evidencia(evidence_path)
+
+    assert result is True
+    assert evidence_path.is_file()
+    assert driver.elements[FormPage.MENSAGEM_RESULTADO].actions == [
+        ("screenshot", str(evidence_path))
+    ]
 
 
 def test_is_sucesso_trata_confirmacao_ausente_ou_timeout():
