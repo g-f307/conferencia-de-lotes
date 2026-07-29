@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
+from pathlib import Path
 from typing import Any
 import unicodedata
 
@@ -103,8 +104,18 @@ class FormPage:
 
     def is_sucesso(self) -> bool:
         """Aguarda a mensagem final e valida se ela confirma sucesso."""
+        mensagem = self._wait_resultado()
+        texto = getattr(mensagem, "text", "") or ""
+        return "sucesso" in texto.casefold()
+
+    def capturar_evidencia(self, destino: Path) -> bool:
+        """Captura a mensagem final sem expor detalhes do elemento ao orquestrador."""
+        mensagem = self._wait_resultado()
+        return bool(mensagem.screenshot(str(destino)))
+
+    def _wait_resultado(self) -> Any:
         try:
-            mensagem = self._wait.until(
+            return self._wait.until(
                 EC.visibility_of_element_located(self.MENSAGEM_RESULTADO)
             )
         except TimeoutException as exc:
@@ -113,9 +124,6 @@ class FormPage:
                 f"{self.timeout_seconds:g} segundos "
                 f"(locator={self.MENSAGEM_RESULTADO!r})"
             ) from exc
-
-        texto = getattr(mensagem, "text", "") or ""
-        return "sucesso" in texto.casefold()
 
     def _wait_visible(
         self,

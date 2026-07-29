@@ -209,7 +209,7 @@ def run(
 
     try:
         client.send_start_alert()
-        current_vault_client.get_erp_credential()
+        erp_credential = current_vault_client.get_erp_credential()
         current_logger.info(
             "Vault validado para a credencial %s",
             current_settings.vault_label,
@@ -239,6 +239,7 @@ def run(
                 current_settings.web_test_url,
                 current_settings.base_dir,
                 current_settings.web_artifact_dir,
+                erp_credential,
                 timeout_seconds=current_settings.web_timeout_seconds,
             )
             current_logger.info(

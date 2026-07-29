@@ -20,6 +20,7 @@ def test_vault_client_recovers_erp_credential_from_credencial_erp2():
     assert provider.label == "credencial_erp2"
     assert credential.username == "rebecca.erp"
     assert credential.password == "segredo"
+    assert "segredo" not in repr(credential)
 
 
 def test_vault_client_requires_username_and_password():

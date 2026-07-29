@@ -45,7 +45,7 @@ Estão implementados:
 - recuperação da credencial do ERP pelo Vault;
 - alertas, artefato JSON e finalização da task no Maestro;
 - logs estruturados em JSON Lines no arquivo e no console;
-- automação web opcional com Selenium e waits explícitos;
+- automação web opcional com Selenium, Page Objects e waits explícitos;
 - evidência PNG da confirmação apresentada pelo formulário;
 - empacotamento ZIP para o BotCity Runner;
 - execução em container e integração contínua no GitHub Actions.
@@ -82,7 +82,9 @@ flowchart LR
     RUNNER[BotCity Runner] --> MAIN
     MAIN --> VAULT[Credentials Vault]
     MAIN --> WEB[Selenium]
-    WEB --> PNG[Evidência PNG]
+    WEB --> LOGIN[LoginPage]
+    LOGIN --> FORM[FormPage]
+    FORM --> PNG[Evidência PNG]
     MAIN --> DISPATCHER[Dispatcher]
     DISPATCHER --> DATAPOOL[FilaAuditoriaLotes2]
     DATAPOOL --> PERFORMER[Performer]
@@ -106,7 +108,8 @@ sequência está em [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md).
 2. A configuração e a pasta de entrada são validadas antes do processamento.
 3. O Maestro recebe o alerta inicial quando a integração real está ativa.
 4. A credencial do ERP é recuperada e validada sem registrar a senha.
-5. Quando habilitado, o Selenium valida o formulário e gera uma evidência PNG.
+5. Quando habilitado, o Selenium usa a credencial já recuperada para autenticar
+   pela `LoginPage`, preencher pela `FormPage` e gerar uma evidência PNG.
 6. O Dispatcher publica cada linha do CSV no DataPool.
 7. O Performer consome a fila e processa cada item em um `try/except` isolado.
 8. Cada item é concluído, rejeitado, marcado como falha técnica ou encaminhado
@@ -174,7 +177,8 @@ Exceções inesperadas durante um item são classificadas como erro de sistema.
 │   ├── main.py                    # orquestração do ciclo
 │   ├── models.py                  # ExecutionResult
 │   ├── pages/
-│   │   └── login_page.py          # Page Object da autenticação web
+│   │   ├── login_page.py          # Page Object da autenticação web
+│   │   └── form_page.py           # Page Object do formulário de lotes
 │   ├── validation.py              # RN01–RN07
 │   ├── vault_client.py            # Credentials Vault
 │   └── web_automation.py          # Selenium e evidências

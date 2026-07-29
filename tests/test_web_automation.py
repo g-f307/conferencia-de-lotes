@@ -2,9 +2,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
-from selenium.common.exceptions import TimeoutException
-from selenium.webdriver.common.by import By
 
+from src.pages import FormPageTimeoutError, LoginPageTimeoutError
+from src.vault_client import ErpCredential
 from src.web_automation import (
     WebAutomationEnvironmentError,
     WebAutomationEvidenceError,
@@ -18,109 +18,71 @@ from src.web_automation import (
     resolve_chrome_binary,
     resolve_chromedriver_binary,
     resolve_configured_executable,
+    resolve_login_url,
     resolve_web_url,
     run_web_automation,
 )
 
 
-class FakeElement:
-    def __init__(
-        self,
-        text="",
-        displayed=True,
-        enabled=True,
-        screenshot_succeeds=True,
-        screenshot_writes_file=True,
-    ):
-        self.actions = []
-        self.text = text
-        self.displayed = displayed
-        self.enabled = enabled
-        self.screenshot_succeeds = screenshot_succeeds
-        self.screenshot_writes_file = screenshot_writes_file
-
-    def clear(self):
-        self.actions.append(("clear",))
-
-    def send_keys(self, value):
-        self.actions.append(("send_keys", value))
-
-    def click(self):
-        self.actions.append(("click",))
-
-    def screenshot(self, path):
-        self.actions.append(("screenshot", path))
-        if self.screenshot_succeeds and self.screenshot_writes_file:
-            Path(path).write_bytes(b"fake-png")
-        return self.screenshot_succeeds
-
-    def is_displayed(self):
-        return self.displayed
-
-    def is_enabled(self):
-        return self.enabled
-
-
 class FakeDriver:
-    def __init__(
-        self,
-        *,
-        confirmation_visible=True,
-        confirmation_text="Lote processado com sucesso.",
-        button_enabled=True,
-    ):
+    def __init__(self):
         self.opened_url = None
         self.quit_called = False
-        self.elements = {
-            (By.ID, "numero-lote"): FakeElement(),
-            (By.ID, "produto"): FakeElement(),
-            (
-                By.XPATH,
-                '//label[.//input[@name="status" and @value="Concluído"]]',
-            ): FakeElement(),
-            (
-                By.XPATH,
-                '//label[.//input[@name="status" and @value="Pendente"]]',
-            ): FakeElement(),
-            (By.ID, "botao-processar"): FakeElement(enabled=button_enabled),
-            (By.ID, "mensagem"): FakeElement(
-                text=confirmation_text,
-                displayed=confirmation_visible,
-            ),
-        }
 
     def get(self, url):
         self.opened_url = url
-
-    def find_element(self, by, value):
-        return self.elements[(by, value)]
 
     def quit(self):
         self.quit_called = True
 
 
-class ImmediateWait:
-    def __init__(self, driver, timeout):
-        self.driver = driver
-        self.timeout = timeout
+def install_page_object_fakes(
+    monkeypatch,
+    *,
+    success=True,
+    login_error=None,
+    form_error=None,
+    screenshot_succeeds=True,
+    screenshot_writes_file=True,
+):
+    state = {
+        "login_instances": [],
+        "form_instances": [],
+        "login_calls": [],
+        "form_calls": [],
+        "evidence_calls": [],
+    }
 
-    def until(self, condition):
-        result = condition(self.driver)
-        if not result:
-            raise TimeoutException("timeout de teste")
-        return result
+    class FakeLoginPage:
+        def __init__(self, driver, timeout_seconds):
+            state["login_instances"].append((driver, timeout_seconds))
 
+        def fazer_login(self, usuario, senha):
+            state["login_calls"].append((usuario, senha))
+            if login_error is not None:
+                raise login_error
 
-class DelayedConfirmationWait(ImmediateWait):
-    def until(self, condition):
-        result = condition(self.driver)
-        if result:
-            return result
-        self.driver.elements[(By.ID, "mensagem")].displayed = True
-        result = condition(self.driver)
-        if not result:
-            raise TimeoutException("timeout de teste")
-        return result
+    class FakeFormPage:
+        def __init__(self, driver, timeout_seconds):
+            state["form_instances"].append((driver, timeout_seconds))
+
+        def preencher_lote(self, dados_lote):
+            state["form_calls"].append(dados_lote)
+            if form_error is not None:
+                raise form_error
+
+        def is_sucesso(self):
+            return success
+
+        def capturar_evidencia(self, destino):
+            state["evidence_calls"].append(destino)
+            if screenshot_succeeds and screenshot_writes_file:
+                destino.write_bytes(b"fake-png")
+            return screenshot_succeeds
+
+    monkeypatch.setattr("src.web_automation.LoginPage", FakeLoginPage)
+    monkeypatch.setattr("src.web_automation.FormPage", FakeFormPage)
+    return state
 
 
 def test_build_chrome_driver_configura_headless_e_webdriver_manager(
@@ -292,44 +254,64 @@ def test_resolve_web_url_preserva_url_http(tmp_path: Path):
     assert resolve_web_url(url, tmp_path) == url
 
 
-def test_fill_and_submit_lote_usa_selenium_e_waits_explicitos(tmp_path):
+def test_resolve_login_url_usa_tela_irma_do_formulario():
+    assert (
+        resolve_login_url("file:///tmp/web/index-lotes/index.html")
+        == "file:///tmp/web/index-lotes/login.html"
+    )
+    assert (
+        resolve_login_url("https://example.test/lotes/index.html")
+        == "https://example.test/lotes/login.html"
+    )
+
+
+def test_resolve_login_url_preserva_url_de_login():
+    url = "https://example.test/lotes/login.html"
+
+    assert resolve_login_url(url) == url
+
+
+def test_fill_and_submit_lote_orquestra_page_objects_com_mesmo_driver(
+    tmp_path,
+    monkeypatch,
+):
     driver = FakeDriver()
     artifact_dir = tmp_path / "artefatos"
+    credential = ErpCredential(
+        username="usuario.erp",
+        password="senha-nao-logavel",
+    )
     data = WebFormData(
         lote_id="LOTE-TESTE-001",
         produto="Scanner",
         status="Concluído",
     )
+    state = install_page_object_fakes(monkeypatch)
 
     evidence_path = fill_and_submit_lote(
         driver,
-        "file:///tmp/index.html",
+        "file:///tmp/web/index-lotes/index.html",
         artifact_dir,
+        credential,
         data,
         timeout_seconds=15,
-        wait_factory=ImmediateWait,
     )
 
-    assert driver.opened_url == "file:///tmp/index.html"
-    assert driver.elements[(By.ID, "numero-lote")].actions == [
-        ("clear",),
-        ("send_keys", "LOTE-TESTE-001"),
+    assert driver.opened_url == "file:///tmp/web/index-lotes/login.html"
+    assert state["login_instances"] == [(driver, 15)]
+    assert state["form_instances"] == [(driver, 15)]
+    assert state["login_calls"] == [
+        ("usuario.erp", "senha-nao-logavel"),
     ]
-    assert driver.elements[(By.ID, "produto")].actions == [
-        ("send_keys", "Scanner")
+    assert state["form_calls"] == [
+        {
+            "lote_id": "LOTE-TESTE-001",
+            "produto": "Scanner",
+            "status": "Concluído",
+        }
     ]
-    assert driver.elements[
-        (
-            By.XPATH,
-            '//label[.//input[@name="status" and @value="Concluído"]]',
-        )
-    ].actions == [("click",)]
-    assert driver.elements[(By.ID, "botao-processar")].actions == [
-        ("click",)
-    ]
-    assert driver.elements[(By.ID, "mensagem")].actions == [
-        ("screenshot", str(evidence_path))
-    ]
+    assert state["evidence_calls"] == [evidence_path]
+    assert evidence_path.is_file()
     assert evidence_path.parent == artifact_dir
     assert "LOTE-TESTE-001" in evidence_path.name
 
@@ -349,62 +331,55 @@ def test_build_evidence_path_identifica_lote_e_momento(tmp_path):
 
 
 @pytest.mark.parametrize(
-    ("driver", "expected_message"),
+    "page_error",
     [
-        (
-            FakeDriver(confirmation_visible=False),
-            "Mensagem de sucesso.*LOTE-TESTE-002.*15 segundos",
-        ),
-        (
-            FakeDriver(button_enabled=False),
-            "Botão de processamento.*LOTE-TESTE-002.*15 segundos",
-        ),
+        LoginPageTimeoutError("login indisponivel"),
+        FormPageTimeoutError("formulario indisponivel"),
     ],
 )
-def test_fill_and_submit_lote_informa_timeout(
+def test_fill_and_submit_lote_normaliza_timeout_sem_expor_senha(
     tmp_path,
-    driver,
-    expected_message,
+    monkeypatch,
+    page_error,
 ):
-    with pytest.raises(WebAutomationTimeoutError, match=expected_message):
+    credential = ErpCredential("usuario.erp", "segredo-nao-pode-vazar")
+    kwargs = (
+        {"login_error": page_error}
+        if isinstance(page_error, LoginPageTimeoutError)
+        else {"form_error": page_error}
+    )
+    install_page_object_fakes(monkeypatch, **kwargs)
+
+    with pytest.raises(WebAutomationTimeoutError) as captured:
         fill_and_submit_lote(
-            driver,
-            "file:///tmp/index.html",
+            FakeDriver(),
+            "file:///tmp/web/index-lotes/index.html",
             tmp_path,
+            credential,
             WebFormData(lote_id="LOTE-TESTE-002"),
             timeout_seconds=15,
-            wait_factory=ImmediateWait,
         )
 
+    assert "LOTE-TESTE-002" in str(captured.value)
+    assert "segredo-nao-pode-vazar" not in str(captured.value)
     assert not list(tmp_path.glob("*.png"))
 
 
-def test_fill_and_submit_lote_suporta_confirmacao_atrasada(tmp_path):
-    driver = FakeDriver(confirmation_visible=False)
-
-    evidence_path = fill_and_submit_lote(
-        driver,
-        "file:///tmp/index.html",
-        tmp_path,
-        wait_factory=DelayedConfirmationWait,
-    )
-
-    assert evidence_path.parent == tmp_path
-    assert driver.elements[(By.ID, "mensagem")].displayed is True
-
-
-def test_fill_and_submit_lote_rejeita_confirmacao_sem_sucesso(tmp_path):
-    driver = FakeDriver(confirmation_text="Falha ao processar o lote.")
+def test_fill_and_submit_lote_rejeita_confirmacao_sem_sucesso(
+    tmp_path,
+    monkeypatch,
+):
+    install_page_object_fakes(monkeypatch, success=False)
 
     with pytest.raises(
         WebAutomationTimeoutError,
-        match="Mensagem de confirmação inválida",
+        match="Mensagem de confirmação inválida.*LOTE-2026-0001",
     ):
         fill_and_submit_lote(
-            driver,
-            "file:///tmp/index.html",
+            FakeDriver(),
+            "file:///tmp/web/index-lotes/index.html",
             tmp_path,
-            wait_factory=ImmediateWait,
+            ErpCredential("usuario.erp", "senha-efemera"),
         )
 
 
@@ -414,23 +389,25 @@ def test_fill_and_submit_lote_rejeita_confirmacao_sem_sucesso(tmp_path):
 )
 def test_fill_and_submit_lote_falha_quando_evidencia_nao_e_criada(
     tmp_path,
+    monkeypatch,
     screenshot_succeeds,
     screenshot_writes_file,
 ):
-    driver = FakeDriver()
-    confirmation = driver.elements[(By.ID, "mensagem")]
-    confirmation.screenshot_succeeds = screenshot_succeeds
-    confirmation.screenshot_writes_file = screenshot_writes_file
+    install_page_object_fakes(
+        monkeypatch,
+        screenshot_succeeds=screenshot_succeeds,
+        screenshot_writes_file=screenshot_writes_file,
+    )
 
     with pytest.raises(
         WebAutomationEvidenceError,
         match="Não foi possível gerar a evidência.*LOTE-2026-0001",
     ):
         fill_and_submit_lote(
-            driver,
-            "file:///tmp/index.html",
+            FakeDriver(),
+            "file:///tmp/web/index-lotes/index.html",
             tmp_path,
-            wait_factory=ImmediateWait,
+            ErpCredential("usuario.erp", "senha-efemera"),
         )
 
 
@@ -447,6 +424,7 @@ def test_run_web_automation_sempre_encerra_driver(tmp_path, monkeypatch):
         "docs/index.html",
         tmp_path,
         tmp_path / "artefatos",
+        ErpCredential("usuario.erp", "senha-efemera"),
         driver_factory=lambda **kwargs: driver,
     )
 
@@ -467,6 +445,7 @@ def test_run_web_automation_encerra_driver_apos_falha(tmp_path, monkeypatch):
             "docs/index.html",
             tmp_path,
             tmp_path / "artefatos",
+            ErpCredential("usuario.erp", "senha-efemera"),
             driver_factory=lambda **kwargs: driver,
         )
 

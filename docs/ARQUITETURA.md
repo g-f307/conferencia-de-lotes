@@ -46,6 +46,8 @@ flowchart TB
 
     subgraph Processamento
         WEB[Selenium]
+        LOGIN[LoginPage]
+        FORM[FormPage]
         DISPATCHER[Dispatcher]
         PERFORMER[LotePerformer]
         RULES[RN01–RN07]
@@ -69,7 +71,9 @@ flowchart TB
     BM --> VAULT
     CSV --> DISPATCHER
     MAIN --> WEB
-    WEB --> PNG
+    WEB --> LOGIN
+    LOGIN --> FORM
+    FORM --> PNG
     MAIN --> DISPATCHER
     DISPATCHER --> MC
     MAIN --> PERFORMER
@@ -93,7 +97,9 @@ flowchart TB
 | `src/bot.py` | Consumir a fila e isolar o tratamento de cada item. |
 | `src/validation.py` | Aplicar RN01–RN07 sem depender de infraestrutura. |
 | `src/vault_client.py` | Recuperar e validar `username` e `password`, com cache apenas em memória. |
-| `src/web_automation.py` | Controlar Selenium, waits, validação da confirmação e evidência PNG. |
+| `src/web_automation.py` | Gerenciar o WebDriver e orquestrar os Page Objects sem manipular elementos HTML. |
+| `src/pages/login_page.py` | Centralizar locators, waits e ações da autenticação web. |
+| `src/pages/form_page.py` | Centralizar locators, waits, preenchimento, validação e captura da evidência do formulário. |
 | `src/logging_config.py` | Produzir JSON Lines e sanitizar dados sensíveis. |
 | `src/models.py` | Padronizar o resumo serializável da execução. |
 
@@ -106,6 +112,8 @@ sequenceDiagram
     participant M as main
     participant V as Vault
     participant W as Selenium
+    participant L as LoginPage
+    participant F as FormPage
     participant D as Dispatcher
     participant Q as DataPool
     participant P as Performer
@@ -118,7 +126,12 @@ sequenceDiagram
     M->>V: recuperar credencial ERP
 
     opt WEB_AUTOMATION_ENABLED
-        M->>W: abrir formulário e aguardar elementos
+        M->>W: iniciar fluxo com credencial em memória
+        W->>L: fazer_login(username, password)
+        L-->>W: formulário disponível
+        W->>F: preencher_lote(dados)
+        W->>F: is_sucesso()
+        W->>F: capturar_evidencia(path)
         W-->>M: evidência PNG
     end
 
