@@ -172,7 +172,7 @@ Exceções inesperadas durante um item são classificadas como erro de sistema.
 │   ├── ADERENCIA_PAGE_OBJECTS.md  # requisitos da aula e evidências
 │   ├── ARQUITETURA.md             # componentes e sequências técnicas
 │   ├── DEPLOY_BOTCITY.md          # implantação e operação no Runner
-│   ├── GUIA_COLABORACAO_GIT.md    # processo de colaboração da equipe
+│   ├── RELEASE_V1.3.0.md          # notas da release Page Objects
 │   ├── REVISAO_BPMN_PDD.md        # aderência entre processo e código
 │   ├── diagrama_pdd.bpmn          # fonte editável do processo
 │   └── diagrama_pdd.svg           # visualização do BPMN
@@ -570,34 +570,17 @@ A CI não utiliza credenciais reais do Maestro ou do Vault.
 | [`docs/ADERENCIA_PAGE_OBJECTS.md`](docs/ADERENCIA_PAGE_OBJECTS.md) | Matriz de requisitos, implementação e evidências da refatoração. |
 | [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md) | Componentes, sequências, limites e manutenção. |
 | [`docs/DEPLOY_BOTCITY.md`](docs/DEPLOY_BOTCITY.md) | Build, implantação, smoke test e rollback. |
+| [`docs/RELEASE_V1.3.0.md`](docs/RELEASE_V1.3.0.md) | Notas técnicas da entrega Page Objects. |
 | [`docs/REVISAO_BPMN_PDD.md`](docs/REVISAO_BPMN_PDD.md) | Rastreabilidade do processo e das regras. |
-| [`docs/GUIA_COLABORACAO_GIT.md`](docs/GUIA_COLABORACAO_GIT.md) | GitHub Flow utilizado pela equipe. |
 | [`docs/diagrama_pdd.bpmn`](docs/diagrama_pdd.bpmn) | Fonte BPMN editável. |
 | [`docs/diagrama_pdd.svg`](docs/diagrama_pdd.svg) | Visualização do processo. |
 | [`docs/Regras de validação a aplicar - Gabriel, Marcelo e Rebecca.docx.pdf`](docs/Regras%20de%20validação%20a%20aplicar%20-%20Gabriel,%20Marcelo%20e%20Rebecca.docx.pdf) | Documento-base das regras. |
 | [`docs/Inspeção de Lotes - Gabriel, Marcelo e Rebecca.xlsx`](docs/Inspeção%20de%20Lotes%20-%20Gabriel,%20Marcelo%20e%20Rebecca.xlsx) | Massa de referência do levantamento. |
 
-## Equipe e colaboração
+## Equipe
 
-| Integrante | Responsabilidade inicial |
-|---|---|
-| Gabriel Fernandes | Configuração, logs, fail-fast e resultado de execução. |
-| Marcelo Uchôa | Dispatcher, DataPool, Maestro, empacotamento e deploy. |
-| Rebecca Xavier | Regras RN01–RN07, Performer e Credentials Vault. |
-
-O projeto utiliza GitHub Flow:
-
-1. Issue com escopo e critérios de aceite;
-2. branch criada a partir da `main` atualizada;
-3. commits claros e descritivos, divididos por blocos lógicos;
-4. Pull Request vinculado à Issue;
-5. testes e revisão por outro integrante;
-6. squash merge e exclusão da branch remota;
-7. atualização e limpeza das branches locais.
-
-Commits não devem ser vagos ou artificiosamente pequenos. Uma funcionalidade
-ampla também não deve ser concentrada em um único commit quando possui blocos
-independentes de implementação, testes, build e documentação.
+Projeto acadêmico desenvolvido por Gabriel Fernandes, Marcelo Uchôa e Rebecca
+Xavier.
 
 ## Releases
 
@@ -606,6 +589,7 @@ independentes de implementação, testes, build e documentação.
 | `v1.0.0` | Primeira versão implantável no BotCity Maestro. |
 | `v1.1.0` | Consolidação do fluxo completo da automação. |
 | `v1.2.0` | Selenium, homologação no Runner e documentação técnica consolidada. |
+| `v1.3.0` | Refatoração com Page Objects, integração Selenium e consolidação documental da atividade. |
 
 Na entrega `v1.2.0`, o ambiente BotCity utiliza:
 
