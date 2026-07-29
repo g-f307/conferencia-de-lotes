@@ -6,10 +6,10 @@ from collections.abc import Callable, Mapping
 from typing import Any
 import unicodedata
 
-from selenium.common.exceptions import TimeoutException
+from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support.ui import Select, WebDriverWait
 
 
 class FormPageTimeoutError(RuntimeError):
@@ -21,9 +21,18 @@ class FormPage:
 
     CAMPO_NUMERO_LOTE = (By.ID, "numero-lote")
     CAMPO_PRODUTO = (By.ID, "produto")
-    STATUS_PENDENTE = (By.CSS_SELECTOR, '[data-testid="status-pendente"]')
-    STATUS_PROCESSAMENTO = (By.CSS_SELECTOR, '[data-testid="status-processamento"]')
-    STATUS_CONCLUIDO = (By.CSS_SELECTOR, '[data-testid="status-concluido"]')
+    STATUS_PENDENTE = (
+        By.XPATH,
+        '//label[.//input[@data-testid="status-pendente"]]',
+    )
+    STATUS_PROCESSAMENTO = (
+        By.XPATH,
+        '//label[.//input[@data-testid="status-processamento"]]',
+    )
+    STATUS_CONCLUIDO = (
+        By.XPATH,
+        '//label[.//input[@data-testid="status-concluido"]]',
+    )
     BOTAO_PROCESSAR = (By.ID, "botao-processar")
     MENSAGEM_RESULTADO = (By.ID, "mensagem")
 
@@ -59,29 +68,37 @@ class FormPage:
         status = self._campo_obrigatorio(dados_lote, "status")
         status_locator = self._locator_status(status, numero_lote)
 
-        numero_input = self._wait.until(
-            EC.visibility_of_element_located(self.CAMPO_NUMERO_LOTE)
+        numero_input = self._wait_visible(
+            self.CAMPO_NUMERO_LOTE,
+            campo="numero do lote",
+            numero_lote=numero_lote,
         )
-        produto_input = self._wait.until(
-            EC.visibility_of_element_located(self.CAMPO_PRODUTO)
+        produto_input = self._wait_visible(
+            self.CAMPO_PRODUTO,
+            campo="produto",
+            numero_lote=numero_lote,
         )
-        status_option = self._wait.until(EC.element_to_be_clickable(status_locator))
+        status_option = self._wait_clickable(
+            status_locator,
+            campo=f"status {status}",
+            numero_lote=numero_lote,
+        )
 
         numero_input.clear()
         numero_input.send_keys(numero_lote)
-        produto_input.clear()
-        produto_input.send_keys(produto)
+        try:
+            Select(produto_input).select_by_visible_text(produto)
+        except NoSuchElementException as exc:
+            raise ValueError(
+                f"Produto invalido para o lote {numero_lote}: {produto!r}"
+            ) from exc
         status_option.click()
 
-        try:
-            button = self._wait.until(EC.element_to_be_clickable(self.BOTAO_PROCESSAR))
-        except TimeoutException as exc:
-            raise FormPageTimeoutError(
-                "Botao de processamento nao ficou clicavel para o lote "
-                f"{numero_lote} em ate {self.timeout_seconds:g} segundos "
-                f"(locator={self.BOTAO_PROCESSAR!r})"
-            ) from exc
-
+        button = self._wait_clickable(
+            self.BOTAO_PROCESSAR,
+            campo="Botao de processamento",
+            numero_lote=numero_lote,
+        )
         button.click()
 
     def is_sucesso(self) -> bool:
@@ -99,6 +116,36 @@ class FormPage:
 
         texto = getattr(mensagem, "text", "") or ""
         return "sucesso" in texto.casefold()
+
+    def _wait_visible(
+        self,
+        locator: tuple[str, str],
+        *,
+        campo: str,
+        numero_lote: str,
+    ) -> Any:
+        try:
+            return self._wait.until(EC.visibility_of_element_located(locator))
+        except TimeoutException as exc:
+            raise FormPageTimeoutError(
+                f"Campo {campo} nao ficou visivel para o lote {numero_lote} "
+                f"em ate {self.timeout_seconds:g} segundos (locator={locator!r})"
+            ) from exc
+
+    def _wait_clickable(
+        self,
+        locator: tuple[str, str],
+        *,
+        campo: str,
+        numero_lote: str,
+    ) -> Any:
+        try:
+            return self._wait.until(EC.element_to_be_clickable(locator))
+        except TimeoutException as exc:
+            raise FormPageTimeoutError(
+                f"Campo {campo} nao ficou clicavel para o lote {numero_lote} "
+                f"em ate {self.timeout_seconds:g} segundos (locator={locator!r})"
+            ) from exc
 
     @classmethod
     def _campo_obrigatorio(

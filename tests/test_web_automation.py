@@ -199,8 +199,8 @@ def test_resolve_configured_executable_rejeita_caminho_invalido(monkeypatch, tmp
 def test_resolve_configured_executable_rejeita_sem_permissao(monkeypatch, tmp_path):
     driver = tmp_path / "chromedriver"
     driver.write_text("#!/bin/sh\n", encoding="utf-8")
-    driver.chmod(0o644)
     monkeypatch.setenv("CHROMEDRIVER_PATH", str(driver))
+    monkeypatch.setattr("src.web_automation.os.access", lambda path, mode: False)
 
     with pytest.raises(WebAutomationEnvironmentError, match="permissão de execução"):
         resolve_configured_executable("CHROMEDRIVER_PATH")
