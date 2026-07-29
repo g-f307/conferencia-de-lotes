@@ -1,333 +1,302 @@
 # Conferência de Lotes
 
-Automação corporativa para conferência de registros de inspeção de lotes, com
-processamento resiliente por item, rastreabilidade operacional e integração com
-BotCity Maestro, DataPool e Credentials Vault.
+Automação corporativa para conferência de registros de inspeção, com
+processamento resiliente por item, integração com BotCity Maestro e automação
+web controlada por Playwright.
 
 ## Visão geral
 
-O projeto transforma um processo manual de validação de planilhas em um fluxo
-automatizado composto por Dispatcher e Performer:
+O fluxo combina Dispatcher, DataPool, Performer, Credentials Vault, Page
+Objects, evidências visuais e observabilidade:
 
-1. o Dispatcher lê um CSV padronizado e publica uma entrada por linha no
-   DataPool `FilaAuditoriaLotes2`;
-2. o Performer consome os itens, recupera a credencial `credencial_erp2`,
-   aplica as regras RN01–RN07 e finaliza cada item individualmente;
-3. o ciclo principal consolida o resultado em JSON, publica evidências e
-   finaliza a task do Maestro;
-4. uma etapa web opcional, implementada com Selenium, valida o formulário local
-   e gera uma evidência visual.
+1. o Dispatcher lê `dados_entrada/lotes_auditoria.csv` e publica uma entrada
+   por linha no DataPool `FilaAuditoriaLotes2`;
+2. a credencial `credencial_erp2` é recuperada do Credentials Vault;
+3. uma sessão Playwright headless autentica uma única vez na aplicação local;
+4. o Performer consome a fila e processa cada lote isoladamente;
+5. as regras RN01–RN07 determinam aprovação, divergência ou revisão;
+6. `LoginPage` e `FormPage` executam a interação web correspondente ao item;
+7. o resultado, a mensagem e o caminho da captura são gravados no DataPool
+   antes da finalização do item;
+8. logs JSON Lines, resumo JSON e relatório PDF consolidam a execução.
 
-Uma inconsistência de negócio afeta apenas o item correspondente. Falhas
-técnicas fatais são diferenciadas de rejeições e revisões de negócio.
+Uma inconsistência ou falha web em um lote não interrompe os demais itens. Uma
+falha anterior ao consumo, como configuração, entrada ou credencial inválida,
+encerra a execução imediatamente.
 
 ## Objetivo
 
-Padronizar a conferência de lotes e produzir uma execução:
+Executar a conferência de lotes de forma:
 
-- resiliente, para que um item inválido não interrompa os demais;
-- rastreável, por meio de logs estruturados, relatório e evidências;
-- segura, mantendo a senha do ERP exclusivamente no Credentials Vault;
-- reproduzível, com modos local, Docker e BotCity Runner;
-- testável, isolando integrações externas por protocolos e adaptadores.
+- resiliente, isolando falhas por item;
+- rastreável, com resultado e evidência associados ao lote;
+- segura, sem credenciais no código, no `.env` ou nos logs;
+- reproduzível nos modos local, Docker e BotCity Runner;
+- manutenível, separando regras, orquestração e interface por Page Objects;
+- auditável, com logs estruturados e resultados consolidados.
 
 ## Escopo
 
 Estão implementados:
 
-- configuração por variáveis de ambiente e caminhos relativos ao projeto;
-- fail-fast para a pasta `dados_entrada/`;
-- leitura do CSV por cabeçalho;
-- publicação e consumo de itens no DataPool;
-- gateways local e BotCity Maestro;
+- configuração externa e caminhos relativos;
+- fail-fast da pasta `dados_entrada/`;
+- Dispatcher de CSV por cabeçalho;
+- DataPool local ou BotCity Maestro;
 - validações RN01–RN07;
-- normalização de status e separação de casos ambíguos;
-- recuperação da credencial do ERP pelo Vault;
-- alertas, artefatos JSON/PDF e finalização da task no Maestro;
-- logs estruturados em JSON Lines no arquivo e no console;
-- automação web opcional com Selenium, Page Objects e waits explícitos;
-- evidência PNG da confirmação apresentada pelo formulário;
-- empacotamento ZIP para o BotCity Runner;
-- execução em container e integração contínua no GitHub Actions.
+- recuperação da credencial pelo Vault;
+- Playwright síncrono com Chromium headless;
+- Page Objects com locators semânticos e waits por condição;
+- processamento web e captura de PNG por item;
+- continuidade após divergência, revisão ou falha técnica isolada;
+- campos de saída no DataPool;
+- logs estruturados no arquivo e no console;
+- resumo JSON, relatório PDF, artefatos e `finish_task`;
+- pacote ZIP para o BotCity Runner;
+- Docker e integração contínua.
 
 ## Fora do escopo
 
-Não fazem parte da implementação atual:
+Não fazem parte desta versão:
 
-- captura automática de anexos de e-mail;
-- leitura direta de arquivos XLSX pelo Dispatcher;
-- lançamento de dados em um ERP real;
-- atualização automática da base de referência de lotes;
-- interface para tratamento dos casos encaminhados à revisão humana;
-- Selenium Grid ou execução distribuída do navegador;
-- gestão de agenda, capacidade e infraestrutura produtiva do Runner.
+- captura de anexos de e-mail;
+- leitura direta de XLSX;
+- acesso ou atualização de ERP produtivo;
+- armazenamento de credenciais reais no repositório;
+- interface para resolução dos itens encaminhados à revisão;
+- execução distribuída de navegadores;
+- alteração automática da base de referência.
 
-O formulário web presente em `web/index-lotes/` é um ambiente controlado de
-validação e evidência. Ele não representa um ERP produtivo.
+`web/index-lotes/` é uma aplicação controlada, destinada somente à
+demonstração e à produção de evidências. Nenhum sistema real é acessado.
 
 ## Processo de negócio
 
 ![Processo BPMN de inspeção de lotes](docs/diagrama_pdd.svg)
 
-O diagrama apresenta as visões AS-IS e TO-BE do processo. A fonte editável está
-em [`docs/diagrama_pdd.bpmn`](docs/diagrama_pdd.bpmn), e o registro da revisão
-de aderência está em
+O modelo editável está em
+[`docs/diagrama_pdd.bpmn`](docs/diagrama_pdd.bpmn). A relação entre o processo,
+as regras e o código está registrada em
 [`docs/REVISAO_BPMN_PDD.md`](docs/REVISAO_BPMN_PDD.md).
 
 ## Arquitetura
 
 ```mermaid
 flowchart LR
-    CSV[CSV de lotes] --> MAIN[Ciclo principal]
-    RUNNER[BotCity Runner] --> MAIN
+    CSV[CSV de lotes] --> DISPATCHER[Dispatcher]
+    DISPATCHER --> DP[FilaAuditoriaLotes2]
+    RUNNER[Local ou Runner] --> MAIN[src/main.py]
     MAIN --> VAULT[Credentials Vault]
-    MAIN --> WEB[Selenium]
-    WEB --> LOGIN[LoginPage]
-    LOGIN --> FORM[FormPage]
-    FORM --> PNG[Evidência PNG]
-    MAIN --> DISPATCHER[Dispatcher]
-    DISPATCHER --> DATAPOOL[FilaAuditoriaLotes2]
-    DATAPOOL --> PERFORMER[Performer]
+    MAIN --> SESSION[Sessão Playwright headless]
+    SESSION --> LOGIN[LoginPage]
+    DP --> PERFORMER[LotePerformer]
     PERFORMER --> RULES[RN01–RN07]
-    PERFORMER --> DATAPOOL
-    MAIN --> REPORT[Resumo JSON e relatório PDF]
-    MAIN --> LOGS[Logs JSON Lines]
-    MAIN --> MAESTRO[Alertas, artefatos e finish_task]
+    PERFORMER --> SESSION
+    SESSION --> FORM[FormPage]
+    FORM --> PNG[PNG por item]
+    PERFORMER --> DP
+    MAIN --> LOG[Logs JSON Lines]
+    MAIN --> REPORT[Resumo JSON e PDF]
+    MAIN --> MAESTRO[Artefatos e finish_task]
 ```
 
-Os módulos de domínio não dependem diretamente do SDK do BotCity. Protocolos,
-fachadas e adaptadores permitem usar o gateway real no Runner e implementações
-em memória nos testes e na execução local.
+As responsabilidades principais são:
 
-A descrição dos componentes, limites de responsabilidade e diagramas de
-sequência está em [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md).
+| Componente | Responsabilidade |
+|---|---|
+| `src/main.py` | Validar o ambiente e coordenar Vault, Playwright, Dispatcher, Performer e encerramento. |
+| `src/dispatcher.py` | Publicar uma entrada por linha e reservar os campos de saída. |
+| `src/bot.py` | Classificar, processar e finalizar cada item de forma isolada. |
+| `src/validation.py` | Aplicar RN01–RN07 sem dependência da interface. |
+| `src/web_automation.py` | Gerenciar o ciclo da sessão Playwright e a evidência por item. |
+| `src/pages/login_page.py` | Encapsular autenticação, locators e waits. |
+| `src/pages/form_page.py` | Encapsular o formulário, a confirmação e a captura visual. |
+| `src/maestro_client.py` | Adaptar DataPool, alertas, artefatos e task. |
+| `src/vault_client.py` | Recuperar e validar a credencial somente em memória. |
 
-### Estratégia Page Object
-
-A automação web separa a coordenação do processo das interações com a
-interface:
-
-- `src/main.py` habilita a etapa web e fornece a credencial já recuperada;
-- `src/web_automation.py` cria e encerra o WebDriver, instancia os Page Objects
-  com o mesmo driver e timeout e coordena a sequência;
-- `LoginPage` centraliza locators, waits e ações da autenticação;
-- `FormPage` centraliza locators, preenchimento, confirmação e captura do PNG;
-- `src/validation.py` mantém as regras RN01–RN07 fora dos Page Objects.
-
-A senha recebida do Credentials Vault permanece somente em memória. Ela não é
-incluída em logs, exceções, relatórios ou evidências.
+Detalhes e diagramas de sequência estão em
+[`docs/ARQUITETURA.md`](docs/ARQUITETURA.md).
 
 ## Fluxo de execução
 
-1. `bot.py` carrega as configurações e reconhece o contexto local ou Runner.
-2. A configuração e a pasta de entrada são validadas antes do processamento.
-3. O Maestro recebe o alerta inicial quando a integração real está ativa.
-4. A credencial do ERP é recuperada e validada sem registrar a senha.
-5. Quando habilitado, o Selenium usa a credencial já recuperada para autenticar
-   pela `LoginPage`, preencher pela `FormPage` e gerar uma evidência PNG.
-6. O Dispatcher publica cada linha do CSV no DataPool.
-7. O Performer consome a fila e processa cada item em um `try/except` isolado.
-8. Cada item é concluído, rejeitado, marcado como falha técnica ou encaminhado
-   para revisão humana.
-9. O resumo JSON e o relatório PDF são persistidos em `relatorios/` e
-   publicados como artefatos da task.
-10. A task é finalizada e o encerramento operacional é registrado.
+1. `bot.py` carrega o ambiente e os argumentos opcionais do Runner.
+2. `Settings.validate()` valida configuração, caminhos e timeout.
+3. A ausência de `dados_entrada/` causa falha imediata e alerta no Maestro.
+4. O Vault é validado antes da criação ou do consumo de itens.
+5. Quando habilitada, a sessão Playwright inicia em modo headless e
+   `LoginPage.fazer_login()` utiliza a credencial recuperada.
+6. O Dispatcher publica o CSV no DataPool.
+7. O Performer obtém um item e aplica RN01–RN07.
+8. `FormPage.preencher_lote()` apresenta o resultado do item na aplicação
+   controlada e aguarda a confirmação.
+9. Uma captura `aprovado-*`, `divergencia-*` ou `erro-*` é produzida.
+10. `resultado_validacao`, `evidencia` e `mensagem_resultado` são atualizados no
+    DataPool antes de `report_done` ou `report_error`.
+11. O loop continua até o fim da fila.
+12. O resumo e o PDF são publicados, e a task é finalizada.
+13. Página, navegador e runtime Playwright são encerrados em `finally`.
 
-### Resultados da execução
-
-| Resultado | Significado |
-|---|---|
-| `SUCCESS` | Todos os itens foram processados sem erro ou revisão. |
-| `PARTIALLY_COMPLETED` | O ciclo terminou, mas existem rejeições de negócio ou revisões humanas. |
-| `FAILED` | Uma falha fatal impediu a conclusão normal do ciclo. |
-
-No Maestro, uma execução concluída com erros de negócio continua sendo
-finalizada como sucesso operacional. O detalhamento permanece nos itens do
-DataPool e no resumo da execução.
+Não existem `sleep()` para sincronização da interface. A camada web aguarda
+condições explícitas de visibilidade, disponibilidade e confirmação.
 
 ## Regras de validação
 
 | Regra | Comportamento |
 |---|---|
-| RN01 | Exige exatamente `lote_id`, `produto`, `linha`, `turno`, `status`, `responsavel`, `data` e `observacao`. |
-| RN02 | Exige todos os campos, exceto `observacao`. |
-| RN03 | Confirma que `lote_id` pertence à base configurada em `REFERENCE_LOTES`. |
+| RN01 | Reconhece somente os campos oficiais do lote e os três campos operacionais de saída. |
+| RN02 | Exige todos os campos de entrada, exceto `observacao`. |
+| RN03 | Confirma que `lote_id` pertence a `REFERENCE_LOTES`. |
 | RN04 | Aceita como estados finais apenas `APROVADO` e `REPROVADO`. |
 | RN05 | Normaliza `OK` para `APROVADO` e `NOK` para `REPROVADO`. |
-| RN06 | Encaminha `PENDENTE`, `EM ANALISE`, `A REVISAR` e `REVISAO` para revisão humana. |
-| RN07 | Exige observação para lotes com status final `REPROVADO`. |
+| RN06 | Encaminha estados ambíguos para revisão humana. |
+| RN07 | Exige observação quando o lote está reprovado. |
 
-RN01, RN02, RN03, RN04 e RN07 geram erro de negócio. RN06 gera revisão humana.
-Exceções inesperadas durante um item são classificadas como erro de sistema.
+As regras permanecem em `src/validation.py`. Os Page Objects apenas representam
+a interface e não decidem o resultado do negócio.
+
+## Resultados por item
+
+| `resultado_validacao` | Finalização | Evidência |
+|---|---|---|
+| `APROVADO` | `report_done` | `artefatos/aprovado-<lote>-<timestamp>.png` |
+| `DIVERGENCIA` | erro de negócio | `artefatos/divergencia-<lote>-<timestamp>.png` |
+| `REVISAO` | erro de negócio com motivo de revisão | `artefatos/divergencia-<lote>-<timestamp>.png` |
+| `ERRO` | erro de sistema | `artefatos/erro-<lote>-<timestamp>.png`, quando a captura for possível |
+
+O caminho gravado no DataPool, no log e no resumo é relativo à raiz do projeto,
+o que evita referências específicas de uma máquina ou Runner.
 
 ## Estrutura do projeto
 
 ```text
 .
-├── .github/workflows/ci.yml       # testes e build da imagem em CI
-├── artefatos/                     # evidências PNG geradas
+├── .github/workflows/ci.yml
+├── artefatos/                     # PNG gerado em runtime
 ├── dados_entrada/
-│   └── lotes_auditoria.csv        # massa de entrada de exemplo
+│   └── lotes_auditoria.csv
 ├── docs/
-│   ├── ADERENCIA_PAGE_OBJECTS.md  # requisitos da aula e evidências
-│   ├── ARQUITETURA.md             # componentes e sequências técnicas
-│   ├── DEPLOY_BOTCITY.md          # implantação e operação no Runner
-│   ├── RELEASE_V1.3.0.md          # notas da release Page Objects
-│   ├── REVISAO_BPMN_PDD.md        # aderência entre processo e código
-│   ├── diagrama_pdd.bpmn          # fonte editável do processo
-│   └── diagrama_pdd.svg           # visualização do BPMN
-├── web/
-│   └── index-lotes/
-│       ├── login.html              # autenticação web controlada
-│       └── index.html              # formulário de lotes
-├── logs/                          # logs JSON Lines
-├── relatorios/                    # resumos JSON e relatórios PDF
+│   ├── ADERENCIA_PAGE_OBJECTS.md
+│   ├── ARQUITETURA.md
+│   ├── DEPLOY_BOTCITY.md
+│   ├── REVISAO_BPMN_PDD.md
+│   ├── ROTEIRO_DEMONSTRACAO.md
+│   ├── diagrama_pdd.bpmn
+│   └── diagrama_pdd.svg
+├── logs/                          # JSON Lines gerado em runtime
+├── relatorios/                    # JSON e PDF gerados em runtime
 ├── scripts/
-│   └── build_botcity_package.py   # geração do pacote BotCity
+│   └── build_botcity_package.py
 ├── src/
-│   ├── bot.py                     # Performer
-│   ├── config.py                  # configuração e contexto do Runner
-│   ├── dispatcher.py              # CSV para DataPool
-│   ├── logging_config.py          # log estruturado e sanitização
-│   ├── maestro_client.py          # gateways local e BotCity
-│   ├── main.py                    # orquestração do ciclo
-│   ├── models.py                  # ExecutionResult
-│   ├── reporting.py               # relatório PDF de evidências
 │   ├── pages/
-│   │   ├── login_page.py          # Page Object da autenticação web
-│   │   └── form_page.py           # Page Object do formulário de lotes
-│   ├── validation.py              # RN01–RN07
-│   ├── vault_client.py            # Credentials Vault
-│   └── web_automation.py          # Selenium e evidências
-├── tests/                         # suíte automatizada
-├── .env.example                   # configuração segura de referência
-├── bot.py                         # entry point
+│   │   ├── login_page.py
+│   │   └── form_page.py
+│   ├── bot.py
+│   ├── config.py
+│   ├── dispatcher.py
+│   ├── logging_config.py
+│   ├── maestro_client.py
+│   ├── main.py
+│   ├── models.py
+│   ├── reporting.py
+│   ├── validation.py
+│   ├── vault_client.py
+│   └── web_automation.py
+├── tests/
+├── web/index-lotes/               # aplicação controlada
+├── .env.example
+├── bot.py
 ├── Dockerfile
 ├── docker-compose.yml
 ├── requirements.txt
 └── requirements-dev.txt
 ```
 
-Logs, capturas PNG e pacotes de `dist/` não são versionados. Os resultados
-consolidados em `relatorios/` são preservados como evidências de homologação.
+`.env`, logs, relatórios, PNG, pacotes e caches não são versionados. Os
+diretórios operacionais mantêm somente seus arquivos `.gitkeep`.
 
 ## Pré-requisitos
 
-### Execução local
-
 - Python 3.10 ou superior;
-- Google Chrome ou Chromium apenas quando o Selenium estiver habilitado;
-- Git para obter e versionar o projeto.
+- Git;
+- Chromium fornecido pelo Playwright ou instalado no ambiente;
+- para integração real, workspace e Runner ativos no BotCity Maestro.
 
-### Integração real
+O ambiente do Maestro deve possuir:
 
-- workspace e Runner ativos no BotCity Maestro;
 - DataPool `FilaAuditoriaLotes2`;
 - credencial `credencial_erp2`;
-- Chrome/Chromium e ChromeDriver compatíveis no host do Runner;
-- permissões para publicar artefatos e finalizar tasks.
+- permissão para alertas, artefatos e finalização de tasks.
 
-## Configuração do ambiente
-
-Clone o repositório:
+## Instalação
 
 ```bash
 git clone https://github.com/g-f307/conferencia-de-lotes.git
 cd conferencia-de-lotes
-```
-
-Crie e ative o ambiente virtual no Linux:
-
-```bash
 python -m venv .venv
 source .venv/bin/activate
+python -m pip install -r requirements-dev.txt
+python -m playwright install chromium
+cp .env.example .env
 ```
 
-No Windows PowerShell:
+No PowerShell:
 
 ```powershell
 python -m venv .venv
 .venv\Scripts\Activate.ps1
-```
-
-Instale as dependências e crie o `.env` local:
-
-```bash
 python -m pip install -r requirements-dev.txt
-cp .env.example .env
-```
-
-No PowerShell, substitua o último comando por:
-
-```powershell
+python -m playwright install chromium
 Copy-Item .env.example .env
 ```
 
-### Variáveis de ambiente
+O comando `playwright install chromium` é necessário somente quando não houver
+um Chromium compatível configurado em `PLAYWRIGHT_CHROMIUM_PATH`.
 
-| Variável | Finalidade | Padrão ou exemplo seguro |
+## Variáveis de ambiente
+
+| Variável | Finalidade | Padrão |
 |---|---|---|
-| `MAESTRO_ENABLED` | Seleciona o gateway real do Maestro. | `false` |
-| `VAULT_ENABLED` | Exige o Credentials Vault quando o Maestro está ativo. | `false` |
-| `MAESTRO_SERVER` | URL do workspace. | vazio |
-| `MAESTRO_LOGIN` | Login técnico usado fora do Runner. | vazio |
-| `MAESTRO_KEY` | Chave técnica usada fora do Runner. | vazio |
-| `MAESTRO_TASK_ID` | Task de teste fora do Runner; no Runner vem dos argumentos. | vazio |
-| `BOT_ID` | Identificador do bot nos logs e na operação. | `bot-conferencia-de-lotes-v2` |
-| `EXECUTION_ID` | Correlação dos logs; no Runner usa o `task_id`. | `execucao-local` |
-| `DATAPOOL_LABEL` | DataPool usado pelo Dispatcher e Performer. | `FilaAuditoriaLotes2` |
-| `VAULT_LABEL` | Label da credencial do ERP. | `credencial_erp2` |
-| `REFERENCE_LOTES` | IDs válidos separados por vírgula. | `L001,L002` |
-| `INPUT_DIR` | Pasta validada no fail-fast. | `dados_entrada` |
-| `INPUT_CSV` | CSV publicado pelo Dispatcher. | `dados_entrada/lotes_auditoria.csv` |
-| `LOG_FILE` | Destino do log estruturado. | `logs/execucao.log` |
-| `REPORT_DIR` | Destino do resumo JSON. | `relatorios` |
-| `PROCESSING_DELAY_SECONDS` | Atraso simulado entre itens. | `1` |
-| `WEB_AUTOMATION_ENABLED` | Ativa Selenium; no Runner é `true` quando ausente. | `false` local |
-| `WEB_TEST_URL` | URL ou caminho da página controlada. | `web/index-lotes/index.html` |
-| `WEB_ARTIFACT_DIR` | Destino das evidências PNG. | `artefatos` |
-| `WEB_TIMEOUT_SECONDS` | Limite dos waits explícitos. | `15` |
-| `CHROME_BIN` | Caminho explícito do Chrome/Chromium. | vazio |
-| `CHROMEDRIVER_PATH` | Caminho explícito do ChromeDriver. | vazio |
+| `MAESTRO_ENABLED` | Ativa o gateway BotCity. | `false` |
+| `VAULT_ENABLED` | Exige o Credentials Vault. | `false` |
+| `MAESTRO_SERVER` | URL do workspace fora do Runner. | vazio |
+| `MAESTRO_LOGIN` | Login técnico fora do Runner. | vazio |
+| `MAESTRO_KEY` | Chave técnica fora do Runner. | vazio |
+| `MAESTRO_TASK_ID` | Task controlada fora do Runner. | vazio |
+| `BOT_ID` | Identificador da automação. | `bot-conferencia-de-lotes-v2` |
+| `EXECUTION_ID` | Correlação dos logs. | `execucao-local` |
+| `DATAPOOL_LABEL` | Nome da fila. | `FilaAuditoriaLotes2` |
+| `VAULT_LABEL` | Nome da credencial. | `credencial_erp2` |
+| `REFERENCE_LOTES` | IDs de referência separados por vírgula. | `L001,L002` |
+| `INPUT_DIR` | Diretório validado no fail-fast. | `dados_entrada` |
+| `INPUT_CSV` | Massa publicada pelo Dispatcher. | `dados_entrada/lotes_auditoria.csv` |
+| `LOG_FILE` | Log JSON Lines. | `logs/execucao.log` |
+| `REPORT_DIR` | Resumo e PDF. | `relatorios` |
+| `PROCESSING_DELAY_SECONDS` | Atraso de demonstração após aprovação. | `0` |
+| `WEB_AUTOMATION_ENABLED` | Ativa a sessão Playwright. | `false` local |
+| `WEB_TEST_URL` | Aplicação controlada. | `web/index-lotes/index.html` |
+| `WEB_ARTIFACT_DIR` | Capturas por item. | `artefatos` |
+| `WEB_TIMEOUT_SECONDS` | Timeout dos waits por condição. | `15` |
+| `PLAYWRIGHT_CHROMIUM_PATH` | Chromium explícito do Runner. | vazio |
 
-Variáveis de caminho relativas são resolvidas a partir da raiz do projeto.
-Variáveis definidas pelo ambiente têm precedência sobre o arquivo `.env`.
-
-### Classificação das configurações
-
-- **Não sigilosas:** flags, labels, IDs de correlação, listas de referência,
-  caminhos e timeouts podem ser configurados no ambiente operacional.
-- **Acesso técnico:** `MAESTRO_LOGIN` e `MAESTRO_KEY` não devem receber valores
-  reais no repositório, na imagem ou no pacote. No Runner, o contexto é
-  fornecido pelos argumentos da task.
-- **Credencial de negócio:** a senha do ERP não é uma variável deste projeto e
-  deve existir somente no Credentials Vault.
-- **Token do Runner:** o terceiro argumento recebido por `bot.py` é administrado
-  pelo BotCity e nunca deve ser registrado.
+Caminhos relativos são resolvidos a partir da raiz do projeto. A senha do ERP
+não é uma variável de ambiente deste projeto.
 
 ## Credentials Vault
 
-O Credentials Vault deve possuir o label:
-
-```text
-credencial_erp2
-```
-
-Chaves obrigatórias:
+Crie o label `credencial_erp2` com as chaves:
 
 ```text
 username
 password
 ```
 
-A senha do ERP pertence exclusivamente ao Vault. Ela não pode ser adicionada ao
-`.env`, ao código, ao pacote, aos logs ou aos relatórios. Em execução local, o
-projeto utiliza uma credencial efêmera apenas para preservar o mesmo contrato.
+A ausência da credencial, do usuário ou da senha interrompe o fluxo antes da
+publicação e do processamento dos itens. Somente o nome do usuário pode aparecer
+no log.
 
 ## DataPool
 
-O DataPool `FilaAuditoriaLotes2` deve conter campos de texto com os mesmos nomes
-do CSV:
+Crie `FilaAuditoriaLotes2` com os onze campos de texto:
 
 ```text
 lote_id
@@ -338,19 +307,17 @@ status
 responsavel
 data
 observacao
+resultado_validacao
+evidencia
+mensagem_resultado
 ```
 
-O Dispatcher exige exatamente esse cabeçalho. O Performer associa o item à task
-do Runner e registra seu resultado individual no Maestro.
-
-A evidência PNG não é um campo do DataPool e não é anexada diretamente ao item.
-Ela é persistida em `artefatos/`. O resumo consolidado e o relatório de
-evidências são publicados separadamente no Maestro como
-`resumo_execucao.json` e `relatorio_evidencias.pdf`.
+Os oito primeiros são entradas. Os três últimos são inicializados vazios pelo
+Dispatcher e preenchidos pelo Performer antes da finalização individual.
 
 ## Execução local
 
-Com Maestro, Vault e Selenium desabilitados:
+Sem navegador:
 
 ```bash
 MAESTRO_ENABLED=false \
@@ -360,102 +327,7 @@ PROCESSING_DELAY_SECONDS=0 \
 python bot.py
 ```
 
-No PowerShell:
-
-```powershell
-$env:MAESTRO_ENABLED="false"
-$env:VAULT_ENABLED="false"
-$env:WEB_AUTOMATION_ENABLED="false"
-$env:PROCESSING_DELAY_SECONDS="0"
-python bot.py
-```
-
-A execução usa o gateway em memória, processa o CSV e gera:
-
-- `logs/execucao.log`;
-- `relatorios/resumo_execucao.json`;
-- `relatorios/relatorio_evidencias.pdf`.
-
-## Execução com Docker
-
-Construa a imagem:
-
-```bash
-docker build -t conferencia-de-lotes:local .
-```
-
-Execute o fluxo local:
-
-```bash
-mkdir -p logs relatorios artefatos
-docker compose up --build --abort-on-container-exit
-```
-
-Execute uma rodada pontual com Selenium:
-
-```bash
-WEB_AUTOMATION_ENABLED=true docker compose run --rm conferencia-de-lotes
-```
-
-O Compose monta `dados_entrada/` como somente leitura e persiste logs,
-relatórios e evidências no host. A imagem contém Chromium e ChromeDriver, sem
-download de driver durante a execução.
-
-## Execução no BotCity Runner
-
-O Runner chama o entry point no formato:
-
-```text
-bot.py <maestro-server> <task-id> <token>
-```
-
-Nesse contexto:
-
-- Maestro e Vault ficam ativos por padrão;
-- `task-id` identifica a execução e alimenta `EXECUTION_ID`;
-- Selenium fica ativo por padrão quando `WEB_AUTOMATION_ENABLED` não é definido;
-- `CHROME_BIN` e `CHROMEDRIVER_PATH` podem indicar os binários homologados;
-- a task é finalizada explicitamente por `finish_task`.
-
-O pacote homologado é gerado com:
-
-```bash
-python scripts/build_botcity_package.py --version 2
-```
-
-Artefato:
-
-```text
-dist/bot-conferencia-de-lotes-v2.zip
-```
-
-O procedimento completo, incluindo smoke test e rollback, está em
-[`docs/DEPLOY_BOTCITY.md`](docs/DEPLOY_BOTCITY.md).
-
-## Automação web e evidências
-
-O Selenium:
-
-- inicia Chrome/Chromium em modo headless;
-- abre a autenticação e delega a interação à `LoginPage`;
-- entrega o formulário à `FormPage` após o login;
-- utiliza waits explícitos encapsulados nos Page Objects;
-- valida a mensagem final por `FormPage.is_sucesso()`;
-- captura a confirmação por `FormPage.capturar_evidencia()`;
-- sempre encerra o navegador em `finally`.
-
-Em distribuições Debian/Ubuntu, Chromium e ChromeDriver podem ser instalados
-para desenvolvimento com:
-
-```bash
-sudo apt-get update
-sudo apt-get install chromium chromium-driver
-```
-
-O projeto não utiliza mais Playwright; portanto, não existe etapa
-`playwright install chromium`.
-
-Para executar localmente:
+Com Playwright e evidências por item:
 
 ```bash
 MAESTRO_ENABLED=false \
@@ -465,126 +337,131 @@ PROCESSING_DELAY_SECONDS=0 \
 python bot.py
 ```
 
-Se `CHROMEDRIVER_PATH` estiver vazio, o `webdriver-manager` pode obter um driver
-compatível no ambiente local. No Runner, utilize o driver homologado em
-`/usr/local/bin/chromedriver` para não depender de download.
+A execução local usa gateway em memória e credencial efêmera. Ao final,
+verifique:
 
-## Logs, relatórios e artefatos
-
-### Logs
-
-Cada linha de `logs/execucao.log` é um objeto JSON independente. Esse formato,
-conhecido como JSON Lines, facilita correlação, busca e ingestão por ferramentas
-de observabilidade.
-
-Campos principais:
-
-| Campo | Conteúdo |
-|---|---|
-| `timestamp` | Data e hora UTC em ISO 8601. |
-| `level` | Severidade (`INFO`, `WARNING` ou `ERROR`). |
-| `execution_id` | Identificador da execução. |
-| `bot_id` | Identificador da automação. |
-| `evento` | Código do evento operacional. |
-| `aplicacao` | Nome lógico da aplicação. |
-| `ambiente` | `local` ou `runner`. |
-| `usuario` | Usuário operacional, nunca a senha. |
-| `detalhes` | Formulário, status, mensagem e eventual exceção sanitizada. |
-
-Exemplo:
-
-```json
-{"timestamp":"2026-07-27T23:00:00+00:00","level":"INFO","execution_id":"execucao-local","bot_id":"bot-conferencia-de-lotes-v2","evento":"FIM_PROCESSAMENTO","aplicacao":"bot-conferencia-de-lotes-v2","ambiente":"local","usuario":"sistema","detalhes":{"formulario":"Resumo","status":"PARTIALLY_COMPLETED","mensagem":"Execucao finalizada"}}
+```text
+logs/execucao.log
+relatorios/resumo_execucao.json
+relatorios/relatorio_evidencias.pdf
+artefatos/*.png
 ```
 
-O formatador mascara atribuições e valores associados a senha, token, chave e
-API key antes da persistência.
+## Docker
 
-### Relatórios
+```bash
+mkdir -p logs relatorios artefatos
+docker compose up --build --abort-on-container-exit
+```
 
-`relatorios/resumo_execucao.json` contém:
+Para habilitar o navegador:
 
-- status e mensagem;
-- totais processados, rejeitados e ambíguos;
-- horários de início e término;
-- erros consolidados, quando existentes.
+```bash
+WEB_AUTOMATION_ENABLED=true docker compose run --rm conferencia-de-lotes
+```
 
-`relatorios/relatorio_evidencias.pdf` apresenta os identificadores da
-execução, os contadores consolidados e o parecer operacional. Quando o Selenium
-está habilitado e produz uma captura, o PNG também é incorporado ao documento.
-O PDF não inclui senha, token ou chave.
+A imagem instala Chromium e define
+`PLAYWRIGHT_CHROMIUM_PATH=/usr/bin/chromium`. Os diretórios de saída são
+montados no host.
 
-### Artefatos
+## BotCity Runner
 
-- `resumo_execucao.json`: publicado no Maestro;
-- `relatorio_evidencias.pdf`: publicado no Maestro;
-- `comprovante-<lote>-<timestamp>.png`: evidência local da automação web,
-  persistida em `artefatos/` e não anexada diretamente ao item do DataPool.
+O Runner invoca:
+
+```text
+bot.py <maestro-server> <task-id> <token>
+```
+
+Nesse contexto, Maestro, Vault e automação web ficam ativos por padrão, salvo
+configuração explícita de contingência. O token recebido não é registrado.
+
+Gere o pacote:
+
+```bash
+python scripts/build_botcity_package.py --version 2
+unzip -l dist/bot-conferencia-de-lotes-v2.zip
+```
+
+O ZIP contém somente o necessário para execução:
+
+```text
+bot.py
+requirements.txt
+src/
+dados_entrada/
+web/index-lotes/
+```
+
+O procedimento completo está em
+[`docs/DEPLOY_BOTCITY.md`](docs/DEPLOY_BOTCITY.md).
+
+## Logs, resumo e evidências
+
+Cada linha de `logs/execucao.log` é um objeto JSON independente, com
+`timestamp`, `level`, `execution_id`, `bot_id`, `evento`, `ambiente`, `usuario`
+e `detalhes`.
+
+Eventos relevantes:
+
+| Evento | Finalidade |
+|---|---|
+| `VALIDACAO_VAULT` | Confirma a disponibilidade da credencial. |
+| `PLAYWRIGHT_AMBIENTE` | Registra engine, caminho e versão do navegador. |
+| `INICIO_PLAYWRIGHT` / `FIM_PLAYWRIGHT` | Delimitam a sessão web. |
+| `INICIO_ITEM` / `RESULTADO_ITEM` | Delimitam o processamento do lote. |
+| `EVIDENCIA_ITEM` | Relaciona a captura ao item. |
+| `ERRO_WEB_ITEM` | Registra falha isolada da interação web. |
+| `PUBLICACAO_RESULTADOS` | Confirma JSON e PDF. |
+| `ENCERRAMENTO` | Confirma sucesso operacional. |
+
+`resumo_execucao.json` inclui total, aprovados, divergências, revisões,
+erros técnicos e a lista de caminhos das evidências. O PDF e o JSON são
+publicados como artefatos da task.
 
 ## Testes e integração contínua
 
-Execute a suíte:
-
 ```bash
 python -m pytest -q
+python -m pytest --cov=src --cov-report=term-missing --cov-fail-under=80
 ```
 
-Execute com cobertura mínima:
-
-```bash
-python -m pytest \
-  --cov=src \
-  --cov-report=term-missing \
-  --cov-fail-under=80
-```
-
-A documentação não fixa a quantidade de testes, pois ela evolui com o projeto.
-O critério é a conclusão integral da suíte e a cobertura mínima definida.
-
-O workflow [`.github/workflows/ci.yml`](.github/workflows/ci.yml) é acionado em
-pushes para `main` e em Pull Requests destinados a `main`. Ele:
-
-1. instala as dependências de desenvolvimento;
-2. executa a suíte com `pytest`;
-3. constrói a imagem Docker em um job independente.
-
-A CI não utiliza credenciais reais do Maestro ou do Vault.
+O workflow `.github/workflows/ci.yml` executa a suíte, constrói a imagem Docker
+e roda um smoke test Playwright headless com massa e credencial efêmera
+controladas. Ele é acionado em Pull Requests e em alterações da `main`, sem
+utilizar credenciais reais.
 
 ## Tratamento de erros
 
-| Categoria | Exemplo | Comportamento |
-|---|---|---|
-| Configuração | variável obrigatória ausente | Falha controlada antes do processamento. |
-| Entrada | pasta `dados_entrada/` ausente | Fail-fast e alerta de erro no Maestro. |
-| Negócio | RN01, RN02, RN03, RN04 ou RN07 | Item marcado com erro e fila continua. |
-| Revisão humana | RN06 | Item separado para análise sem criar estado final “pendente”. |
-| Sistema por item | exceção inesperada no Performer | Item marcado como erro técnico e fila continua. |
-| Sistema fatal | falha de Vault, Selenium, Dispatcher ou Maestro | Execução `FAILED`, log estruturado e tentativa de finalizar a task. |
+| Categoria | Comportamento |
+|---|---|
+| Configuração ou entrada | Falha antes da fila. |
+| Vault ou login inicial | Falha antes da publicação dos itens. |
+| Divergência RN01–RN07 | Item finalizado como erro de negócio; fila continua. |
+| Revisão humana | Item separado com motivo; fila continua. |
+| Timeout ou falha web de um item | Captura de erro, saída `ERRO` e fila continua. |
+| Falha ao obter o próximo item | Falha fatal, pois não há item seguro para atualizar. |
+
+Uma execução com divergências pode resultar em `PARTIALLY_COMPLETED` e ainda ser
+finalizada no Maestro como sucesso operacional.
 
 ## Segurança
 
-- nenhum segredo é versionado;
-- a senha do ERP fica somente no Credentials Vault;
-- `.env`, logs, relatórios, evidências e pacotes gerados são ignorados pelo Git;
-- o pacote BotCity exclui arquivos locais e caches;
-- logs sanitizam valores sensíveis;
-- imagens Docker não recebem credenciais no build;
-- a `main` exige Pull Request e revisão;
-- force push e exclusão da branch principal são bloqueados por ruleset.
+- `.env` real nunca é versionado ou empacotado;
+- a senha existe somente no Vault ou na credencial efêmera local;
+- logs sanitizam senha, token, chave e API key;
+- capturas usam somente a aplicação e a massa controladas;
+- imagens e pacotes não recebem credenciais durante o build;
+- logs, relatórios, PNG e `dist/` permanecem fora do Git.
 
 ## Documentação complementar
 
 | Documento | Finalidade |
 |---|---|
-| [`docs/ADERENCIA_PAGE_OBJECTS.md`](docs/ADERENCIA_PAGE_OBJECTS.md) | Matriz de requisitos, implementação e evidências da refatoração. |
-| [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md) | Componentes, sequências, limites e manutenção. |
-| [`docs/DEPLOY_BOTCITY.md`](docs/DEPLOY_BOTCITY.md) | Build, implantação, smoke test e rollback. |
-| [`docs/RELEASE_V1.3.0.md`](docs/RELEASE_V1.3.0.md) | Notas técnicas da entrega Page Objects. |
-| [`docs/REVISAO_BPMN_PDD.md`](docs/REVISAO_BPMN_PDD.md) | Rastreabilidade do processo e das regras. |
-| [`docs/diagrama_pdd.bpmn`](docs/diagrama_pdd.bpmn) | Fonte BPMN editável. |
-| [`docs/diagrama_pdd.svg`](docs/diagrama_pdd.svg) | Visualização do processo. |
-| [`docs/Regras de validação a aplicar - Gabriel, Marcelo e Rebecca.docx.pdf`](docs/Regras%20de%20validação%20a%20aplicar%20-%20Gabriel,%20Marcelo%20e%20Rebecca.docx.pdf) | Documento-base das regras. |
-| [`docs/Inspeção de Lotes - Gabriel, Marcelo e Rebecca.xlsx`](docs/Inspeção%20de%20Lotes%20-%20Gabriel,%20Marcelo%20e%20Rebecca.xlsx) | Massa de referência do levantamento. |
+| [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md) | Componentes, sequência e limites. |
+| [`docs/REVISAO_BPMN_PDD.md`](docs/REVISAO_BPMN_PDD.md) | Aderência do processo e das regras. |
+| [`docs/ADERENCIA_PAGE_OBJECTS.md`](docs/ADERENCIA_PAGE_OBJECTS.md) | Matriz técnica da entrega. |
+| [`docs/DEPLOY_BOTCITY.md`](docs/DEPLOY_BOTCITY.md) | Implantação, smoke test e rollback. |
+| [`docs/ROTEIRO_DEMONSTRACAO.md`](docs/ROTEIRO_DEMONSTRACAO.md) | Roteiro objetivo da demonstração. |
 
 ## Equipe
 
@@ -593,25 +470,15 @@ Xavier.
 
 ## Releases
 
-| Release GitHub | Marco |
+| Release | Marco |
 |---|---|
 | `v1.0.0` | Primeira versão implantável no BotCity Maestro. |
-| `v1.1.0` | Consolidação do fluxo completo da automação. |
-| `v1.2.0` | Selenium, homologação no Runner e documentação técnica consolidada. |
-| `v1.3.0` | Refatoração com Page Objects, integração Selenium e consolidação documental da atividade. |
-
-Na entrega `v1.2.0`, o ambiente BotCity utiliza:
-
-```text
-Bot ID: bot-conferencia-de-lotes-v2
-Versão no Maestro: 2
-Pacote: bot-conferencia-de-lotes-v2.zip
-```
-
-O versionamento do GitHub registra a evolução funcional do projeto; a
-identificação `v2` registra a implantação homologada no BotCity.
+| `v1.1.0` | Consolidação do fluxo corporativo. |
+| `v1.2.0` | Automação Selenium homologada no Runner. |
+| `v1.3.0` | Page Objects integrados ao fluxo Selenium. |
+| `v1.4.0` | Integração Playwright por item com DataPool e evidências rastreáveis. |
 
 ## Licença
 
 Este repositório não possui licença de uso definida. O código e os materiais
-devem ser utilizados conforme as orientações da atividade acadêmica e da equipe.
+devem ser utilizados conforme as orientações da atividade acadêmica.

@@ -6,6 +6,8 @@ __pycache__/
 .coverage
 htmlcov/
 logs/*.log
+relatorios/*
+!relatorios/.gitkeep
 artefatos/*.png
 dist/
 Atividade.pdf
