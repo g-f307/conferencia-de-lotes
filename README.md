@@ -102,6 +102,21 @@ em memória nos testes e na execução local.
 A descrição dos componentes, limites de responsabilidade e diagramas de
 sequência está em [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md).
 
+### Estratégia Page Object
+
+A automação web separa a coordenação do processo das interações com a
+interface:
+
+- `src/main.py` habilita a etapa web e fornece a credencial já recuperada;
+- `src/web_automation.py` cria e encerra o WebDriver, instancia os Page Objects
+  com o mesmo driver e timeout e coordena a sequência;
+- `LoginPage` centraliza locators, waits e ações da autenticação;
+- `FormPage` centraliza locators, preenchimento, confirmação e captura do PNG;
+- `src/validation.py` mantém as regras RN01–RN07 fora dos Page Objects.
+
+A senha recebida do Credentials Vault permanece somente em memória. Ela não é
+incluída em logs, exceções, relatórios ou evidências.
+
 ## Fluxo de execução
 
 1. `bot.py` carrega as configurações e reconhece o contexto local ou Runner.
@@ -154,6 +169,7 @@ Exceções inesperadas durante um item são classificadas como erro de sistema.
 ├── dados_entrada/
 │   └── lotes_auditoria.csv        # massa de entrada de exemplo
 ├── docs/
+│   ├── ADERENCIA_PAGE_OBJECTS.md  # requisitos da aula e evidências
 │   ├── ARQUITETURA.md             # componentes e sequências técnicas
 │   ├── DEPLOY_BOTCITY.md          # implantação e operação no Runner
 │   ├── GUIA_COLABORACAO_GIT.md    # processo de colaboração da equipe
@@ -326,6 +342,10 @@ observacao
 O Dispatcher exige exatamente esse cabeçalho. O Performer associa o item à task
 do Runner e registra seu resultado individual no Maestro.
 
+A evidência PNG não é um campo do DataPool e não é anexada diretamente ao item.
+Ela é persistida em `artefatos/`. O resumo consolidado da execução é publicado
+separadamente no Maestro como `resumo_execucao.json`.
+
 ## Execução local
 
 Com Maestro, Vault e Selenium desabilitados:
@@ -414,12 +434,11 @@ O procedimento completo, incluindo smoke test e rollback, está em
 O Selenium:
 
 - inicia Chrome/Chromium em modo headless;
-- preenche o número do lote com `send_keys`;
-- seleciona produto e status;
-- aguarda o botão com `element_to_be_clickable`;
-- aguarda a confirmação com `visibility_of_element_located`;
-- valida o texto de sucesso;
-- captura a confirmação em PNG;
+- abre a autenticação e delega a interação à `LoginPage`;
+- entrega o formulário à `FormPage` após o login;
+- utiliza waits explícitos encapsulados nos Page Objects;
+- valida a mensagem final por `FormPage.is_sucesso()`;
+- captura a confirmação por `FormPage.capturar_evidencia()`;
 - sempre encerra o navegador em `finally`.
 
 Em distribuições Debian/Ubuntu, Chromium e ChromeDriver podem ser instalados
@@ -490,7 +509,8 @@ API key antes da persistência.
 ### Artefatos
 
 - `resumo_execucao.json`: publicado no Maestro;
-- `comprovante-<lote>-<timestamp>.png`: evidência da automação web.
+- `comprovante-<lote>-<timestamp>.png`: evidência local da automação web,
+  persistida em `artefatos/` e não anexada diretamente ao item do DataPool.
 
 ## Testes e integração contínua
 
@@ -547,6 +567,7 @@ A CI não utiliza credenciais reais do Maestro ou do Vault.
 
 | Documento | Finalidade |
 |---|---|
+| [`docs/ADERENCIA_PAGE_OBJECTS.md`](docs/ADERENCIA_PAGE_OBJECTS.md) | Matriz de requisitos, implementação e evidências da refatoração. |
 | [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md) | Componentes, sequências, limites e manutenção. |
 | [`docs/DEPLOY_BOTCITY.md`](docs/DEPLOY_BOTCITY.md) | Build, implantação, smoke test e rollback. |
 | [`docs/REVISAO_BPMN_PDD.md`](docs/REVISAO_BPMN_PDD.md) | Rastreabilidade do processo e das regras. |
@@ -584,7 +605,7 @@ independentes de implementação, testes, build e documentação.
 |---|---|
 | `v1.0.0` | Primeira versão implantável no BotCity Maestro. |
 | `v1.1.0` | Consolidação do fluxo completo da automação. |
-| `v1.2.0` | Release prevista para Selenium, homologação no Runner e documentação final. |
+| `v1.2.0` | Selenium, homologação no Runner e documentação técnica consolidada. |
 
 Na entrega `v1.2.0`, o ambiente BotCity utiliza:
 
