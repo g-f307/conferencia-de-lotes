@@ -1,331 +1,181 @@
 from pathlib import Path
 
 import pytest
-from selenium.common.exceptions import InvalidElementStateException, TimeoutException
-from selenium.webdriver.common.by import By
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
-from src.pages.form_page import FormPage, FormPageTimeoutError
+from src.pages.form_page import (
+    FormPage,
+    FormPageResultError,
+    FormPageTimeoutError,
+)
 
 
-class FakeElement:
-    def __init__(
-        self,
-        *,
-        text="",
-        displayed=True,
-        enabled=True,
-        tag_name="input",
-        clear_allowed=True,
-        screenshot_succeeds=True,
-    ):
+class FakeLocator:
+    def __init__(self, *, text="", result="APROVADO", timeout=False):
         self.actions = []
         self.text = text
-        self.displayed = displayed
-        self.enabled = enabled
-        self.tag_name = tag_name
-        self.clear_allowed = clear_allowed
-        self.screenshot_succeeds = screenshot_succeeds
+        self.result = result
+        self.timeout = timeout
 
-    def clear(self):
-        if not self.clear_allowed:
-            raise InvalidElementStateException("clear indisponivel para este elemento")
-        self.actions.append(("clear",))
+    def fill(self, value, timeout=None):
+        self.actions.append(("fill", value, timeout))
 
-    def send_keys(self, value):
-        self.actions.append(("send_keys", value))
+    def select_option(self, label=None, timeout=None):
+        self.actions.append(("select_option", label, timeout))
 
-    def click(self):
-        self.actions.append(("click",))
+    def check(self, timeout=None):
+        self.actions.append(("check", timeout))
 
-    def screenshot(self, path):
-        self.actions.append(("screenshot", path))
-        if self.screenshot_succeeds:
-            Path(path).write_bytes(b"fake-png")
-        return self.screenshot_succeeds
+    def click(self, timeout=None):
+        self.actions.append(("click", timeout))
 
-    def is_displayed(self):
-        return self.displayed
+    def wait_for(self, state=None, timeout=None):
+        self.actions.append(("wait_for", state, timeout))
+        if self.timeout:
+            raise PlaywrightTimeoutError("timeout de teste")
 
-    def is_enabled(self):
-        return self.enabled
+    def inner_text(self, timeout=None):
+        return self.text
+
+    def get_attribute(self, name):
+        assert name == "data-resultado"
+        return self.result
 
 
-class FakeOption(FakeElement):
-    def __init__(self, text):
-        super().__init__(text=text, tag_name="option")
-        self.selected = False
-
-    def click(self):
-        self.selected = True
-        self.actions.append(("click",))
-
-    def is_selected(self):
-        return self.selected
-
-    def value_of_css_property(self, css_property):
-        values = {
-            "visibility": "visible",
-            "display": "block",
-            "opacity": "1",
-        }
-        return values[css_property]
-
-
-class FakeSelectElement(FakeElement):
-    def __init__(self, options):
-        super().__init__(tag_name="select", clear_allowed=False)
-        self.options = {option_text: FakeOption(option_text) for option_text in options}
-
-    def get_dom_attribute(self, name):
-        return None
-
-    def find_elements(self, by, value):
-        if by != By.XPATH:
-            return []
-
-        return [
-            option
-            for option_text, option in self.options.items()
-            if f'"{option_text}"' in value or f"'{option_text}'" in value
-        ]
-
-
-class FakeDriver:
+class FakePage:
     def __init__(
         self,
         *,
-        button_enabled=True,
-        confirmation_visible=True,
-        confirmation_text="Lote processado com sucesso.",
+        result="APROVADO",
+        message="Aprovado — lote L001",
+        result_timeout=False,
     ):
-        self.elements = {
-            FormPage.CAMPO_NUMERO_LOTE: FakeElement(),
-            FormPage.CAMPO_PRODUTO: FakeSelectElement(["Monitor", "Scanner"]),
-            FormPage.STATUS_PENDENTE: FakeElement(),
-            FormPage.STATUS_PROCESSAMENTO: FakeElement(),
-            FormPage.STATUS_CONCLUIDO: FakeElement(),
-            FormPage.BOTAO_PROCESSAR: FakeElement(enabled=button_enabled),
-            FormPage.MENSAGEM_RESULTADO: FakeElement(
-                text=confirmation_text,
-                displayed=confirmation_visible,
-            ),
+        self.numero = FakeLocator()
+        self.produto = FakeLocator()
+        self.mensagem_configurada = FakeLocator()
+        self.statuses = {
+            name: FakeLocator()
+            for name in FormPage.RESULTADOS_VISUAIS.values()
         }
+        self.botao = FakeLocator()
+        self.resultado = FakeLocator(
+            text=message,
+            result=result,
+            timeout=result_timeout,
+        )
+        self.calls = []
 
-    def find_element(self, by, value):
-        return self.elements[(by, value)]
+    def get_by_label(self, name, exact=False):
+        self.calls.append(("label", name, exact))
+        return {
+            FormPage.ROTULO_NUMERO_LOTE: self.numero,
+            FormPage.ROTULO_PRODUTO: self.produto,
+            FormPage.ROTULO_MENSAGEM_RESULTADO: self.mensagem_configurada,
+        }[name]
 
+    def get_by_role(self, role, name=None, exact=False):
+        self.calls.append(("role", role, name, exact))
+        if role == "radio":
+            return self.statuses[name]
+        if role == "button":
+            return self.botao
+        return self.resultado
 
-class ImmediateWait:
-    def __init__(self, driver, timeout):
-        self.driver = driver
-        self.timeout = timeout
-
-    def until(self, condition):
-        result = condition(self.driver)
-        if not result:
-            raise TimeoutException("timeout de teste")
-        return result
-
-
-def build_form_page(driver, timeout=15):
-    return FormPage(
-        driver,
-        timeout_seconds=timeout,
-        wait_factory=ImmediateWait,
-    )
-
-
-def test_form_page_centraliza_locators():
-    assert FormPage.CAMPO_NUMERO_LOTE == (By.ID, "numero-lote")
-    assert FormPage.CAMPO_PRODUTO == (By.ID, "produto")
-    assert FormPage.STATUS_PENDENTE == (
-        By.XPATH,
-        '//label[.//input[@data-testid="status-pendente"]]',
-    )
-    assert FormPage.STATUS_PROCESSAMENTO == (
-        By.XPATH,
-        '//label[.//input[@data-testid="status-processamento"]]',
-    )
-    assert FormPage.STATUS_CONCLUIDO == (
-        By.XPATH,
-        '//label[.//input[@data-testid="status-concluido"]]',
-    )
-    assert FormPage.BOTAO_PROCESSAR == (By.ID, "botao-processar")
-    assert FormPage.MENSAGEM_RESULTADO == (By.ID, "mensagem")
-    assert FormPage.STATUS_OPCOES["Pendente"] == FormPage.STATUS_PENDENTE
+    def screenshot(self, path, full_page=False):
+        self.calls.append(("screenshot", path, full_page))
+        Path(path).write_bytes(b"\x89PNG\r\n\x1a\nfake")
 
 
-def test_preencher_lote_preenche_campos_status_e_envia_formulario():
-    driver = FakeDriver()
-    dados_lote = {
-        "numero_lote": "LOTE-TESTE-001",
-        "produto": "Scanner",
-        "status": "Concluido",
-    }
-
-    build_form_page(driver).preencher_lote(dados_lote)
-
-    assert driver.elements[FormPage.CAMPO_NUMERO_LOTE].actions == [
-        ("clear",),
-        ("send_keys", "LOTE-TESTE-001"),
-    ]
-    produto = driver.elements[FormPage.CAMPO_PRODUTO]
-    assert produto.actions == []
-    assert produto.options["Scanner"].actions == [("click",)]
-    assert produto.options["Scanner"].is_selected() is True
-    assert driver.elements[FormPage.STATUS_CONCLUIDO].actions == [("click",)]
-    assert driver.elements[FormPage.BOTAO_PROCESSAR].actions == [("click",)]
-
-
-def test_preencher_lote_aceita_lote_id_como_alias_do_numero():
-    driver = FakeDriver()
-    dados_lote = {
-        "lote_id": "LOTE-ALIAS-001",
+def dados(**overrides):
+    item = {
+        "lote_id": "L001",
         "produto": "Monitor",
-        "status": "Pendente",
+        "resultado_validacao": "APROVADO",
+        "mensagem_resultado": "Lote aprovado",
     }
-
-    build_form_page(driver).preencher_lote(dados_lote)
-
-    assert driver.elements[FormPage.CAMPO_NUMERO_LOTE].actions == [
-        ("clear",),
-        ("send_keys", "LOTE-ALIAS-001"),
-    ]
+    item.update(overrides)
+    return item
 
 
-def test_preencher_lote_rejeita_status_desconhecido_com_contexto():
-    driver = FakeDriver()
-    dados_lote = {
-        "numero_lote": "LOTE-TESTE-002",
-        "produto": "Scanner",
-        "status": "Cancelado",
-    }
-
-    with pytest.raises(ValueError, match="Status.*LOTE-TESTE-002.*Cancelado"):
-        build_form_page(driver).preencher_lote(dados_lote)
-
-    assert driver.elements[FormPage.BOTAO_PROCESSAR].actions == []
+def test_form_page_centraliza_locators_semanticos():
+    assert FormPage.ROTULO_NUMERO_LOTE == "Número do lote"
+    assert FormPage.ROTULO_PRODUTO == "Produto"
+    assert FormPage.NOME_BOTAO_PROCESSAR == "Processar lote"
+    assert FormPage.RESULTADOS_VISUAIS["DIVERGENCIA"] == "Divergência"
 
 
-def test_preencher_lote_rejeita_produto_inexistente_com_contexto():
-    driver = FakeDriver()
+def test_preencher_lote_usa_dados_do_item_e_resultado_recebido():
+    page = FakePage()
 
-    with pytest.raises(ValueError, match="Produto.*LOTE-TESTE-004.*Inexistente"):
-        build_form_page(driver).preencher_lote(
-            {
-                "numero_lote": "LOTE-TESTE-004",
-                "produto": "Inexistente",
-                "status": "Pendente",
-            }
+    message = FormPage(page).preencher_lote(dados())
+
+    assert page.numero.actions[0][:2] == ("fill", "L001")
+    assert page.produto.actions[0][:2] == ("select_option", "Monitor")
+    assert page.statuses["Aprovado"].actions[0][0] == "check"
+    assert page.mensagem_configurada.actions[0][:2] == ("fill", "Lote aprovado")
+    assert page.botao.actions[0][0] == "click"
+    assert message == "Aprovado — lote L001"
+
+
+def test_preencher_lote_usa_fallbacks_para_dados_invalidos():
+    page = FakePage(result="DIVERGENCIA", message="Divergência")
+
+    FormPage(page).preencher_lote(
+        dados(
+            lote_id="",
+            produto="",
+            resultado_validacao="DIVERGENCIA",
         )
+    )
 
-    assert driver.elements[FormPage.BOTAO_PROCESSAR].actions == []
+    assert page.numero.actions[0][1] == "Lote sem identificação"
+    assert page.produto.actions[0][1] == "Não informado"
+    assert page.statuses["Divergência"].actions[0][0] == "check"
 
 
-def test_preencher_lote_informa_timeout_do_botao_com_contexto():
-    driver = FakeDriver(button_enabled=False)
-
-    with pytest.raises(
-        FormPageTimeoutError,
-        match="Botao de processamento.*LOTE-TESTE-003.*15 segundos",
-    ):
-        build_form_page(driver).preencher_lote(
-            {
-                "numero_lote": "LOTE-TESTE-003",
-                "produto": "Scanner",
-                "status": "Pendente",
-            }
+def test_preencher_lote_rejeita_resultado_desconhecido():
+    with pytest.raises(ValueError, match="Resultado inválido"):
+        FormPage(FakePage()).preencher_lote(
+            dados(resultado_validacao="DESCONHECIDO")
         )
 
 
-def test_preencher_lote_informa_timeout_do_status_com_contexto():
-    driver = FakeDriver()
-    driver.elements[FormPage.STATUS_CONCLUIDO].displayed = False
+def test_validar_resultado_confirma_classificacao_visual():
+    page = FakePage(result="REVISAO", message="Revisão humana solicitada")
 
-    with pytest.raises(
-        FormPageTimeoutError,
-        match="status Concluido.*LOTE-TESTE-005.*15 segundos.*status-concluido",
-    ):
-        build_form_page(driver).preencher_lote(
-            {
-                "numero_lote": "LOTE-TESTE-005",
-                "produto": "Scanner",
-                "status": "Concluido",
-            }
-        )
+    message = FormPage(page).validar_resultado("REVISAO")
 
-    assert driver.elements[FormPage.BOTAO_PROCESSAR].actions == []
+    assert message == "Revisão humana solicitada"
 
 
-def test_preencher_lote_informa_timeout_do_produto_com_contexto():
-    driver = FakeDriver()
-    driver.elements[FormPage.CAMPO_PRODUTO].displayed = False
+def test_validar_resultado_rejeita_classificacao_diferente():
+    page = FakePage(result="DIVERGENCIA")
 
-    with pytest.raises(
-        FormPageTimeoutError,
-        match="produto.*LOTE-TESTE-006.*15 segundos.*produto",
-    ):
-        build_form_page(driver).preencher_lote(
-            {
-                "numero_lote": "LOTE-TESTE-006",
-                "produto": "Scanner",
-                "status": "Pendente",
-            }
-        )
+    with pytest.raises(FormPageResultError, match="resultado esperado"):
+        FormPage(page).validar_resultado("APROVADO")
 
 
-def test_preencher_lote_informa_timeout_do_numero_com_contexto():
-    driver = FakeDriver()
-    driver.elements[FormPage.CAMPO_NUMERO_LOTE].displayed = False
+def test_resultado_trata_timeout():
+    page = FakePage(result_timeout=True)
 
-    with pytest.raises(
-        FormPageTimeoutError,
-        match="numero do lote.*LOTE-TESTE-007.*15 segundos.*numero-lote",
-    ):
-        build_form_page(driver).preencher_lote(
-            {
-                "numero_lote": "LOTE-TESTE-007",
-                "produto": "Scanner",
-                "status": "Pendente",
-            }
-        )
+    with pytest.raises(FormPageTimeoutError, match="não ficou visível"):
+        FormPage(page).validar_resultado("APROVADO")
 
 
-def test_is_sucesso_aguarda_e_valida_mensagem_final():
-    driver = FakeDriver(confirmation_text="Lote processado com sucesso.")
+def test_capturar_evidencia_confirma_png(tmp_path):
+    destination = tmp_path / "artefatos" / "aprovado-L001.png"
 
-    assert build_form_page(driver).is_sucesso() is True
+    result = FormPage(FakePage()).capturar_evidencia(destination)
 
-
-def test_is_sucesso_retorna_falso_para_mensagem_invalida():
-    driver = FakeDriver(confirmation_text="Falha ao processar o lote.")
-
-    assert build_form_page(driver).is_sucesso() is False
+    assert result == destination
+    assert destination.read_bytes().startswith(b"\x89PNG")
 
 
-def test_capturar_evidencia_usa_mensagem_final(tmp_path):
-    driver = FakeDriver()
-    evidence_path = tmp_path / "comprovante.png"
-
-    result = build_form_page(driver).capturar_evidencia(evidence_path)
-
-    assert result is True
-    assert evidence_path.is_file()
-    assert driver.elements[FormPage.MENSAGEM_RESULTADO].actions == [
-        ("screenshot", str(evidence_path))
-    ]
-
-
-def test_is_sucesso_trata_confirmacao_ausente_ou_timeout():
-    driver = FakeDriver(confirmation_visible=False)
-
-    with pytest.raises(
-        FormPageTimeoutError,
-        match="Mensagem de resultado.*15 segundos.*mensagem",
-    ):
-        build_form_page(driver).is_sucesso()
+def test_is_sucesso_consulta_estado_da_interface():
+    assert FormPage(FakePage(result="APROVADO")).is_sucesso() is True
+    assert FormPage(FakePage(result="DIVERGENCIA")).is_sucesso() is False
 
 
 def test_form_page_rejeita_timeout_invalido():
     with pytest.raises(ValueError, match="timeout_seconds"):
-        build_form_page(FakeDriver(), timeout=0)
+        FormPage(FakePage(), timeout_seconds=0)

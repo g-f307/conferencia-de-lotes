@@ -5,14 +5,13 @@ from zipfile import ZipFile
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_dockerfile_instala_selenium_chromium_e_chromedriver():
+def test_dockerfile_instala_playwright_e_chromium_headless():
     content = (PROJECT_ROOT / "Dockerfile").read_text(encoding="utf-8")
 
-    assert "CHROME_BIN=/usr/bin/chromium" in content
-    assert "CHROMEDRIVER_PATH=/usr/bin/chromedriver" in content
+    assert "PLAYWRIGHT_CHROMIUM_PATH=/usr/bin/chromium" in content
     assert "HOME=/tmp" in content
-    assert "chromium chromium-driver" in content
-    assert "playwright" not in content.lower()
+    assert "apt-get install --yes --no-install-recommends chromium" in content
+    assert "chromedriver" not in content.lower()
     assert "web/index-lotes/" in content
     assert "artefatos" in content
 
@@ -34,7 +33,19 @@ def test_compose_mapeia_volumes_operacionais():
     assert "./artefatos:/app/artefatos" in content
     assert "WEB_AUTOMATION_ENABLED" in content
     assert "WEB_TIMEOUT_SECONDS" in content
+    assert "PLAYWRIGHT_CHROMIUM_PATH" in content
     assert "HOME: /tmp" in content
+
+
+def test_ci_executa_smoke_test_playwright_na_imagem():
+    content = (
+        PROJECT_ROOT / ".github" / "workflows" / "ci.yml"
+    ).read_text(encoding="utf-8")
+
+    assert "Executar smoke test Playwright" in content
+    assert "WEB_AUTOMATION_ENABLED=true" in content
+    assert "REFERENCE_LOTES=L001,L002" in content
+    assert "conferencia-de-lotes:ci" in content
 
 
 def test_pacote_botcity_inclui_pagina_web_local():
@@ -50,13 +61,13 @@ def test_pacote_botcity_inclui_pagina_web_local():
     assert "web/index-lotes/login.js" in package_files
 
 
-def test_requirements_do_pacote_usa_selenium_sem_playwright():
+def test_requirements_do_pacote_usa_playwright_sem_selenium():
     requirements = (PROJECT_ROOT / "requirements.txt").read_text(encoding="utf-8")
 
-    assert "selenium" in requirements
-    assert "webdriver-manager" in requirements
+    assert "playwright" in requirements
+    assert "selenium" not in requirements
+    assert "webdriver-manager" not in requirements
     assert "reportlab" in requirements
-    assert "playwright" not in requirements.lower()
 
 
 def test_pacote_botcity_exclui_arquivos_locais_e_caches():
@@ -90,7 +101,7 @@ def test_build_botcity_package_usa_versao_no_nome_do_artefato(tmp_path):
         (tmp_path / directory).mkdir(parents=True)
         (tmp_path / directory / ".gitkeep").write_text("", encoding="utf-8")
     (tmp_path / "bot.py").write_text("print('bot')\n", encoding="utf-8")
-    (tmp_path / "requirements.txt").write_text("selenium\n", encoding="utf-8")
+    (tmp_path / "requirements.txt").write_text("playwright\n", encoding="utf-8")
     (tmp_path / ".env").write_text("SECRET=nao-incluir\n", encoding="utf-8")
 
     artifact = build_package(

@@ -3,255 +3,148 @@ from pathlib import Path
 
 import pytest
 
-from src.pages import FormPageTimeoutError, LoginPageTimeoutError
 from src.vault_client import ErpCredential
 from src.web_automation import (
+    PlaywrightWebSession,
     WebAutomationEnvironmentError,
-    WebAutomationEvidenceError,
-    WebAutomationTimeoutError,
-    WebFormData,
-    build_chrome_driver,
+    WebItemResult,
     build_evidence_path,
-    describe_selenium_environment,
+    describe_playwright_environment,
     executable_version,
-    fill_and_submit_lote,
-    resolve_chrome_binary,
-    resolve_chromedriver_binary,
-    resolve_configured_executable,
+    relative_evidence_path,
+    resolve_chromium_binary,
     resolve_login_url,
     resolve_web_url,
-    run_web_automation,
 )
 
 
-class FakeDriver:
-    def __init__(self):
-        self.opened_url = None
-        self.quit_called = False
+class FakePage:
+    def __init__(self, state, *, screenshot_error=None):
+        self.state = state
+        self.screenshot_error = screenshot_error
 
-    def get(self, url):
-        self.opened_url = url
+    def set_default_timeout(self, timeout):
+        self.state["timeout"] = timeout
 
-    def quit(self):
-        self.quit_called = True
+    def goto(self, url, **kwargs):
+        self.state["goto"] = (url, kwargs)
+
+    def screenshot(self, *, path, full_page):
+        self.state["screenshots"].append((path, full_page))
+        if self.screenshot_error is not None:
+            raise self.screenshot_error
+        destination = Path(path)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(b"fake-png")
+
+    def close(self):
+        self.state["page_closed"] += 1
 
 
-def install_page_object_fakes(
-    monkeypatch,
-    *,
-    success=True,
-    login_error=None,
-    form_error=None,
-    screenshot_succeeds=True,
-    screenshot_writes_file=True,
-):
+class FakeBrowser:
+    def __init__(self, state, page):
+        self.state = state
+        self.page = page
+
+    def new_page(self, **kwargs):
+        self.state["new_page"] = kwargs
+        return self.page
+
+    def close(self):
+        self.state["browser_closed"] += 1
+
+
+class FakeChromium:
+    def __init__(self, state, browser):
+        self.state = state
+        self.browser = browser
+
+    def launch(self, **kwargs):
+        self.state["launch"] = kwargs
+        return self.browser
+
+
+class FakePlaywright:
+    def __init__(self, state, browser):
+        self.state = state
+        self.chromium = FakeChromium(state, browser)
+
+    def stop(self):
+        self.state["playwright_stopped"] += 1
+
+
+class FakeManager:
+    def __init__(self, playwright):
+        self.playwright = playwright
+
+    def start(self):
+        return self.playwright
+
+
+def build_fake_runtime(*, screenshot_error=None):
     state = {
-        "login_instances": [],
-        "form_instances": [],
+        "screenshots": [],
+        "page_closed": 0,
+        "browser_closed": 0,
+        "playwright_stopped": 0,
+    }
+    page = FakePage(state, screenshot_error=screenshot_error)
+    browser = FakeBrowser(state, page)
+    playwright = FakePlaywright(state, browser)
+    return state, page, lambda: FakeManager(playwright)
+
+
+def install_page_object_fakes(monkeypatch, *, form_error=None):
+    state = {
         "login_calls": [],
+        "form_instances": [],
         "form_calls": [],
+        "validation_calls": [],
         "evidence_calls": [],
     }
 
     class FakeLoginPage:
-        def __init__(self, driver, timeout_seconds):
-            state["login_instances"].append((driver, timeout_seconds))
+        def __init__(self, page, timeout_seconds):
+            state["login_page"] = (page, timeout_seconds)
 
         def fazer_login(self, usuario, senha):
             state["login_calls"].append((usuario, senha))
-            if login_error is not None:
-                raise login_error
 
     class FakeFormPage:
-        def __init__(self, driver, timeout_seconds):
-            state["form_instances"].append((driver, timeout_seconds))
+        def __init__(self, page, timeout_seconds):
+            state["form_page"] = (page, timeout_seconds)
+            state["form_instances"].append((page, timeout_seconds))
 
         def preencher_lote(self, dados_lote):
             state["form_calls"].append(dados_lote)
             if form_error is not None:
                 raise form_error
 
-        def is_sucesso(self):
-            return success
+        def validar_resultado(self, resultado):
+            state["validation_calls"].append(resultado)
+            return f"Resultado confirmado: {resultado}"
 
         def capturar_evidencia(self, destino):
             state["evidence_calls"].append(destino)
-            if screenshot_succeeds and screenshot_writes_file:
-                destino.write_bytes(b"fake-png")
-            return screenshot_succeeds
+            destino.parent.mkdir(parents=True, exist_ok=True)
+            destino.write_bytes(b"fake-png")
 
     monkeypatch.setattr("src.web_automation.LoginPage", FakeLoginPage)
     monkeypatch.setattr("src.web_automation.FormPage", FakeFormPage)
     return state
 
 
-def test_build_chrome_driver_configura_headless_e_webdriver_manager(
-    monkeypatch,
-):
-    captured = {}
-    monkeypatch.delenv("CHROMEDRIVER_PATH", raising=False)
-    monkeypatch.delenv("CHROME_BIN", raising=False)
-    monkeypatch.setattr("src.web_automation.DEFAULT_CHROME_BIN_CANDIDATES", ())
-    monkeypatch.setattr("src.web_automation.DEFAULT_CHROMEDRIVER_CANDIDATES", ())
-    monkeypatch.setattr(
-        "src.web_automation.ChromeDriverManager.install",
-        lambda self: "/tmp/chromedriver",
+def test_resolve_web_url_converte_caminho_relativo_em_file_url(tmp_path):
+    html = tmp_path / "web" / "index.html"
+
+    assert resolve_web_url("web/index.html", tmp_path) == html.resolve().as_uri()
+
+
+def test_resolve_web_url_preserva_url_http(tmp_path):
+    assert (
+        resolve_web_url("https://example.test/lotes", tmp_path)
+        == "https://example.test/lotes"
     )
-    monkeypatch.setattr(
-        "src.web_automation.Service",
-        lambda path: type("FakeService", (), {"path": path})(),
-    )
-
-    def fake_chrome(*, service, options):
-        captured["service"] = service
-        captured["options"] = options
-        return object()
-
-    monkeypatch.setattr("src.web_automation.webdriver.Chrome", fake_chrome)
-
-    build_chrome_driver(headless=True)
-
-    assert captured["service"].path == "/tmp/chromedriver"
-    assert "--headless=new" in captured["options"].arguments
-    assert "--no-sandbox" in captured["options"].arguments
-    assert "--disable-dev-shm-usage" in captured["options"].arguments
-    assert "--disable-crash-reporter" in captured["options"].arguments
-
-
-def test_build_chrome_driver_usa_binarios_configurados(monkeypatch, tmp_path):
-    chrome = tmp_path / "chrome"
-    driver = tmp_path / "chromedriver"
-    chrome.write_text("#!/bin/sh\n", encoding="utf-8")
-    driver.write_text("#!/bin/sh\n", encoding="utf-8")
-    chrome.chmod(0o755)
-    driver.chmod(0o755)
-    monkeypatch.setenv("CHROME_BIN", str(chrome))
-    monkeypatch.setenv("CHROMEDRIVER_PATH", str(driver))
-    monkeypatch.setattr(
-        "src.web_automation.Service",
-        lambda path: type("FakeService", (), {"path": path})(),
-    )
-    monkeypatch.setattr(
-        "src.web_automation.ChromeDriverManager.install",
-        lambda self: pytest.fail("webdriver-manager nao deveria ser chamado"),
-    )
-    captured = {}
-
-    def fake_chrome(*, service, options):
-        captured["service"] = service
-        captured["options"] = options
-        return object()
-
-    monkeypatch.setattr("src.web_automation.webdriver.Chrome", fake_chrome)
-
-    build_chrome_driver()
-
-    assert captured["service"].path == str(driver)
-    assert captured["options"].binary_location == str(chrome)
-
-
-def test_resolve_configured_executable_rejeita_caminho_invalido(monkeypatch, tmp_path):
-    missing = tmp_path / "chromedriver"
-    monkeypatch.setenv("CHROMEDRIVER_PATH", str(missing))
-
-    with pytest.raises(WebAutomationEnvironmentError, match="inexistente"):
-        resolve_configured_executable("CHROMEDRIVER_PATH")
-
-
-def test_resolve_configured_executable_rejeita_sem_permissao(monkeypatch, tmp_path):
-    driver = tmp_path / "chromedriver"
-    driver.write_text("#!/bin/sh\n", encoding="utf-8")
-    monkeypatch.setenv("CHROMEDRIVER_PATH", str(driver))
-    monkeypatch.setattr("src.web_automation.os.access", lambda path, mode: False)
-
-    with pytest.raises(WebAutomationEnvironmentError, match="permissão de execução"):
-        resolve_configured_executable("CHROMEDRIVER_PATH")
-
-
-def test_resolve_chrome_binary_usa_caminho_padrao_quando_env_ausente(
-    monkeypatch,
-    tmp_path,
-):
-    chrome = tmp_path / "google-chrome"
-    chrome.write_text("#!/bin/sh\n", encoding="utf-8")
-    chrome.chmod(0o755)
-    monkeypatch.delenv("CHROME_BIN", raising=False)
-    monkeypatch.setattr("src.web_automation.DEFAULT_CHROME_BIN_CANDIDATES", (chrome,))
-
-    assert resolve_chrome_binary() == chrome
-
-
-def test_resolve_chromedriver_binary_usa_caminho_padrao_quando_env_ausente(
-    monkeypatch,
-    tmp_path,
-):
-    driver = tmp_path / "chromedriver"
-    driver.write_text("#!/bin/sh\n", encoding="utf-8")
-    driver.chmod(0o755)
-    monkeypatch.delenv("CHROMEDRIVER_PATH", raising=False)
-    monkeypatch.setattr(
-        "src.web_automation.DEFAULT_CHROMEDRIVER_CANDIDATES",
-        (driver,),
-    )
-
-    assert resolve_chromedriver_binary() == driver
-
-
-def test_describe_selenium_environment_inclui_versoes_configuradas(
-    monkeypatch,
-    tmp_path,
-):
-    chrome = tmp_path / "chrome"
-    driver = tmp_path / "chromedriver"
-    chrome.write_text("#!/bin/sh\n", encoding="utf-8")
-    driver.write_text("#!/bin/sh\n", encoding="utf-8")
-    chrome.chmod(0o755)
-    driver.chmod(0o755)
-    monkeypatch.setenv("CHROME_BIN", str(chrome))
-    monkeypatch.setenv("CHROMEDRIVER_PATH", str(driver))
-    monkeypatch.setattr(
-        "src.web_automation.executable_version",
-        lambda path: f"{path.name} 1.0",
-    )
-
-    environment = describe_selenium_environment()
-
-    assert environment == {
-        "chrome_bin": str(chrome),
-        "chrome_version": "chrome 1.0",
-        "chromedriver_path": str(driver),
-        "chromedriver_version": "chromedriver 1.0",
-    }
-
-
-def test_executable_version_retorna_primeira_linha(monkeypatch, tmp_path):
-    binary = tmp_path / "chrome"
-    binary.write_text("#!/bin/sh\n", encoding="utf-8")
-
-    class Completed:
-        stdout = "Chrome 120\nsegunda linha"
-        stderr = ""
-
-    monkeypatch.setattr(
-        "src.web_automation.subprocess.run",
-        lambda *args, **kwargs: Completed(),
-    )
-
-    assert executable_version(binary) == "Chrome 120"
-
-
-def test_resolve_web_url_converte_caminho_relativo_em_file_url(tmp_path: Path):
-    html = tmp_path / "docs" / "index.html"
-
-    resolved = resolve_web_url("docs/index.html", tmp_path)
-
-    assert resolved == html.resolve().as_uri()
-
-
-def test_resolve_web_url_preserva_url_http(tmp_path: Path):
-    url = "https://example.test/lotes"
-
-    assert resolve_web_url(url, tmp_path) == url
 
 
 def test_resolve_login_url_usa_tela_irma_do_formulario():
@@ -267,186 +160,252 @@ def test_resolve_login_url_usa_tela_irma_do_formulario():
 
 def test_resolve_login_url_preserva_url_de_login():
     url = "https://example.test/lotes/login.html"
-
     assert resolve_login_url(url) == url
 
 
-def test_fill_and_submit_lote_orquestra_page_objects_com_mesmo_driver(
-    tmp_path,
+def test_resolve_chromium_usa_caminho_configurado(monkeypatch, tmp_path):
+    browser = tmp_path / "chromium"
+    browser.write_text("#!/bin/sh\n", encoding="utf-8")
+    browser.chmod(0o755)
+    monkeypatch.setenv("PLAYWRIGHT_CHROMIUM_PATH", str(browser))
+
+    assert resolve_chromium_binary() == browser
+
+
+def test_resolve_chromium_rejeita_caminho_configurado_inexistente(
     monkeypatch,
+    tmp_path,
 ):
-    driver = FakeDriver()
-    artifact_dir = tmp_path / "artefatos"
-    credential = ErpCredential(
-        username="usuario.erp",
-        password="senha-nao-logavel",
+    missing = tmp_path / "chromium"
+    monkeypatch.setenv("PLAYWRIGHT_CHROMIUM_PATH", str(missing))
+
+    with pytest.raises(WebAutomationEnvironmentError, match="inexistente"):
+        resolve_chromium_binary()
+
+
+def test_resolve_chromium_rejeita_arquivo_sem_permissao(monkeypatch, tmp_path):
+    browser = tmp_path / "chromium"
+    browser.write_text("#!/bin/sh\n", encoding="utf-8")
+    monkeypatch.setenv("PLAYWRIGHT_CHROMIUM_PATH", str(browser))
+    monkeypatch.setattr("src.web_automation.os.access", lambda path, mode: False)
+
+    with pytest.raises(WebAutomationEnvironmentError, match="permissão"):
+        resolve_chromium_binary()
+
+
+def test_resolve_chromium_usa_bundle_quando_nao_ha_binario(monkeypatch):
+    monkeypatch.delenv("PLAYWRIGHT_CHROMIUM_PATH", raising=False)
+    monkeypatch.setattr("src.web_automation.DEFAULT_CHROMIUM_CANDIDATES", ())
+
+    assert resolve_chromium_binary() is None
+
+
+def test_describe_playwright_environment_inclui_navegador_configurado(
+    monkeypatch,
+    tmp_path,
+):
+    browser = tmp_path / "chromium"
+    browser.write_text("#!/bin/sh\n", encoding="utf-8")
+    browser.chmod(0o755)
+    monkeypatch.setenv("PLAYWRIGHT_CHROMIUM_PATH", str(browser))
+    monkeypatch.setattr(
+        "src.web_automation.executable_version",
+        lambda path: "Chromium 120",
     )
-    data = WebFormData(
-        lote_id="LOTE-TESTE-001",
-        produto="Scanner",
-        status="Concluído",
+
+    assert describe_playwright_environment() == {
+        "engine": "playwright-chromium",
+        "browser_path": str(browser),
+        "browser_version": "Chromium 120",
+        "headless": "true",
+    }
+
+
+def test_executable_version_retorna_primeira_linha(monkeypatch, tmp_path):
+    binary = tmp_path / "chromium"
+    binary.write_text("#!/bin/sh\n", encoding="utf-8")
+
+    class Completed:
+        stdout = "Chromium 120\nsegunda linha"
+        stderr = ""
+
+    monkeypatch.setattr(
+        "src.web_automation.subprocess.run",
+        lambda *args, **kwargs: Completed(),
     )
-    state = install_page_object_fakes(monkeypatch)
 
-    evidence_path = fill_and_submit_lote(
-        driver,
-        "file:///tmp/web/index-lotes/index.html",
-        artifact_dir,
-        credential,
-        data,
-        timeout_seconds=15,
-    )
-
-    assert driver.opened_url == "file:///tmp/web/index-lotes/login.html"
-    assert state["login_instances"] == [(driver, 15)]
-    assert state["form_instances"] == [(driver, 15)]
-    assert state["login_calls"] == [
-        ("usuario.erp", "senha-nao-logavel"),
-    ]
-    assert state["form_calls"] == [
-        {
-            "lote_id": "LOTE-TESTE-001",
-            "produto": "Scanner",
-            "status": "Concluído",
-        }
-    ]
-    assert state["evidence_calls"] == [evidence_path]
-    assert evidence_path.is_file()
-    assert evidence_path.parent == artifact_dir
-    assert "LOTE-TESTE-001" in evidence_path.name
+    assert executable_version(binary) == "Chromium 120"
 
 
-def test_build_evidence_path_identifica_lote_e_momento(tmp_path):
-    timestamp = datetime(2026, 7, 23, 4, 30, tzinfo=timezone.utc)
+@pytest.mark.parametrize(
+    ("resultado", "prefixo"),
+    [
+        ("APROVADO", "aprovado"),
+        ("DIVERGENCIA", "divergencia"),
+        ("REVISAO", "divergencia"),
+        ("ERRO", "erro"),
+    ],
+)
+def test_build_evidence_path_identifica_resultado_lote_e_momento(
+    tmp_path,
+    resultado,
+    prefixo,
+):
+    timestamp = datetime(2026, 7, 29, 13, 30, tzinfo=timezone.utc)
 
     path = build_evidence_path(
         tmp_path,
         "LOTE / 001",
+        resultado,
         timestamp=timestamp,
     )
 
     assert path == (
-        tmp_path / "comprovante-LOTE-001-20260723T043000000000Z.png"
+        tmp_path / f"{prefixo}-LOTE-001-20260729T133000000000Z.png"
     )
 
 
-@pytest.mark.parametrize(
-    "page_error",
-    [
-        LoginPageTimeoutError("login indisponivel"),
-        FormPageTimeoutError("formulario indisponivel"),
-    ],
-)
-def test_fill_and_submit_lote_normaliza_timeout_sem_expor_senha(
-    tmp_path,
+def test_relative_evidence_path_retorna_caminho_portatil(tmp_path):
+    path = tmp_path / "artefatos" / "aprovado-L001.png"
+    assert relative_evidence_path(path, tmp_path) == "artefatos/aprovado-L001.png"
+
+
+def test_sessao_inicia_headless_e_autentica_com_page_object(
     monkeypatch,
-    page_error,
-):
-    credential = ErpCredential("usuario.erp", "segredo-nao-pode-vazar")
-    kwargs = (
-        {"login_error": page_error}
-        if isinstance(page_error, LoginPageTimeoutError)
-        else {"form_error": page_error}
-    )
-    install_page_object_fakes(monkeypatch, **kwargs)
-
-    with pytest.raises(WebAutomationTimeoutError) as captured:
-        fill_and_submit_lote(
-            FakeDriver(),
-            "file:///tmp/web/index-lotes/index.html",
-            tmp_path,
-            credential,
-            WebFormData(lote_id="LOTE-TESTE-002"),
-            timeout_seconds=15,
-        )
-
-    assert "LOTE-TESTE-002" in str(captured.value)
-    assert "segredo-nao-pode-vazar" not in str(captured.value)
-    assert not list(tmp_path.glob("*.png"))
-
-
-def test_fill_and_submit_lote_rejeita_confirmacao_sem_sucesso(
     tmp_path,
-    monkeypatch,
 ):
-    install_page_object_fakes(monkeypatch, success=False)
-
-    with pytest.raises(
-        WebAutomationTimeoutError,
-        match="Mensagem de confirmação inválida.*LOTE-2026-0001",
-    ):
-        fill_and_submit_lote(
-            FakeDriver(),
-            "file:///tmp/web/index-lotes/index.html",
-            tmp_path,
-            ErpCredential("usuario.erp", "senha-efemera"),
-        )
-
-
-@pytest.mark.parametrize(
-    ("screenshot_succeeds", "screenshot_writes_file"),
-    [(False, False), (True, False)],
-)
-def test_fill_and_submit_lote_falha_quando_evidencia_nao_e_criada(
-    tmp_path,
-    monkeypatch,
-    screenshot_succeeds,
-    screenshot_writes_file,
-):
-    install_page_object_fakes(
-        monkeypatch,
-        screenshot_succeeds=screenshot_succeeds,
-        screenshot_writes_file=screenshot_writes_file,
-    )
-
-    with pytest.raises(
-        WebAutomationEvidenceError,
-        match="Não foi possível gerar a evidência.*LOTE-2026-0001",
-    ):
-        fill_and_submit_lote(
-            FakeDriver(),
-            "file:///tmp/web/index-lotes/index.html",
-            tmp_path,
-            ErpCredential("usuario.erp", "senha-efemera"),
-        )
-
-
-def test_run_web_automation_sempre_encerra_driver(tmp_path, monkeypatch):
-    driver = FakeDriver()
-    evidence = tmp_path / "artefatos" / "comprovante.png"
-
-    monkeypatch.setattr(
-        "src.web_automation.fill_and_submit_lote",
-        lambda *args, **kwargs: evidence,
-    )
-
-    result = run_web_automation(
-        "docs/index.html",
+    state, page, factory = build_fake_runtime()
+    po_state = install_page_object_fakes(monkeypatch)
+    monkeypatch.setattr("src.web_automation.resolve_chromium_binary", lambda: None)
+    session = PlaywrightWebSession(
+        "web/index-lotes/index.html",
         tmp_path,
         tmp_path / "artefatos",
-        ErpCredential("usuario.erp", "senha-efemera"),
-        driver_factory=lambda **kwargs: driver,
+        timeout_seconds=12,
+        playwright_factory=factory,
     )
 
-    assert result.evidence_path == evidence
-    assert driver.quit_called is True
+    session.start(ErpCredential("usuario.vault", "senha-secreta"))
+
+    assert state["launch"]["headless"] is True
+    assert "--no-sandbox" in state["launch"]["args"]
+    assert state["new_page"]["viewport"] == {"width": 1440, "height": 1200}
+    assert state["timeout"] == 12_000
+    assert state["goto"][0].endswith("/web/index-lotes/login.html")
+    assert po_state["login_page"] == (page, 12)
+    assert po_state["login_calls"] == [("usuario.vault", "senha-secreta")]
 
 
-def test_run_web_automation_encerra_driver_apos_falha(tmp_path, monkeypatch):
-    driver = FakeDriver()
+def test_sessao_processa_item_e_gera_evidencia_rastreavel(
+    monkeypatch,
+    tmp_path,
+):
+    _, _, factory = build_fake_runtime()
+    po_state = install_page_object_fakes(monkeypatch)
+    monkeypatch.setattr("src.web_automation.resolve_chromium_binary", lambda: None)
+    session = PlaywrightWebSession(
+        "web/index-lotes/index.html",
+        tmp_path,
+        tmp_path / "artefatos",
+        playwright_factory=factory,
+    )
+    session.start(ErpCredential("usuario.vault", "senha-secreta"))
 
-    def fail(*args, **kwargs):
-        raise WebAutomationTimeoutError("timeout")
+    result = session.process_item(
+        {"lote_id": "L001", "produto": "Monitor", "status": "APROVADO"},
+        "APROVADO",
+        "Lote validado",
+    )
 
-    monkeypatch.setattr("src.web_automation.fill_and_submit_lote", fail)
+    assert isinstance(result, WebItemResult)
+    assert result.resultado_validacao == "APROVADO"
+    assert result.evidence_path.is_file()
+    assert result.evidence_path.name.startswith("aprovado-L001-")
+    assert po_state["form_calls"][0]["lote_id"] == "L001"
+    assert po_state["form_calls"][0]["resultado_validacao"] == "APROVADO"
+    assert po_state["validation_calls"] == ["APROVADO"]
+    assert po_state["evidence_calls"] == [result.evidence_path]
+    assert len(po_state["form_instances"]) == 1
 
-    with pytest.raises(WebAutomationTimeoutError):
-        run_web_automation(
-            "docs/index.html",
-            tmp_path,
-            tmp_path / "artefatos",
-            ErpCredential("usuario.erp", "senha-efemera"),
-            driver_factory=lambda **kwargs: driver,
+
+def test_sessao_instancia_form_page_para_cada_item(monkeypatch, tmp_path):
+    _, _, factory = build_fake_runtime()
+    po_state = install_page_object_fakes(monkeypatch)
+    monkeypatch.setattr("src.web_automation.resolve_chromium_binary", lambda: None)
+    session = PlaywrightWebSession(
+        "web/index-lotes/index.html",
+        tmp_path,
+        tmp_path / "artefatos",
+        playwright_factory=factory,
+    )
+    session.start(ErpCredential("usuario.vault", "senha-secreta"))
+
+    for lote_id in ("L001", "L002"):
+        session.process_item(
+            {"lote_id": lote_id, "produto": "Monitor", "status": "APROVADO"},
+            "APROVADO",
+            "Lote validado",
         )
 
-    assert driver.quit_called is True
+    assert len(po_state["form_instances"]) == 2
+
+
+def test_sessao_captura_evidencia_de_erro_por_item(monkeypatch, tmp_path):
+    state, _, factory = build_fake_runtime()
+    install_page_object_fakes(monkeypatch)
+    monkeypatch.setattr("src.web_automation.resolve_chromium_binary", lambda: None)
+    session = PlaywrightWebSession(
+        "web/index-lotes/index.html",
+        tmp_path,
+        tmp_path / "artefatos",
+        playwright_factory=factory,
+    )
+    session.start(ErpCredential("usuario.vault", "senha-secreta"))
+
+    evidence = session.capture_error({"lote_id": "L002"})
+
+    assert evidence is not None
+    assert evidence.name.startswith("erro-L002-")
+    assert evidence.is_file()
+    assert state["screenshots"] == [(str(evidence), True)]
+
+
+def test_sessao_retorna_none_quando_captura_de_erro_falha(
+    monkeypatch,
+    tmp_path,
+):
+    _, _, factory = build_fake_runtime(screenshot_error=RuntimeError("falha"))
+    install_page_object_fakes(monkeypatch)
+    monkeypatch.setattr("src.web_automation.resolve_chromium_binary", lambda: None)
+    session = PlaywrightWebSession(
+        "web/index-lotes/index.html",
+        tmp_path,
+        tmp_path / "artefatos",
+        playwright_factory=factory,
+    )
+    session.start(ErpCredential("usuario.vault", "senha-secreta"))
+
+    assert session.capture_error({"lote_id": "L003"}) is None
+
+
+def test_sessao_sempre_fecha_pagina_navegador_e_playwright(
+    monkeypatch,
+    tmp_path,
+):
+    state, _, factory = build_fake_runtime()
+    install_page_object_fakes(monkeypatch)
+    monkeypatch.setattr("src.web_automation.resolve_chromium_binary", lambda: None)
+    session = PlaywrightWebSession(
+        "web/index-lotes/index.html",
+        tmp_path,
+        tmp_path / "artefatos",
+        playwright_factory=factory,
+    )
+    session.start(ErpCredential("usuario.vault", "senha-secreta"))
+
+    session.close()
+    session.close()
+
+    assert state["page_closed"] == 1
+    assert state["browser_closed"] == 1
+    assert state["playwright_stopped"] == 1
