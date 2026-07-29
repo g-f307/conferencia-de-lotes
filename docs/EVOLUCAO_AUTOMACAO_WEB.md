@@ -65,7 +65,8 @@ A versão `v1.4.0` atende à integração final solicitada para a atividade:
 3. waits orientados a condições;
 4. autenticação com credencial recuperada pelo Vault;
 5. processamento web dentro do loop do DataPool;
-6. screenshot individual de aprovação, divergência, revisão ou erro;
+6. screenshot individual de aprovação, reprovação, divergência, revisão ou
+   erro;
 7. continuidade após falha isolada;
 8. caminho relativo da evidência no item, no log e no resumo.
 
@@ -99,7 +100,7 @@ conhecidos e, quando disponível, utiliza o Chromium gerenciado pelo Playwright.
 |---|---|
 | `v1.2.0` | Comprovante produzido pela automação Selenium. |
 | `v1.3.0` | Comprovante encapsulado pela `FormPage` Selenium. |
-| `v1.4.0` | PNG por item com prefixo `aprovado-`, `divergencia-` ou `erro-`. |
+| `v1.4.0` | PNG por item com prefixo `aprovado-`, `reprovado-`, `divergencia-` ou `erro-`. |
 
 Na versão atual, os caminhos são relativos à raiz do projeto e aparecem:
 

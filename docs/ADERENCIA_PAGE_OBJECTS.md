@@ -73,6 +73,7 @@ Após uma execução com web habilitada, valide:
 
 ```text
 artefatos/aprovado-<lote>-<timestamp>.png
+artefatos/reprovado-<lote>-<timestamp>.png
 artefatos/divergencia-<lote>-<timestamp>.png
 logs/execucao.log
 relatorios/resumo_execucao.json

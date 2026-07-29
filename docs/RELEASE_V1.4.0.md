@@ -22,7 +22,8 @@ homologação definida no checklist de release.
 - interação web dentro do loop de consumo do DataPool;
 - preenchimento dos campos `resultado_validacao`, `evidencia` e
   `mensagem_resultado` antes da finalização do item;
-- screenshot individual de aprovação, divergência, revisão ou erro;
+- screenshot individual de aprovação, reprovação, divergência, revisão ou
+  erro;
 - continuidade do processamento após falha isolada;
 - inclusão das evidências no resumo JSON e no relatório PDF;
 - smoke test Playwright executado pela integração contínua;
@@ -55,7 +56,8 @@ Esta versão preserva:
 - credencial `credencial_erp2`;
 - argumentos do BotCity Runner;
 - modelo `ExecutionResult`;
-- classificação entre aprovação, divergência, revisão e erro técnico;
+- classificação entre aprovação, reprovação, divergência, revisão e erro
+  técnico;
 - finalização de falhas de negócio como sucesso operacional da automação.
 
 Não existe migração de dados. A mudança necessária está no ambiente de
@@ -85,6 +87,7 @@ As demais variáveis e os procedimentos atuais estão documentados no
 | Evidência | Destino |
 |---|---|
 | Aprovação | `artefatos/aprovado-<lote>-<timestamp>.png` |
+| Reprovação válida | `artefatos/reprovado-<lote>-<timestamp>.png` |
 | Divergência ou revisão | `artefatos/divergencia-<lote>-<timestamp>.png` |
 | Falha técnica | `artefatos/erro-<lote>-<timestamp>.png` |
 | Log estruturado | `logs/execucao.log` |
@@ -96,14 +99,16 @@ Logs, relatórios, screenshots, pacotes e caches permanecem fora do Git.
 
 ## Validação da candidata
 
-- 147 testes automatizados aprovados;
-- cobertura total de 91,90%;
+- 152 testes automatizados aprovados;
+- cobertura total de 92%;
 - `git diff --check` aprovado;
 - pacote `dist/bot-conferencia-de-lotes-v2.zip` gerado;
 - imagem Docker construída;
 - smoke test Playwright headless executado em Docker;
 - 16 itens processados sem interrupção global;
-- evidências de aprovação e divergência geradas;
+- 4 itens concluídos com estado final oficial: 2 aprovados e 2 reprovados;
+- 9 divergências de negócio e 3 revisões humanas;
+- evidências de aprovação, reprovação e divergência geradas;
 - resumo JSON e relatório PDF gerados;
 - sessão Playwright encerrada corretamente.
 

@@ -28,7 +28,7 @@ automação Playwright ao processamento individual do DataPool.
 | Continuar após falha | `LotePerformer` isola cada item. | Atendido. |
 | Exigir observação | RN07 valida reprovação. | Atendido. |
 | Interagir com sistema | Aplicação local por Playwright e Page Objects. | Atendido no ambiente controlado. |
-| Produzir evidência | PNG aprovado, divergente ou erro por item. | Atendido. |
+| Produzir evidência | PNG aprovado, reprovado, divergente ou erro por item. | Atendido. |
 | Atualizar resultado | Três campos de saída no DataPool. | Atendido. |
 | Consolidar execução | JSON, PDF e logs estruturados. | Atendido. |
 

@@ -49,6 +49,8 @@ Durante a execução:
 ### 5. Evidências — 2 minutos
 
 - abrir um PNG `aprovado-*`;
+- abrir um PNG `reprovado-*` e explicar que reprovação é resultado final
+  válido;
 - abrir um PNG `divergencia-*`;
 - mostrar os campos `resultado_validacao`, `evidencia` e
   `mensagem_resultado` no DataPool;

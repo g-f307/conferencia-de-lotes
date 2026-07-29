@@ -14,7 +14,8 @@ Objects, evidências visuais e observabilidade:
 2. a credencial `credencial_erp2` é recuperada do Credentials Vault;
 3. uma sessão Playwright headless autentica uma única vez na aplicação local;
 4. o Performer consome a fila e processa cada lote isoladamente;
-5. as regras RN01–RN07 determinam aprovação, divergência ou revisão;
+5. as regras RN01–RN07 determinam aprovação, reprovação, divergência ou
+   revisão;
 6. `LoginPage` e `FormPage` executam a interação web correspondente ao item;
 7. o resultado, a mensagem e o caminho da captura são gravados no DataPool
    antes da finalização do item;
@@ -129,7 +130,8 @@ Detalhes e diagramas de sequência estão em
 7. O Performer obtém um item e aplica RN01–RN07.
 8. `FormPage.preencher_lote()` apresenta o resultado do item na aplicação
    controlada e aguarda a confirmação.
-9. Uma captura `aprovado-*`, `divergencia-*` ou `erro-*` é produzida.
+9. Uma captura `aprovado-*`, `reprovado-*`, `divergencia-*` ou `erro-*` é
+   produzida.
 10. `resultado_validacao`, `evidencia` e `mensagem_resultado` são atualizados no
     DataPool antes de `report_done` ou `report_error`.
 11. O loop continua até o fim da fila.
@@ -159,9 +161,13 @@ a interface e não decidem o resultado do negócio.
 | `resultado_validacao` | Finalização | Evidência |
 |---|---|---|
 | `APROVADO` | `report_done` | `artefatos/aprovado-<lote>-<timestamp>.png` |
+| `REPROVADO` | `report_done` | `artefatos/reprovado-<lote>-<timestamp>.png` |
 | `DIVERGENCIA` | erro de negócio | `artefatos/divergencia-<lote>-<timestamp>.png` |
 | `REVISAO` | erro de negócio com motivo de revisão | `artefatos/divergencia-<lote>-<timestamp>.png` |
 | `ERRO` | erro de sistema | `artefatos/erro-<lote>-<timestamp>.png`, quando a captura for possível |
+
+`REPROVADO` é um resultado final válido das regras RN01–RN07. Ele não é
+contabilizado como divergência nem como falha da automação.
 
 O caminho gravado no DataPool, no log e no resumo é relativo à raiz do projeto,
 o que evita referências específicas de uma máquina ou Runner.

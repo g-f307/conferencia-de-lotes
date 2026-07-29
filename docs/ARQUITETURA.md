@@ -188,6 +188,7 @@ O gateway atualiza os campos de saída antes de chamar `report_done` ou
 | Saída | Destino | Correlação |
 |---|---|---|
 | PNG aprovado | `artefatos/aprovado-<lote>-<timestamp>.png` | lote e item do DataPool |
+| PNG reprovado | `artefatos/reprovado-<lote>-<timestamp>.png` | lote e item do DataPool |
 | PNG divergente/revisão | `artefatos/divergencia-<lote>-<timestamp>.png` | lote e item do DataPool |
 | PNG de erro | `artefatos/erro-<lote>-<timestamp>.png` | falha técnica isolada |
 | Log | `logs/execucao.log` e console | `execution_id`, `bot_id` e evento |
@@ -202,6 +203,10 @@ O gateway atualiza os campos de saída antes de chamar `report_done` ou
 | Local web | memória | credencial efêmera | Playwright Chromium | integração e PNG |
 | Docker | memória por padrão | credencial efêmera | `/usr/bin/chromium` | reprodutibilidade |
 | Runner | BotCity | Credentials Vault | Chromium configurado ou disponível | homologação |
+
+O ciclo completo de cada item — classificação, interação web e finalização no
+DataPool — é isolado. Uma falha inesperada é registrada como erro de sistema e
+o Performer tenta continuar o consumo da fila.
 
 ## Segurança
 
