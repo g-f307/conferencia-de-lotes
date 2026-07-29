@@ -103,6 +103,22 @@ flowchart TB
 | `src/logging_config.py` | Produzir JSON Lines e sanitizar dados sensíveis. |
 | `src/models.py` | Padronizar o resumo serializável da execução. |
 
+## Padrão Page Object
+
+O limite da camada web segue estas regras:
+
+1. `src/main.py` não conhece locators nem comandos do Selenium;
+2. `src/web_automation.py` controla o ciclo de vida do WebDriver e a ordem das
+   ações, mas não manipula elementos HTML diretamente;
+3. `LoginPage` e `FormPage` recebem o mesmo WebDriver e o mesmo timeout;
+4. somente os Page Objects concentram locators, waits e operações da interface;
+5. RN01–RN07 continuam em `src/validation.py`, sem dependência do navegador;
+6. a credencial é recuperada antes da etapa web e não é persistida;
+7. `driver.quit()` é executado em `finally`, tanto no sucesso quanto na falha.
+
+Essa separação concentra mudanças de interface em `src/pages/` e preserva o
+fluxo principal e as regras de negócio quando um locator é alterado.
+
 ## Sequência principal
 
 ```mermaid
@@ -158,6 +174,21 @@ sequenceDiagram
     M->>B: finish_task
     M-->>R: código de saída
 ```
+
+## Rastreabilidade das evidências
+
+As saídas possuem destinos diferentes e não devem ser confundidas:
+
+| Evidência | Origem | Destino | Relação com o Maestro |
+|---|---|---|---|
+| PNG da confirmação | `FormPage.capturar_evidencia()` | `artefatos/` | Evidência local; não é anexada diretamente ao item do DataPool. |
+| Resultado do item | `LotePerformer` | DataPool | Finalização individual como sucesso, erro de negócio, revisão ou erro de sistema. |
+| Resumo JSON | `ExecutionResult` | `relatorios/` | Publicado como artefato da task. |
+| Log JSON Lines | `logging_config.py` | `logs/execucao.log` e console | Permite correlação por `execution_id` e `bot_id`. |
+
+Capturas do painel do DataPool são evidências operacionais da entrega e devem
+ser anexadas ao Pull Request ou ao material acadêmico. Elas não fazem parte do
+código-fonte.
 
 ## Modos de execução
 
