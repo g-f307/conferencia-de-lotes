@@ -462,6 +462,9 @@ finalizada no Maestro como sucesso operacional.
 | [`docs/ADERENCIA_PAGE_OBJECTS.md`](docs/ADERENCIA_PAGE_OBJECTS.md) | Matriz técnica da entrega. |
 | [`docs/DEPLOY_BOTCITY.md`](docs/DEPLOY_BOTCITY.md) | Implantação, smoke test e rollback. |
 | [`docs/ROTEIRO_DEMONSTRACAO.md`](docs/ROTEIRO_DEMONSTRACAO.md) | Roteiro objetivo da demonstração. |
+| [`docs/EVOLUCAO_AUTOMACAO_WEB.md`](docs/EVOLUCAO_AUTOMACAO_WEB.md) | Histórico e comparação entre Selenium e Playwright. |
+| [`docs/RELEASE_V1.3.0.md`](docs/RELEASE_V1.3.0.md) | Notas da versão Selenium com Page Objects. |
+| [`docs/RELEASE_V1.4.0.md`](docs/RELEASE_V1.4.0.md) | Notas e checklist da candidata Playwright. |
 
 ## Equipe
 
@@ -470,13 +473,13 @@ Xavier.
 
 ## Releases
 
-| Release | Marco |
-|---|---|
-| `v1.0.0` | Primeira versão implantável no BotCity Maestro. |
-| `v1.1.0` | Consolidação do fluxo corporativo. |
-| `v1.2.0` | Automação Selenium homologada no Runner. |
-| `v1.3.0` | Page Objects integrados ao fluxo Selenium. |
-| `v1.4.0` | Integração Playwright por item com DataPool e evidências rastreáveis. |
+| Release | Tecnologia | Marco |
+|---|---|---|
+| `v1.0.0` | Sem integração web final | Primeira versão implantável no BotCity Maestro. |
+| `v1.1.0` | Playwright inicial | Consolidação do fluxo corporativo. |
+| `v1.2.0` | Selenium | Automação homologada no Runner. |
+| [`v1.3.0`](docs/RELEASE_V1.3.0.md) | Selenium com Page Objects | Separação da interface e do orquestrador. |
+| [`v1.4.0`](docs/RELEASE_V1.4.0.md) | Playwright com Page Objects | DataPool e evidências rastreáveis por item. |
 
 ## Licença
 
