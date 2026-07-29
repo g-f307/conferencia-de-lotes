@@ -22,11 +22,24 @@ DATAPOOL_FIELDS = (
     "data",
     "observacao",
 )
+DATAPOOL_OUTPUT_FIELDS = (
+    "resultado_validacao",
+    "evidencia",
+    "mensagem_resultado",
+)
 
 
 def normalize_row(row: dict[str, str | None]) -> dict[str, str]:
     """Mantem so os campos do DataPool, sem aplicar regras de negocio."""
     return {field: (row.get(field) or "").strip() for field in DATAPOOL_FIELDS}
+
+
+def prepare_datapool_entry(row: dict[str, str | None]) -> dict[str, str]:
+    """Adiciona os campos que serão preenchidos durante o processamento."""
+    return {
+        **normalize_row(row),
+        **{field: "" for field in DATAPOOL_OUTPUT_FIELDS},
+    }
 
 
 def iter_csv_rows(csv_path: Path) -> Iterable[dict[str, str]]:
@@ -71,7 +84,7 @@ def dispatch_csv(
 
     published = 0
     for item in iter_csv_rows(csv_path):
-        maestro_client.create_entry(item)
+        maestro_client.create_entry(prepare_datapool_entry(item))
         published += 1
 
     current_logger.info(

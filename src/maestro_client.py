@@ -14,6 +14,13 @@ from src.reporting import generate_evidence_pdf
 from src.validation import HumanReviewRequired
 
 
+DATAPOOL_OUTPUT_FIELDS = (
+    "resultado_validacao",
+    "evidencia",
+    "mensagem_resultado",
+)
+
+
 class MaestroGateway(Protocol):
     """Operações mínimas esperadas do cliente real ou de um mock em testes."""
 
@@ -29,13 +36,28 @@ class MaestroGateway(Protocol):
     def mark_done(self, item: Any, result: dict[str, str]) -> None:
         ...
 
-    def mark_business_error(self, item: Any, error: str) -> None:
+    def mark_business_error(
+        self,
+        item: Any,
+        error: str,
+        result: dict[str, str],
+    ) -> None:
         ...
 
-    def mark_system_error(self, item: Any, error: str) -> None:
+    def mark_system_error(
+        self,
+        item: Any,
+        error: str,
+        result: dict[str, str],
+    ) -> None:
         ...
 
-    def mark_human_review(self, item: Any, review: HumanReviewRequired) -> None:
+    def mark_human_review(
+        self,
+        item: Any,
+        review: HumanReviewRequired,
+        result: dict[str, str],
+    ) -> None:
         ...
 
     def send_info_alert(self, message: str) -> None:
@@ -82,16 +104,45 @@ class InMemoryMaestroGateway:
         return self.entries.setdefault(datapool_label, []).pop(0)
 
     def mark_done(self, item: Any, result: dict[str, str]) -> None:
+        self._apply_outputs(item, result)
         self.done.append((item, result))
 
-    def mark_business_error(self, item: Any, error: str) -> None:
+    def mark_business_error(
+        self,
+        item: Any,
+        error: str,
+        result: dict[str, str],
+    ) -> None:
+        self._apply_outputs(item, result)
         self.business_errors.append((item, error))
 
-    def mark_system_error(self, item: Any, error: str) -> None:
+    def mark_system_error(
+        self,
+        item: Any,
+        error: str,
+        result: dict[str, str],
+    ) -> None:
+        self._apply_outputs(item, result)
         self.system_errors.append((item, error))
 
-    def mark_human_review(self, item: Any, review: HumanReviewRequired) -> None:
+    def mark_human_review(
+        self,
+        item: Any,
+        review: HumanReviewRequired,
+        result: dict[str, str],
+    ) -> None:
+        self._apply_outputs(item, result)
         self.human_reviews.append((item, review))
+
+    @staticmethod
+    def _apply_outputs(item: Any, result: Mapping[str, str]) -> None:
+        if isinstance(item, dict):
+            item.update(
+                {
+                    field: str(result.get(field) or "")
+                    for field in DATAPOOL_OUTPUT_FIELDS
+                }
+            )
 
     def send_info_alert(self, message: str) -> None:
         self.info_alerts.append(message)
@@ -232,23 +283,58 @@ class BotCityMaestroGateway:
     def _entry_from_item(self, item: Any) -> Any:
         return item.entry if isinstance(item, DataPoolWorkItem) else item
 
-    def mark_done(self, item: Any, result: dict[str, str]) -> None:
-        self._entry_from_item(item).report_done(finish_message="Lote processado com sucesso")
+    @staticmethod
+    def _apply_outputs(entry: Any, result: Mapping[str, str]) -> None:
+        values = getattr(entry, "values", None)
+        if not isinstance(values, dict):
+            raise TypeError("DataPoolEntry recebido sem values mutável")
+        values.update(
+            {
+                field: str(result.get(field) or "")
+                for field in DATAPOOL_OUTPUT_FIELDS
+            }
+        )
 
-    def mark_business_error(self, item: Any, error: str) -> None:
-        self._entry_from_item(item).report_error(
+    def mark_done(self, item: Any, result: dict[str, str]) -> None:
+        entry = self._entry_from_item(item)
+        self._apply_outputs(entry, result)
+        entry.report_done(finish_message="Lote processado com sucesso")
+
+    def mark_business_error(
+        self,
+        item: Any,
+        error: str,
+        result: dict[str, str],
+    ) -> None:
+        entry = self._entry_from_item(item)
+        self._apply_outputs(entry, result)
+        entry.report_error(
             error_type=self.error_type.BUSINESS,
             finish_message=error,
         )
 
-    def mark_system_error(self, item: Any, error: str) -> None:
-        self._entry_from_item(item).report_error(
+    def mark_system_error(
+        self,
+        item: Any,
+        error: str,
+        result: dict[str, str],
+    ) -> None:
+        entry = self._entry_from_item(item)
+        self._apply_outputs(entry, result)
+        entry.report_error(
             error_type=self.error_type.SYSTEM,
             finish_message=error,
         )
 
-    def mark_human_review(self, item: Any, review: HumanReviewRequired) -> None:
-        self._entry_from_item(item).report_error(
+    def mark_human_review(
+        self,
+        item: Any,
+        review: HumanReviewRequired,
+        result: dict[str, str],
+    ) -> None:
+        entry = self._entry_from_item(item)
+        self._apply_outputs(entry, result)
+        entry.report_error(
             error_type=self.error_type.BUSINESS,
             finish_message=review.reason,
         )
@@ -330,17 +416,32 @@ class MaestroClient:
         """Finaliza um item processado com sucesso."""
         self.gateway.mark_done(item, result)
 
-    def mark_business_error(self, item: Any, error: str) -> None:
+    def mark_business_error(
+        self,
+        item: Any,
+        error: str,
+        result: dict[str, str],
+    ) -> None:
         """Finaliza um item com erro de negócio."""
-        self.gateway.mark_business_error(item, error)
+        self.gateway.mark_business_error(item, error, result)
 
-    def mark_system_error(self, item: Any, error: str) -> None:
+    def mark_system_error(
+        self,
+        item: Any,
+        error: str,
+        result: dict[str, str],
+    ) -> None:
         """Finaliza um item com erro técnico/sistêmico."""
-        self.gateway.mark_system_error(item, error)
+        self.gateway.mark_system_error(item, error, result)
 
-    def mark_human_review(self, item: Any, review: HumanReviewRequired) -> None:
+    def mark_human_review(
+        self,
+        item: Any,
+        review: HumanReviewRequired,
+        result: dict[str, str],
+    ) -> None:
         """Finaliza um item separado para revisão humana."""
-        self.gateway.mark_human_review(item, review)
+        self.gateway.mark_human_review(item, review, result)
 
     def send_error_alert(self, message: str) -> None:
         """Implementa o contrato AlertGateway definido no núcleo."""

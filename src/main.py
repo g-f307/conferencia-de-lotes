@@ -15,7 +15,7 @@ from src.logging_config import configure_logging
 from src.maestro_client import MaestroClient
 from src.models import ExecutionResult
 from src.vault_client import BotCityVaultProvider, VaultClient
-from src.web_automation import describe_selenium_environment, run_web_automation
+from src.web_automation import PlaywrightWebSession, describe_playwright_environment
 
 
 class AlertGateway(Protocol):
@@ -33,11 +33,26 @@ class SummaryGateway(AlertGateway, Protocol):
 
     def mark_done(self, item: dict[str, object], result: dict[str, str]) -> None: ...
 
-    def mark_business_error(self, item: dict[str, object], error: str) -> None: ...
+    def mark_business_error(
+        self,
+        item: dict[str, object],
+        error: str,
+        result: dict[str, str],
+    ) -> None: ...
 
-    def mark_system_error(self, item: dict[str, object], error: str) -> None: ...
+    def mark_system_error(
+        self,
+        item: dict[str, object],
+        error: str,
+        result: dict[str, str],
+    ) -> None: ...
 
-    def mark_human_review(self, item: dict[str, object], review: Any) -> None: ...
+    def mark_human_review(
+        self,
+        item: dict[str, object],
+        review: Any,
+        result: dict[str, str],
+    ) -> None: ...
 
     def send_start_alert(self) -> None: ...
 
@@ -104,6 +119,10 @@ def execution_result_from_performer(result: PerformerResult) -> ExecutionResult:
         processed_items=result.success,
         failed_items=result.business_errors + result.system_errors,
         ambiguous_items=len(result.human_reviews),
+        approved_items=result.approved,
+        divergence_items=result.divergences,
+        technical_errors=result.system_errors,
+        evidences=list(result.evidences),
     )
     execution.message = "Processamento concluido"
     return execution.complete()
@@ -215,7 +234,7 @@ def run(
 
     client = maestro_client or MaestroClient(current_settings)
     current_vault_client = vault_client or build_vault_client(current_settings, client)
-    web_evidence_path: Path | None = None
+    web_session: PlaywrightWebSession | None = None
 
     try:
         client.send_start_alert()
@@ -231,34 +250,31 @@ def run(
             },
         )
         if current_settings.web_automation_enabled:
-            selenium_environment = describe_selenium_environment()
+            playwright_environment = describe_playwright_environment()
             current_logger.info(
-                "Ambiente Selenium: chrome=%s (%s), chromedriver=%s (%s)",
-                selenium_environment["chrome_bin"],
-                selenium_environment["chrome_version"],
-                selenium_environment["chromedriver_path"],
-                selenium_environment["chromedriver_version"],
+                "Ambiente Playwright: engine=%s, navegador=%s (%s), headless=%s",
+                playwright_environment["engine"],
+                playwright_environment["browser_path"],
+                playwright_environment["browser_version"],
+                playwright_environment["headless"],
                 extra={
-                    "evento": "SELENIUM_AMBIENTE",
+                    "evento": "PLAYWRIGHT_AMBIENTE",
                     "formulario": "Index Lotes",
                     "status": "SUCCESS",
                     "usuario": "sistema",
                 },
             )
-            web_result = run_web_automation(
+            web_session = PlaywrightWebSession(
                 current_settings.web_test_url,
                 current_settings.base_dir,
                 current_settings.web_artifact_dir,
-                erp_credential,
                 timeout_seconds=current_settings.web_timeout_seconds,
             )
-            web_evidence_path = web_result.evidence_path
+            web_session.start(erp_credential)
             current_logger.info(
-                "Automacao web executada em %s; evidencia salva em %s",
-                web_result.url,
-                web_result.evidence_path,
+                "Sessão Playwright autenticada e pronta para processar itens",
                 extra={
-                    "evento": "AUTOMACAO_WEB",
+                    "evento": "INICIO_PLAYWRIGHT",
                     "formulario": "Index Lotes",
                     "status": "SUCCESS",
                     "usuario": "sistema",
@@ -289,12 +305,18 @@ def run(
             reference_lotes or current_settings.reference_lotes,
             current_vault_client,
             processing_delay_seconds=current_settings.processing_delay_seconds,
+            web_processor=web_session,
         )
         result = execution_result_from_performer(performer.run())
         summary = result.to_dict()
         summary_path = client.post_summary_artifact(
             summary,
             report_dir=current_settings.report_dir,
+        )
+        report_evidence = (
+            current_settings.base_dir / result.evidences[0]
+            if result.evidences
+            else None
         )
         evidence_report_path = client.post_evidence_report(
             summary,
@@ -306,7 +328,7 @@ def run(
                 "web_enabled": current_settings.web_automation_enabled,
             },
             report_dir=current_settings.report_dir,
-            evidence_path=web_evidence_path,
+            evidence_path=report_evidence,
         )
         current_logger.info(
             "Resultados gerados: %s e %s",
@@ -357,6 +379,18 @@ def run(
         failed_result = result.fail(str(exc))
         finish_maestro_task(client, failed_result, current_logger)
         return failed_result
+    finally:
+        if web_session is not None:
+            web_session.close()
+            current_logger.info(
+                "Sessão Playwright encerrada",
+                extra={
+                    "evento": "FIM_PLAYWRIGHT",
+                    "formulario": "Index Lotes",
+                    "status": "SUCCESS",
+                    "usuario": "sistema",
+                },
+            )
 
 
 def main() -> int:
