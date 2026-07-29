@@ -1,158 +1,149 @@
-"""Page Object do formulario de lotes."""
+"""Page Object do formulário controlado de lotes."""
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
-import unicodedata
 
-from selenium.common.exceptions import NoSuchElementException, TimeoutException
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.support.ui import Select, WebDriverWait
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 
 class FormPageTimeoutError(RuntimeError):
     """O formulário de lotes não respondeu dentro do tempo configurado."""
 
 
+class FormPageResultError(RuntimeError):
+    """A interface retornou um resultado diferente do solicitado pelo fluxo."""
+
+
 class FormPage:
-    """Encapsula locators, waits e ações do formulário de lotes."""
+    """Centraliza locators semânticos e ações, sem regras RN01–RN07."""
 
-    CAMPO_NUMERO_LOTE = (By.ID, "numero-lote")
-    CAMPO_PRODUTO = (By.ID, "produto")
-    STATUS_PENDENTE = (
-        By.XPATH,
-        '//label[.//input[@data-testid="status-pendente"]]',
-    )
-    STATUS_PROCESSAMENTO = (
-        By.XPATH,
-        '//label[.//input[@data-testid="status-processamento"]]',
-    )
-    STATUS_CONCLUIDO = (
-        By.XPATH,
-        '//label[.//input[@data-testid="status-concluido"]]',
-    )
-    BOTAO_PROCESSAR = (By.ID, "botao-processar")
-    MENSAGEM_RESULTADO = (By.ID, "mensagem")
+    ROTULO_NUMERO_LOTE = "Número do lote"
+    ROTULO_PRODUTO = "Produto"
+    ROTULO_MENSAGEM_RESULTADO = "Mensagem do resultado"
+    NOME_BOTAO_PROCESSAR = "Processar lote"
+    NOME_REGIAO_RESULTADO = "Resultado do processamento"
 
-    STATUS_OPCOES = {
-        "Pendente": STATUS_PENDENTE,
-        "Em Processamento": STATUS_PROCESSAMENTO,
-        "Concluido": STATUS_CONCLUIDO,
-        "Conclu\u00eddo": STATUS_CONCLUIDO,
+    RESULTADOS_VISUAIS = {
+        "APROVADO": "Aprovado",
+        "DIVERGENCIA": "Divergência",
+        "REVISAO": "Revisão humana",
+        "ERRO": "Erro técnico",
     }
 
-    def __init__(
-        self,
-        driver: Any,
-        timeout_seconds: float = 15.0,
-        *,
-        wait_factory: Callable[[Any, float], Any] = WebDriverWait,
-    ) -> None:
+    def __init__(self, page: Any, timeout_seconds: float = 15.0) -> None:
         if timeout_seconds <= 0:
             raise ValueError("timeout_seconds deve ser maior que zero")
 
-        self.driver = driver
+        self.page = page
         self.timeout_seconds = timeout_seconds
-        self._wait = wait_factory(driver, timeout_seconds)
+        self.timeout_ms = timeout_seconds * 1_000
 
-    def preencher_lote(self, dados_lote: Mapping[str, Any]) -> None:
-        """Preenche número, produto, status e envia o formulário."""
-        numero_lote = self._campo_obrigatorio(
+    def preencher_lote(self, dados_lote: Mapping[str, Any]) -> str:
+        """Preenche o formulário e devolve a mensagem visual apresentada."""
+        numero_lote = self._campo_para_exibicao(
             dados_lote,
             "numero_lote",
             aliases=("lote_id",),
+            fallback="Lote sem identificação",
         )
-        produto = self._campo_obrigatorio(dados_lote, "produto")
-        status = self._campo_obrigatorio(dados_lote, "status")
-        status_locator = self._locator_status(status, numero_lote)
+        produto = self._campo_para_exibicao(
+            dados_lote,
+            "produto",
+            fallback="Não informado",
+        )
+        resultado = self._campo_obrigatorio(dados_lote, "resultado_validacao")
+        mensagem = self._campo_para_exibicao(
+            dados_lote,
+            "mensagem_resultado",
+            fallback="Resultado processado pela automação.",
+        )
+        nome_resultado = self._nome_resultado(resultado, numero_lote)
 
-        numero_input = self._wait_visible(
-            self.CAMPO_NUMERO_LOTE,
-            campo="numero do lote",
-            numero_lote=numero_lote,
-        )
-        produto_input = self._wait_visible(
-            self.CAMPO_PRODUTO,
-            campo="produto",
-            numero_lote=numero_lote,
-        )
-        status_option = self._wait_clickable(
-            status_locator,
-            campo=f"status {status}",
-            numero_lote=numero_lote,
-        )
-
-        numero_input.clear()
-        numero_input.send_keys(numero_lote)
         try:
-            Select(produto_input).select_by_visible_text(produto)
-        except NoSuchElementException as exc:
-            raise ValueError(
-                f"Produto invalido para o lote {numero_lote}: {produto!r}"
+            self.page.get_by_label(
+                self.ROTULO_NUMERO_LOTE,
+                exact=True,
+            ).fill(numero_lote, timeout=self.timeout_ms)
+            self.page.get_by_label(
+                self.ROTULO_PRODUTO,
+                exact=True,
+            ).select_option(label=produto, timeout=self.timeout_ms)
+            self.page.get_by_role(
+                "radio",
+                name=nome_resultado,
+                exact=True,
+            ).check(timeout=self.timeout_ms)
+            self.page.get_by_label(
+                self.ROTULO_MENSAGEM_RESULTADO,
+                exact=True,
+            ).fill(
+                mensagem,
+                timeout=self.timeout_ms,
+            )
+            self.page.get_by_role(
+                "button",
+                name=self.NOME_BOTAO_PROCESSAR,
+                exact=True,
+            ).click(timeout=self.timeout_ms)
+            return self._aguardar_resultado()
+        except PlaywrightTimeoutError as exc:
+            raise FormPageTimeoutError(
+                "Formulário não respondeu para o lote "
+                f"{numero_lote} em até {self.timeout_seconds:g} segundos"
             ) from exc
-        status_option.click()
 
-        button = self._wait_clickable(
-            self.BOTAO_PROCESSAR,
-            campo="Botao de processamento",
-            numero_lote=numero_lote,
-        )
-        button.click()
+    def validar_resultado(self, resultado_esperado: str) -> str:
+        """Confirma que a apresentação corresponde à classificação recebida."""
+        mensagem = self._aguardar_resultado()
+        resultado = resultado_esperado.strip().upper()
+        marcador = self.RESULTADOS_VISUAIS.get(resultado)
+        if marcador is None:
+            raise ValueError(f"Resultado visual desconhecido: {resultado_esperado!r}")
+
+        estado = self.page.get_by_role(
+            "status",
+            name=self.NOME_REGIAO_RESULTADO,
+        ).get_attribute("data-resultado")
+        if str(estado or "").strip().upper() != resultado:
+            raise FormPageResultError(
+                "A interface não apresentou o resultado esperado para o item"
+            )
+        return mensagem
 
     def is_sucesso(self) -> bool:
-        """Aguarda a mensagem final e valida se ela confirma sucesso."""
-        mensagem = self._wait_resultado()
-        texto = getattr(mensagem, "text", "") or ""
-        return "sucesso" in texto.casefold()
+        """Mantém a consulta legível usada pelos consumidores do Page Object."""
+        estado = self.page.get_by_role(
+            "status",
+            name=self.NOME_REGIAO_RESULTADO,
+        ).get_attribute("data-resultado")
+        return str(estado or "").strip().upper() == "APROVADO"
 
-    def capturar_evidencia(self, destino: Path) -> bool:
-        """Captura a mensagem final sem expor detalhes do elemento ao orquestrador."""
-        mensagem = self._wait_resultado()
-        return bool(mensagem.screenshot(str(destino)))
-
-    def _wait_resultado(self) -> Any:
-        try:
-            return self._wait.until(
-                EC.visibility_of_element_located(self.MENSAGEM_RESULTADO)
+    def capturar_evidencia(self, destino: Path) -> Path:
+        """Captura a página após o resultado e confirma a persistência do PNG."""
+        self._aguardar_resultado()
+        destino.parent.mkdir(parents=True, exist_ok=True)
+        self.page.screenshot(path=str(destino), full_page=True)
+        if not destino.is_file() or destino.stat().st_size == 0:
+            raise FormPageResultError(
+                f"A evidência visual não foi persistida: {destino}"
             )
-        except TimeoutException as exc:
-            raise FormPageTimeoutError(
-                "Mensagem de resultado nao ficou visivel em ate "
-                f"{self.timeout_seconds:g} segundos "
-                f"(locator={self.MENSAGEM_RESULTADO!r})"
-            ) from exc
+        return destino
 
-    def _wait_visible(
-        self,
-        locator: tuple[str, str],
-        *,
-        campo: str,
-        numero_lote: str,
-    ) -> Any:
+    def _aguardar_resultado(self) -> str:
         try:
-            return self._wait.until(EC.visibility_of_element_located(locator))
-        except TimeoutException as exc:
+            region = self.page.get_by_role(
+                "status",
+                name=self.NOME_REGIAO_RESULTADO,
+            )
+            region.wait_for(state="visible", timeout=self.timeout_ms)
+            return region.inner_text(timeout=self.timeout_ms).strip()
+        except PlaywrightTimeoutError as exc:
             raise FormPageTimeoutError(
-                f"Campo {campo} nao ficou visivel para o lote {numero_lote} "
-                f"em ate {self.timeout_seconds:g} segundos (locator={locator!r})"
-            ) from exc
-
-    def _wait_clickable(
-        self,
-        locator: tuple[str, str],
-        *,
-        campo: str,
-        numero_lote: str,
-    ) -> Any:
-        try:
-            return self._wait.until(EC.element_to_be_clickable(locator))
-        except TimeoutException as exc:
-            raise FormPageTimeoutError(
-                f"Campo {campo} nao ficou clicavel para o lote {numero_lote} "
-                f"em ate {self.timeout_seconds:g} segundos (locator={locator!r})"
+                "Mensagem de resultado não ficou visível em até "
+                f"{self.timeout_seconds:g} segundos"
             ) from exc
 
     @classmethod
@@ -169,23 +160,28 @@ class FormPage:
                 return str(valor).strip()
 
         nomes = ", ".join((campo, *aliases))
-        raise ValueError(f"Campo obrigatorio ausente ou vazio: {nomes}")
+        raise ValueError(f"Campo obrigatório ausente ou vazio: {nomes}")
 
     @classmethod
-    def _locator_status(cls, status: str, numero_lote: str) -> tuple[str, str]:
-        normalized_status = cls._normalizar_status(status)
-        for status_configurado, locator in cls.STATUS_OPCOES.items():
-            if cls._normalizar_status(status_configurado) == normalized_status:
-                return locator
+    def _campo_para_exibicao(
+        cls,
+        dados_lote: Mapping[str, Any],
+        campo: str,
+        *,
+        aliases: tuple[str, ...] = (),
+        fallback: str,
+    ) -> str:
+        try:
+            return cls._campo_obrigatorio(dados_lote, campo, aliases=aliases)
+        except ValueError:
+            return fallback
 
-        opcoes = ", ".join(cls.STATUS_OPCOES)
-        raise ValueError(
-            f"Status invalido para o lote {numero_lote}: {status!r}. "
-            f"Opcoes validas: {opcoes}"
-        )
-
-    @staticmethod
-    def _normalizar_status(status: str) -> str:
-        without_accents = unicodedata.normalize("NFKD", status)
-        ascii_status = without_accents.encode("ascii", "ignore").decode("ascii")
-        return " ".join(ascii_status.casefold().split())
+    @classmethod
+    def _nome_resultado(cls, resultado: str, numero_lote: str) -> str:
+        normalized = resultado.strip().upper()
+        try:
+            return cls.RESULTADOS_VISUAIS[normalized]
+        except KeyError as exc:
+            raise ValueError(
+                f"Resultado inválido para o lote {numero_lote}: {resultado!r}"
+            ) from exc

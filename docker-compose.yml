@@ -19,6 +19,7 @@ services:
       WEB_TEST_URL: web/index-lotes/index.html
       WEB_ARTIFACT_DIR: artefatos
       WEB_TIMEOUT_SECONDS: "${WEB_TIMEOUT_SECONDS:-15}"
+      PLAYWRIGHT_CHROMIUM_PATH: /usr/bin/chromium
       PROCESSING_DELAY_SECONDS: "0"
     volumes:
       - ./dados_entrada:/app/dados_entrada:ro

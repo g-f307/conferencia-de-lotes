@@ -97,34 +97,53 @@
               <label class="radio-option">
                 <input
                   type="radio"
-                  name="status"
-                  value="Pendente"
-                  data-testid="status-pendente"
+                  name="resultadoValidacao"
+                  value="APROVADO"
+                  data-testid="resultado-aprovado"
                   checked
                 />
-                <span>Pendente</span>
+                <span>Aprovado</span>
               </label>
 
               <label class="radio-option">
                 <input
                   type="radio"
-                  name="status"
-                  value="Em Processamento"
-                  data-testid="status-processamento"
+                  name="resultadoValidacao"
+                  value="DIVERGENCIA"
+                  data-testid="resultado-divergencia"
                 />
-                <span>Em Processamento</span>
+                <span>Divergência</span>
               </label>
 
               <label class="radio-option">
                 <input
                   type="radio"
-                  name="status"
-                  value="Concluído"
-                  data-testid="status-concluido"
+                  name="resultadoValidacao"
+                  value="REVISAO"
+                  data-testid="resultado-revisao"
                 />
-                <span>Concluído</span>
+                <span>Revisão humana</span>
+              </label>
+
+              <label class="radio-option">
+                <input
+                  type="radio"
+                  name="resultadoValidacao"
+                  value="ERRO"
+                  data-testid="resultado-erro"
+                />
+                <span>Erro técnico</span>
               </label>
             </fieldset>
+
+            <div class="visually-hidden">
+              <label for="mensagem-resultado">Mensagem do resultado</label>
+              <textarea
+                id="mensagem-resultado"
+                name="mensagemResultado"
+                tabindex="-1"
+              ></textarea>
+            </div>
 
             <button
               id="botao-processar"
@@ -132,7 +151,10 @@
               type="submit"
               data-testid="processar-lote"
             >
-              <span class="button-label">➤ Processar lote</span>
+              <span class="button-label">
+                <span aria-hidden="true">➤</span>
+                Processar lote
+              </span>
               <span class="button-loader" aria-hidden="true"></span>
             </button>
 
@@ -140,6 +162,7 @@
               id="mensagem"
               class="message"
               role="status"
+              aria-label="Resultado do processamento"
               aria-live="polite"
               data-testid="mensagem"
               hidden

@@ -2,13 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import Any
 
-from selenium.common.exceptions import TimeoutException
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.support.ui import WebDriverWait
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 
 class LoginPageTimeoutError(RuntimeError):
@@ -16,54 +12,47 @@ class LoginPageTimeoutError(RuntimeError):
 
 
 class LoginPage:
-    """Encapsula locators, waits e ações da autenticação web."""
+    """Encapsula locators semânticos, waits e ações da autenticação."""
 
-    CAMPO_USUARIO = (By.ID, "usuario")
-    CAMPO_SENHA = (By.ID, "senha")
-    BOTAO_LOGIN = (By.ID, "botao-login")
-    FORMULARIO_LOTE = (By.ID, "lote-form")
+    ROTULO_USUARIO = "Usuário"
+    ROTULO_SENHA = "Senha"
+    NOME_BOTAO_LOGIN = "Entrar"
+    TITULO_FORMULARIO = "Processar novo lote"
 
-    def __init__(
-        self,
-        driver: Any,
-        timeout_seconds: float = 15.0,
-        *,
-        wait_factory: Callable[[Any, float], Any] = WebDriverWait,
-    ) -> None:
+    def __init__(self, page: Any, timeout_seconds: float = 15.0) -> None:
         if timeout_seconds <= 0:
             raise ValueError("timeout_seconds deve ser maior que zero")
 
-        self.driver = driver
+        self.page = page
         self.timeout_seconds = timeout_seconds
-        self._wait = wait_factory(driver, timeout_seconds)
+        self.timeout_ms = timeout_seconds * 1_000
 
     def fazer_login(self, usuario: str, senha: str) -> None:
-        """Preenche o login e aguarda a abertura do formulário de lotes."""
+        """Autentica e espera o formulário de lotes ficar disponível."""
         normalized_user = usuario.strip()
         if not normalized_user or not senha:
             raise ValueError("Usuário e senha devem ser informados")
 
         try:
-            user_input = self._wait.until(
-                EC.visibility_of_element_located(self.CAMPO_USUARIO)
-            )
-            password_input = self._wait.until(
-                EC.visibility_of_element_located(self.CAMPO_SENHA)
-            )
-            login_button = self._wait.until(
-                EC.element_to_be_clickable(self.BOTAO_LOGIN)
-            )
-
-            user_input.clear()
-            user_input.send_keys(normalized_user)
-            password_input.clear()
-            password_input.send_keys(senha)
-            login_button.click()
-
-            self._wait.until(
-                EC.visibility_of_element_located(self.FORMULARIO_LOTE)
-            )
-        except TimeoutException as exc:
+            self.page.get_by_label(
+                self.ROTULO_USUARIO,
+                exact=True,
+            ).fill(normalized_user, timeout=self.timeout_ms)
+            self.page.get_by_label(
+                self.ROTULO_SENHA,
+                exact=True,
+            ).fill(senha, timeout=self.timeout_ms)
+            self.page.get_by_role(
+                "button",
+                name=self.NOME_BOTAO_LOGIN,
+                exact=True,
+            ).click(timeout=self.timeout_ms)
+            self.page.get_by_role(
+                "heading",
+                name=self.TITULO_FORMULARIO,
+                exact=True,
+            ).wait_for(state="visible", timeout=self.timeout_ms)
+        except PlaywrightTimeoutError as exc:
             raise LoginPageTimeoutError(
                 "Não foi possível concluir o login no tempo configurado"
             ) from exc
