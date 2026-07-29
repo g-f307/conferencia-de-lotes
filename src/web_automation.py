@@ -33,6 +33,7 @@ DEFAULT_CHROMIUM_CANDIDATES = (
 )
 EVIDENCE_PREFIXES = {
     "APROVADO": "aprovado",
+    "REPROVADO": "reprovado",
     "DIVERGENCIA": "divergencia",
     "REVISAO": "divergencia",
     "ERRO": "erro",

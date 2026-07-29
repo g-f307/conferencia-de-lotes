@@ -28,6 +28,7 @@ class FormPage:
 
     RESULTADOS_VISUAIS = {
         "APROVADO": "Aprovado",
+        "REPROVADO": "Reprovado",
         "DIVERGENCIA": "Divergência",
         "REVISAO": "Revisão humana",
         "ERRO": "Erro técnico",

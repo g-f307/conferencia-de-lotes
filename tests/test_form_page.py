@@ -101,6 +101,7 @@ def test_form_page_centraliza_locators_semanticos():
     assert FormPage.ROTULO_NUMERO_LOTE == "Número do lote"
     assert FormPage.ROTULO_PRODUTO == "Produto"
     assert FormPage.NOME_BOTAO_PROCESSAR == "Processar lote"
+    assert FormPage.RESULTADOS_VISUAIS["REPROVADO"] == "Reprovado"
     assert FormPage.RESULTADOS_VISUAIS["DIVERGENCIA"] == "Divergência"
 
 
@@ -131,6 +132,20 @@ def test_preencher_lote_usa_fallbacks_para_dados_invalidos():
     assert page.numero.actions[0][1] == "Lote sem identificação"
     assert page.produto.actions[0][1] == "Não informado"
     assert page.statuses["Divergência"].actions[0][0] == "check"
+
+
+def test_preencher_lote_preserva_reprovado_como_resultado_oficial():
+    page = FakePage(result="REPROVADO", message="Reprovado — lote L001")
+
+    message = FormPage(page).preencher_lote(
+        dados(
+            resultado_validacao="REPROVADO",
+            mensagem_resultado="Lote reprovado: avaria",
+        )
+    )
+
+    assert page.statuses["Reprovado"].actions[0][0] == "check"
+    assert message == "Reprovado — lote L001"
 
 
 def test_preencher_lote_rejeita_resultado_desconhecido():

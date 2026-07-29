@@ -20,6 +20,7 @@ class ExecutionResult:
     failed_items: int = 0
     ambiguous_items: int = 0
     approved_items: int = 0
+    rejected_items: int = 0
     divergence_items: int = 0
     technical_errors: int = 0
     evidences: list[str] = field(default_factory=list)

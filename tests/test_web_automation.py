@@ -241,6 +241,7 @@ def test_executable_version_retorna_primeira_linha(monkeypatch, tmp_path):
     ("resultado", "prefixo"),
     [
         ("APROVADO", "aprovado"),
+        ("REPROVADO", "reprovado"),
         ("DIVERGENCIA", "divergencia"),
         ("REVISAO", "divergencia"),
         ("ERRO", "erro"),

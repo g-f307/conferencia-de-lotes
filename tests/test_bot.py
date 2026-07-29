@@ -64,6 +64,7 @@ class FakeWebProcessor:
             raise RuntimeError("formulario indisponivel")
         prefix = {
             "APROVADO": "aprovado",
+            "REPROVADO": "reprovado",
             "DIVERGENCIA": "divergencia",
             "REVISAO": "divergencia",
         }[resultado_validacao]
@@ -239,12 +240,14 @@ def test_performer_processa_cada_item_na_web_e_grava_saidas(tmp_path):
     result = performer.run()
 
     assert result.total == 3
+    assert result.success == 2
     assert result.approved == 1
-    assert result.divergences == 1
+    assert result.rejected == 1
+    assert result.divergences == 0
     assert len(result.human_reviews) == 1
     assert [call[:2] for call in web.calls] == [
         ("L001", "APROVADO"),
-        ("L002", "DIVERGENCIA"),
+        ("L002", "REPROVADO"),
         ("L003", "REVISAO"),
     ]
     assert queue.done[0][1]["resultado_validacao"] == "APROVADO"
@@ -253,11 +256,16 @@ def test_performer_processa_cada_item_na_web_e_grava_saidas(tmp_path):
         queue.done[0][1]["mensagem_resultado"]
         == "Resultado confirmado na interface: APROVADO"
     )
-    assert queue.business_errors[0][2]["resultado_validacao"] == "DIVERGENCIA"
+    assert queue.done[1][1]["resultado_validacao"] == "REPROVADO"
+    assert (
+        queue.done[1][1]["mensagem_resultado"]
+        == "Resultado confirmado na interface: REPROVADO"
+    )
+    assert queue.business_errors == []
     assert queue.human_reviews[0][2]["resultado_validacao"] == "REVISAO"
     assert result.evidences == [
         "artefatos/aprovado-L001.png",
-        "artefatos/divergencia-L002.png",
+        "artefatos/reprovado-L002.png",
         "artefatos/divergencia-L003.png",
     ]
 
@@ -280,4 +288,80 @@ def test_performer_isola_falha_web_e_continua_proximo_item(tmp_path):
     assert web.error_captures == ["L001"]
     assert queue.system_errors[0][2]["resultado_validacao"] == "ERRO"
     assert queue.system_errors[0][2]["evidencia"] == "artefatos/erro-L001.png"
+    assert queue.done[0][0]["lote_id"] == "L002"
+
+
+def test_performer_isola_falha_inesperada_na_classificacao_e_continua():
+    class ClassificationFailurePerformer(LotePerformer):
+        def _classify(self, current_item):
+            if current_item["lote_id"] == "L001":
+                raise RuntimeError("classificador indisponível")
+            return super()._classify(current_item)
+
+    queue = FakeQueue([item(lote_id="L001"), item(lote_id="L002")])
+    performer = ClassificationFailurePerformer(
+        queue,
+        {"L001", "L002"},
+        VaultClient(FakeVaultProvider()),
+    )
+
+    result = performer.run()
+
+    assert result.total == 2
+    assert result.system_errors == 1
+    assert result.success == 1
+    assert queue.system_errors[0][0]["lote_id"] == "L001"
+    assert queue.system_errors[0][2]["resultado_validacao"] == "ERRO"
+    assert queue.done[0][0]["lote_id"] == "L002"
+
+
+def test_performer_isola_falha_na_finalizacao_e_continua_proximo_item():
+    class FinalizationFailureQueue(FakeQueue):
+        def mark_done(self, current_item, output):
+            if current_item["lote_id"] == "L001":
+                raise RuntimeError("DataPool recusou finalização")
+            super().mark_done(current_item, output)
+
+    queue = FinalizationFailureQueue(
+        [item(lote_id="L001"), item(lote_id="L002")]
+    )
+    performer = LotePerformer(
+        queue,
+        {"L001", "L002"},
+        VaultClient(FakeVaultProvider()),
+    )
+
+    result = performer.run()
+
+    assert result.total == 2
+    assert result.system_errors == 1
+    assert result.success == 1
+    assert queue.system_errors[0][0]["lote_id"] == "L001"
+    assert queue.done[0][0]["lote_id"] == "L002"
+
+
+def test_performer_continua_se_registro_do_erro_de_sistema_tambem_falhar():
+    class UnavailableFinalizationQueue(FakeQueue):
+        def mark_done(self, current_item, output):
+            if current_item["lote_id"] == "L001":
+                raise RuntimeError("falha na conclusão")
+            super().mark_done(current_item, output)
+
+        def mark_system_error(self, current_item, error, output):
+            raise RuntimeError("falha ao registrar erro")
+
+    queue = UnavailableFinalizationQueue(
+        [item(lote_id="L001"), item(lote_id="L002")]
+    )
+    performer = LotePerformer(
+        queue,
+        {"L001", "L002"},
+        VaultClient(FakeVaultProvider()),
+    )
+
+    result = performer.run()
+
+    assert result.total == 2
+    assert result.system_errors == 1
+    assert result.success == 1
     assert queue.done[0][0]["lote_id"] == "L002"

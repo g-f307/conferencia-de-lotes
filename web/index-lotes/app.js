@@ -61,12 +61,14 @@ formulario.addEventListener("submit", (event) => {
   const resultado = formulario.elements.resultadoValidacao.value;
   const rotulos = {
     APROVADO: "Aprovado",
+    REPROVADO: "Reprovado",
     DIVERGENCIA: "Divergência",
     REVISAO: "Revisão humana",
     ERRO: "Erro técnico",
   };
   const classes = {
     APROVADO: "message--success",
+    REPROVADO: "message--warning",
     DIVERGENCIA: "message--warning",
     REVISAO: "message--warning",
     ERRO: "message--error",

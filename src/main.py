@@ -120,6 +120,7 @@ def execution_result_from_performer(result: PerformerResult) -> ExecutionResult:
         failed_items=result.business_errors + result.system_errors,
         ambiguous_items=len(result.human_reviews),
         approved_items=result.approved,
+        rejected_items=result.rejected,
         divergence_items=result.divergences,
         technical_errors=result.system_errors,
         evidences=list(result.evidences),

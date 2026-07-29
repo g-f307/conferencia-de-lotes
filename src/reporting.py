@@ -124,6 +124,7 @@ def generate_evidence_pdf(
         ["Mensagem", _text(summary.get("message"))],
         ["Total de itens", _text(summary.get("total_items"), "0")],
         ["Aprovados", _text(summary.get("approved_items"), "0")],
+        ["Reprovados", _text(summary.get("rejected_items"), "0")],
         ["Divergencias", _text(summary.get("divergence_items"), "0")],
         ["Revisoes humanas", _text(summary.get("ambiguous_items"), "0")],
         ["Erros tecnicos", _text(summary.get("technical_errors"), "0")],

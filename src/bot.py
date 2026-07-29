@@ -81,6 +81,8 @@ class ItemClassification:
 class PerformerResult:
     total: int = 0
     success: int = 0
+    approved_items: int = 0
+    rejected_items: int = 0
     business_errors: int = 0
     system_errors: int = 0
     human_reviews: list[HumanReviewRequired] = field(default_factory=list)
@@ -88,7 +90,11 @@ class PerformerResult:
 
     @property
     def approved(self) -> int:
-        return self.success
+        return self.approved_items
+
+    @property
+    def rejected(self) -> int:
+        return self.rejected_items
 
     @property
     def divergences(self) -> int:
@@ -133,27 +139,37 @@ class LotePerformer:
                 extra=self._log_context("INICIO_ITEM", "STARTED"),
             )
 
-            if not credential_logged:
-                credential = self.vault_client.get_erp_credential()
-                self._log_erp_user(credential)
-                credential_logged = True
-
-            classification = self._classify(item)
+            evidence = ""
             try:
+                if not credential_logged:
+                    credential = self.vault_client.get_erp_credential()
+                    self._log_erp_user(credential)
+                    credential_logged = True
+
+                classification = self._classify(item)
                 evidence, message = self._process_web(item, classification)
+                outputs = self._outputs(
+                    classification.resultado,
+                    message,
+                    evidence,
+                )
+                self._finish_classified_item(
+                    item,
+                    classification,
+                    outputs,
+                    result,
+                )
             except Exception as exc:
-                self._handle_web_failure(item, exc, result)
+                self._handle_item_failure(
+                    item,
+                    exc,
+                    result,
+                    evidence=evidence,
+                )
                 continue
 
-            outputs = self._outputs(
-                classification.resultado,
-                message,
-                evidence,
-            )
-            self._finish_classified_item(item, classification, outputs, result)
-
             if (
-                classification.resultado == "APROVADO"
+                classification.resultado in {"APROVADO", "REPROVADO"}
                 and self.processing_delay_seconds > 0
             ):
                 self.sleep_fn(self.processing_delay_seconds)
@@ -210,7 +226,7 @@ class LotePerformer:
         if validated["status"] == "REPROVADO":
             observation = validated.get("observacao") or "Divergência registrada"
             return ItemClassification(
-                resultado="DIVERGENCIA",
+                resultado="REPROVADO",
                 mensagem=f"Lote reprovado: {observation}",
                 validated=validated,
             )
@@ -245,26 +261,43 @@ class LotePerformer:
             or classification.mensagem
         )
 
-    def _handle_web_failure(
+    def _handle_item_failure(
         self,
         item: Mapping[str, object],
         exc: Exception,
         result: PerformerResult,
+        *,
+        evidence: str = "",
     ) -> None:
-        evidence = ""
-        if self.web_processor is not None:
-            captured = self.web_processor.capture_error(item)
-            if captured is not None:
-                evidence = self._relative_path(captured)
-                result.evidences.append(evidence)
+        if not evidence and self.web_processor is not None:
+            try:
+                captured = self.web_processor.capture_error(item)
+                if captured is not None:
+                    evidence = self._relative_path(captured)
+            except Exception:
+                LOGGER.exception(
+                    "Não foi possível capturar a evidência da falha do item",
+                    extra=self._log_context("EVIDENCIA_ERRO_ITEM", "FAILED"),
+                )
 
-        message = f"Falha técnica na automação web: {exc}"
+        if evidence:
+            result.evidences.append(evidence)
+
+        message = f"Falha técnica no ciclo do item: {exc}"
         outputs = self._outputs("ERRO", message, evidence)
-        LOGGER.exception(
-            "Falha técnica ao processar item na página controlada",
-            extra=self._log_context("ERRO_WEB_ITEM", "FAILED"),
+        LOGGER.error(
+            "Falha técnica ao processar ou finalizar item",
+            exc_info=(type(exc), exc, exc.__traceback__),
+            extra=self._log_context("ERRO_SISTEMA_ITEM", "FAILED"),
         )
-        self.queue.mark_system_error(item, message, outputs)
+        try:
+            self.queue.mark_system_error(item, message, outputs)
+        except Exception:
+            LOGGER.exception(
+                "Não foi possível registrar o erro de sistema no DataPool; "
+                "o consumo continuará",
+                extra=self._log_context("FINALIZACAO_ERRO_ITEM", "FAILED"),
+            )
         result.system_errors += 1
 
     def _finish_classified_item(
@@ -275,15 +308,19 @@ class LotePerformer:
         result: PerformerResult,
     ) -> None:
         evidence = outputs[OUTPUT_EVIDENCIA]
-        if evidence:
-            result.evidences.append(evidence)
 
-        if classification.resultado == "APROVADO":
+        if classification.resultado in {"APROVADO", "REPROVADO"}:
             self.queue.mark_done(
                 item,
                 {**classification.validated, **outputs},
             )
             result.success += 1
+            if classification.resultado == "APROVADO":
+                result.approved_items += 1
+            else:
+                result.rejected_items += 1
+            if evidence:
+                result.evidences.append(evidence)
             return
 
         if classification.resultado == "REVISAO":
@@ -294,10 +331,14 @@ class LotePerformer:
                 outputs,
             )
             result.human_reviews.append(classification.review)
+            if evidence:
+                result.evidences.append(evidence)
             return
 
         self.queue.mark_business_error(item, classification.mensagem, outputs)
         result.business_errors += 1
+        if evidence:
+            result.evidences.append(evidence)
 
     @staticmethod
     def _outputs(

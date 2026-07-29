@@ -283,6 +283,7 @@ def test_run_consumindo_datapool_e_publicando_resumo(tmp_path):
     settings.input_csv.write_text(
         "lote_id,produto,linha,turno,status,responsavel,data,observacao\n"
         "L001,Monitor,Linha A,Manha,APROVADO,Marcelo,2026-07-20,\n"
+        "L002,Monitor,Linha A,Manha,REPROVADO,Marcelo,2026-07-20,Avaria\n"
         "L999,Monitor,Linha A,Manha,APROVADO,Marcelo,2026-07-20,\n"
         "L001,Monitor,Linha A,Manha,pendente,Marcelo,2026-07-20,\n",
         encoding="utf-8",
@@ -294,27 +295,30 @@ def test_run_consumindo_datapool_e_publicando_resumo(tmp_path):
         settings=settings,
         maestro_client=client,
         vault_client=vault,
-        reference_lotes={"L001"},
+        reference_lotes={"L001", "L002"},
     )
 
     assert result.status == "PARTIALLY_COMPLETED"
-    assert result.total_items == 3
-    assert result.processed_items == 1
+    assert result.total_items == 4
+    assert result.processed_items == 2
     assert result.failed_items == 1
     assert result.ambiguous_items == 1
     assert result.approved_items == 1
+    assert result.rejected_items == 1
     assert result.divergence_items == 1
     assert result.technical_errors == 0
     assert client.info_alerts == ["Iniciando auditoria de acessos"]
-    assert len(client.done) == 1
+    assert len(client.done) == 2
+    assert client.done[1][1]["resultado_validacao"] == "REPROVADO"
     assert len(client.business_errors) == 1
     assert len(client.human_reviews) == 1
     assert client.artifacts[0][0] == "resumo_execucao.json"
-    assert client.artifacts[0][2]["total_items"] == 3
+    assert client.artifacts[0][2]["total_items"] == 4
+    assert client.artifacts[0][2]["rejected_items"] == 1
     assert client.artifacts[1][0] == "relatorio_evidencias.pdf"
     assert client.artifacts[1][1].read_bytes().startswith(b"%PDF-")
     assert client.finished_tasks[0][0] == "SUCCESS"
-    assert client.finished_tasks[0][2:] == (3, 1, 2)
+    assert client.finished_tasks[0][2:] == (4, 2, 2)
     log_events = [
         json.loads(line)["evento"]
         for line in settings.log_file.read_text(encoding="utf-8").splitlines()
