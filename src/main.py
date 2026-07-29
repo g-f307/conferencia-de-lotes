@@ -57,6 +57,15 @@ class SummaryGateway(AlertGateway, Protocol):
         artifact_name: str = "resumo_execucao.json",
     ) -> Path: ...
 
+    def post_evidence_report(
+        self,
+        summary: dict[str, Any],
+        metadata: dict[str, Any],
+        report_dir: Path | None = None,
+        evidence_path: Path | None = None,
+        artifact_name: str = "relatorio_evidencias.pdf",
+    ) -> Path: ...
+
 
 class MissingVaultProvider:
     """Falha explicitamente quando ha item a processar sem Vault configurado."""
@@ -206,6 +215,7 @@ def run(
 
     client = maestro_client or MaestroClient(current_settings)
     current_vault_client = vault_client or build_vault_client(current_settings, client)
+    web_evidence_path: Path | None = None
 
     try:
         client.send_start_alert()
@@ -242,6 +252,7 @@ def run(
                 erp_credential,
                 timeout_seconds=current_settings.web_timeout_seconds,
             )
+            web_evidence_path = web_result.evidence_path
             current_logger.info(
                 "Automacao web executada em %s; evidencia salva em %s",
                 web_result.url,
@@ -280,7 +291,34 @@ def run(
             processing_delay_seconds=current_settings.processing_delay_seconds,
         )
         result = execution_result_from_performer(performer.run())
-        client.post_summary_artifact(result.to_dict(), report_dir=current_settings.report_dir)
+        summary = result.to_dict()
+        summary_path = client.post_summary_artifact(
+            summary,
+            report_dir=current_settings.report_dir,
+        )
+        evidence_report_path = client.post_evidence_report(
+            summary,
+            {
+                "bot_id": current_settings.bot_id,
+                "execution_id": current_settings.execution_id,
+                "datapool_label": current_settings.datapool_label,
+                "vault_label": current_settings.vault_label,
+                "web_enabled": current_settings.web_automation_enabled,
+            },
+            report_dir=current_settings.report_dir,
+            evidence_path=web_evidence_path,
+        )
+        current_logger.info(
+            "Resultados gerados: %s e %s",
+            summary_path,
+            evidence_report_path,
+            extra={
+                "evento": "PUBLICACAO_RESULTADOS",
+                "formulario": "Resumo",
+                "status": "SUCCESS",
+                "usuario": "sistema",
+            },
+        )
         finish_maestro_task(client, result, current_logger)
         current_logger.info(
             "Execucao finalizada com status %s: %s itens, %s sucesso, %s falhas, %s revisoes",

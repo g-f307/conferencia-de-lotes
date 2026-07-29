@@ -55,6 +55,7 @@ def test_requirements_do_pacote_usa_selenium_sem_playwright():
 
     assert "selenium" in requirements
     assert "webdriver-manager" in requirements
+    assert "reportlab" in requirements
     assert "playwright" not in requirements.lower()
 
 

@@ -6,7 +6,6 @@ __pycache__/
 .coverage
 htmlcov/
 logs/*.log
-relatorios/*.json
 artefatos/*.png
 dist/
 Atividade.pdf

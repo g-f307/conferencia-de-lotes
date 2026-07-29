@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Callable, Protocol
 
 from src.config import Settings
+from src.reporting import generate_evidence_pdf
 from src.validation import HumanReviewRequired
 
 
@@ -362,6 +363,25 @@ class MaestroClient:
         artifact_path.write_text(
             json.dumps(summary, ensure_ascii=False, indent=2),
             encoding="utf-8",
+        )
+        self.gateway.post_artifact(artifact_name, artifact_path)
+        return artifact_path
+
+    def post_evidence_report(
+        self,
+        summary: dict[str, Any],
+        metadata: dict[str, Any],
+        report_dir: Path | None = None,
+        evidence_path: Path | None = None,
+        artifact_name: str = "relatorio_evidencias.pdf",
+    ) -> Path:
+        """Gera o relatorio PDF e o publica como artefato da task."""
+        destination = report_dir or self.settings.report_dir
+        artifact_path = generate_evidence_pdf(
+            summary,
+            destination / artifact_name,
+            metadata,
+            evidence_path,
         )
         self.gateway.post_artifact(artifact_name, artifact_path)
         return artifact_path

@@ -171,6 +171,7 @@ sequenceDiagram
     end
 
     M->>B: publicar resumo JSON
+    M->>B: publicar relatório PDF
     M->>B: finish_task
     M-->>R: código de saída
 ```
@@ -184,6 +185,7 @@ As saídas possuem destinos diferentes e não devem ser confundidas:
 | PNG da confirmação | `FormPage.capturar_evidencia()` | `artefatos/` | Evidência local; não é anexada diretamente ao item do DataPool. |
 | Resultado do item | `LotePerformer` | DataPool | Finalização individual como sucesso, erro de negócio, revisão ou erro de sistema. |
 | Resumo JSON | `ExecutionResult` | `relatorios/` | Publicado como artefato da task. |
+| Relatório PDF | `reporting.py` | `relatorios/` | Publicado como artefato da task e incorpora o PNG quando disponível. |
 | Log JSON Lines | `logging_config.py` | `logs/execucao.log` e console | Permite correlação por `execution_id` e `bot_id`. |
 
 Capturas do painel do DataPool são evidências operacionais da entrega e devem
@@ -252,6 +254,7 @@ Os eventos mais relevantes são:
 | `AUTOMACAO_WEB` | Formulário confirmado e evidência gerada. |
 | `PUBLICACAO_DATAPOOL` | Linhas publicadas. |
 | `PROCESSAMENTO_LOTE` | Falha técnica de um item. |
+| `PUBLICACAO_RESULTADOS` | Resumo JSON e relatório PDF gerados e publicados. |
 | `FIM_PROCESSAMENTO` | Contadores consolidados. |
 | `ENCERRAMENTO` | Sucesso operacional do ciclo. |
 | `ERRO_FATAL` | Falha que encerra a execução. |
