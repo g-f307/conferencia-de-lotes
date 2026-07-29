@@ -4,19 +4,19 @@
 
 | Item | Informação |
 |---|---|
-| Data da revisão técnica | 27 de julho de 2026 |
-| Escopo | Processo AS-IS, processo TO-BE, RN01–RN07 e implementação integrada |
+| Data da revisão técnica | 29 de julho de 2026 |
+| Escopo | Processo AS-IS, processo TO-BE, RN01–RN07, Page Objects e implementação integrada |
 | BPMN | `docs/diagrama_pdd.bpmn` |
 | Visualização | `docs/diagrama_pdd.svg` |
 | Regras-base | `docs/Regras de validação a aplicar - Gabriel, Marcelo e Rebecca.docx.pdf` |
 | Massa-base | `docs/Inspeção de Lotes - Gabriel, Marcelo e Rebecca.xlsx` |
-| Revisão cruzada | Deve ser confirmada por outro integrante no Pull Request da Issue #21 |
+| Revisão cruzada | Deve ser confirmada por outro integrante no Pull Request da Issue #34 |
 
 ## Objetivo
 
 Confirmar que o processo modelado e as regras documentadas continuam coerentes
 com a automação integrada após Dispatcher, Performer, BotCity Maestro, Vault,
-logs estruturados e Selenium.
+logs estruturados e a refatoração Selenium com Page Objects.
 
 ## Aderência do processo
 
@@ -59,6 +59,40 @@ logs estruturados e Selenium.
 8. A senha do ERP é recuperada exclusivamente do Credentials Vault.
 9. O formulário Selenium é uma evidência técnica controlada, não um ERP real.
 
+## Estratégia técnica com Page Objects
+
+A refatoração Page Object altera a organização interna do software, sem
+modificar as atividades, decisões ou responsáveis representados no BPMN.
+
+As responsabilidades foram distribuídas da seguinte forma:
+
+| Componente | Responsabilidade |
+|---|---|
+| `src/main.py` | Coordenar configuração, Vault, etapa web, Dispatcher, Performer e encerramento. |
+| `src/web_automation.py` | Criar e encerrar o WebDriver, instanciar os Page Objects e sequenciar o fluxo web. |
+| `src/pages/login_page.py` | Encapsular locators, waits e ações da autenticação. |
+| `src/pages/form_page.py` | Encapsular locators, preenchimento, confirmação e captura da evidência. |
+| `src/validation.py` | Manter RN01–RN07 independentes da interface web. |
+
+`LoginPage` e `FormPage` recebem a mesma instância do WebDriver e o mesmo
+timeout. A credencial recuperada do Vault é entregue à `LoginPage` somente em
+memória, e o ciclo de vida do navegador permanece sob responsabilidade de
+`src/web_automation.py`.
+
+O PNG comprova a interação com o formulário controlado. Ele é persistido em
+`artefatos/`, enquanto o resultado dos lotes permanece no DataPool e o resumo
+JSON é publicado separadamente no Maestro.
+
+### Impacto no BPMN
+
+Não foi necessário alterar `diagrama_pdd.bpmn` ou `diagrama_pdd.svg` porque:
+
+- o evento inicial e o resultado esperado do processo permanecem os mesmos;
+- as decisões e regras RN01–RN07 não foram alteradas;
+- Dispatcher, Performer, DataPool e revisão humana mantêm o comportamento;
+- Page Object é um padrão de organização da camada de interface;
+- o diagrama técnico em `docs/ARQUITETURA.md` registra a nova composição.
+
 ## Diferenças conhecidas
 
 ### Aquisição da entrada
@@ -86,4 +120,6 @@ limites de escopo já documentados, e não mudanças nas regras ou decisões do
 processo.
 
 Os diagramas Mermaid em `README.md` e `docs/ARQUITETURA.md` complementam o BPMN
-com a visão técnica dos componentes e da sequência executada pelo software.
+com a visão técnica dos componentes e da sequência executada pelo software. A
+matriz em `docs/ADERENCIA_PAGE_OBJECTS.md` relaciona os requisitos da atividade
+aos arquivos, testes e evidências correspondentes.
