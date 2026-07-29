@@ -10,16 +10,20 @@ from pathlib import Path
 import re
 import subprocess
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 from selenium import webdriver
-from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.support.ui import WebDriverWait
 from webdriver_manager.chrome import ChromeDriverManager
+
+from src.pages import (
+    FormPage,
+    FormPageTimeoutError,
+    LoginPage,
+    LoginPageTimeoutError,
+)
+from src.vault_client import ErpCredential
 
 
 DEFAULT_WEB_TIMEOUT_SECONDS = 15.0
@@ -151,6 +155,14 @@ def resolve_web_url(configured_url: str, base_dir: Path) -> str:
     return path.resolve().as_uri()
 
 
+def resolve_login_url(application_url: str) -> str:
+    """Resolve a tela de login associada ao formulário configurado."""
+    parsed = urlparse(application_url)
+    if parsed.path.rstrip("/").endswith("/login.html"):
+        return application_url
+    return urljoin(application_url, "login.html")
+
+
 def build_evidence_path(
     artifact_dir: Path,
     lote_id: str,
@@ -187,67 +199,51 @@ def build_chrome_driver(*, headless: bool = True) -> Any:
     )
 
 
-def _status_label_xpath(status: str) -> str:
-    if '"' in status:
-        raise ValueError("Status contém caractere inválido para o seletor")
-    return (
-        f'//label[.//input[@name="status" and @value="{status}"]]'
-    )
-
-
 def fill_and_submit_lote(
     driver: Any,
     url: str,
     artifact_dir: Path,
+    credential: ErpCredential,
     form_data: WebFormData | None = None,
     *,
     timeout_seconds: float = DEFAULT_WEB_TIMEOUT_SECONDS,
-    wait_factory: Callable[[Any, float], Any] = WebDriverWait,
 ) -> Path:
-    """Preenche o formulário usando waits explícitos no envio e confirmação."""
+    """Orquestra autenticação, preenchimento e evidência por Page Objects."""
     data = form_data or WebFormData()
-    driver.get(url)
+    login_page = LoginPage(driver, timeout_seconds)
+    form_page = FormPage(driver, timeout_seconds)
+    driver.get(resolve_login_url(url))
 
-    lote_input = driver.find_element(By.ID, "numero-lote")
-    lote_input.clear()
-    lote_input.send_keys(data.lote_id)
-    driver.find_element(By.ID, "produto").send_keys(data.produto)
-    driver.find_element(
-        By.XPATH,
-        _status_label_xpath(data.status),
-    ).click()
-
-    wait = wait_factory(driver, timeout_seconds)
     try:
-        button = wait.until(
-            EC.element_to_be_clickable((By.ID, "botao-processar"))
+        login_page.fazer_login(credential.username, credential.password)
+        form_page.preencher_lote(
+            {
+                "lote_id": data.lote_id,
+                "produto": data.produto,
+                "status": data.status,
+            }
         )
-    except TimeoutException as exc:
+        is_success = form_page.is_sucesso()
+    except (LoginPageTimeoutError, FormPageTimeoutError) as exc:
         raise WebAutomationTimeoutError(
-            "Botão de processamento não ficou clicável para o lote "
-            f"{data.lote_id} em até {timeout_seconds:g} segundos"
+            f"Fluxo web excedeu o tempo configurado para o lote {data.lote_id}: "
+            f"{exc}"
         ) from exc
 
-    button.click()
-    try:
-        confirmation = wait.until(
-            EC.visibility_of_element_located((By.ID, "mensagem"))
-        )
-    except TimeoutException as exc:
+    if not is_success:
         raise WebAutomationTimeoutError(
-            "Mensagem de sucesso não ficou visível para o lote "
-            f"{data.lote_id} em até {timeout_seconds:g} segundos"
-        ) from exc
-
-    if "sucesso" not in confirmation.text.casefold():
-        raise WebAutomationTimeoutError(
-            "Mensagem de confirmação inválida para o lote "
-            f"{data.lote_id}: {confirmation.text!r}"
+            f"Mensagem de confirmação inválida para o lote {data.lote_id}"
         )
 
     artifact_dir.mkdir(parents=True, exist_ok=True)
     evidence_path = build_evidence_path(artifact_dir, data.lote_id)
-    screenshot_created = confirmation.screenshot(str(evidence_path))
+    try:
+        screenshot_created = form_page.capturar_evidencia(evidence_path)
+    except FormPageTimeoutError as exc:
+        raise WebAutomationTimeoutError(
+            f"Resultado indisponível para gerar evidência do lote {data.lote_id}: "
+            f"{exc}"
+        ) from exc
     if not screenshot_created or not evidence_path.is_file():
         raise WebAutomationEvidenceError(
             "Não foi possível gerar a evidência da automação para o lote "
@@ -260,6 +256,7 @@ def run_web_automation(
     configured_url: str,
     base_dir: Path,
     artifact_dir: Path,
+    credential: ErpCredential,
     form_data: WebFormData | None = None,
     *,
     headless: bool = True,
@@ -274,6 +271,7 @@ def run_web_automation(
             driver,
             url,
             artifact_dir,
+            credential,
             form_data,
             timeout_seconds=timeout_seconds,
         )

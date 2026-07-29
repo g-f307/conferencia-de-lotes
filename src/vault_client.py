@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from src.logging_config import LOGGER_NAME
@@ -19,7 +19,7 @@ class CredentialProvider(Protocol):
 @dataclass(frozen=True)
 class ErpCredential:
     username: str
-    password: str
+    password: str = field(repr=False)
 
 
 class VaultCredentialError(RuntimeError):
