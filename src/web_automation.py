@@ -204,7 +204,11 @@ class PlaywrightWebSession:
 
         launch_options: dict[str, Any] = {
             "headless": self.headless,
-            "args": ["--no-sandbox", "--disable-dev-shm-usage"],
+            "args": [
+                "--no-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+            ],
         }
         browser_path = resolve_chromium_binary()
         if browser_path is not None:

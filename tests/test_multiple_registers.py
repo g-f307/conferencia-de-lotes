@@ -159,6 +159,21 @@ def test_log_identifica_ambiente_runner(tmp_path, monkeypatch):
     assert registro["ambiente"] == "runner"
 
 
+def test_log_identifica_ambiente_configurado_no_processo(tmp_path, monkeypatch):
+    logger = configured_logger(
+        tmp_path,
+        monkeypatch,
+        ENVIRONMENT="container",
+    )
+
+    logger.info("Execucao no container")
+
+    registro = json.loads(
+        (tmp_path / "execucao.log").read_text(encoding="utf-8")
+    )
+    assert registro["ambiente"] == "container"
+
+
 def test_modulos_usam_logger_estruturado_central(tmp_path):
     log_file = tmp_path / "execucao.log"
     configure_logging(log_file)

@@ -8,9 +8,17 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 def test_dockerfile_instala_playwright_e_chromium_headless():
     content = (PROJECT_ROOT / "Dockerfile").read_text(encoding="utf-8")
 
-    assert "PLAYWRIGHT_CHROMIUM_PATH=/usr/bin/chromium" in content
     assert "HOME=/tmp" in content
-    assert "apt-get install --yes --no-install-recommends chromium" in content
+    assert "ENVIRONMENT=container" in content
+    assert "TZ=America/Manaus" in content
+    assert "PLAYWRIGHT_BROWSERS_PATH=/ms-playwright" in content
+    assert (
+        "python -m playwright install --with-deps --only-shell chromium"
+        in content
+    )
+    assert "python -m playwright install-deps chromium" not in content
+    assert "apt-get install --yes --no-install-recommends chromium" not in content
+    assert "PLAYWRIGHT_CHROMIUM_PATH" not in content
     assert "chromedriver" not in content.lower()
     assert "web/index-lotes/" in content
     assert "artefatos" in content
@@ -33,7 +41,10 @@ def test_compose_mapeia_volumes_operacionais():
     assert "./artefatos:/app/artefatos" in content
     assert "WEB_AUTOMATION_ENABLED" in content
     assert "WEB_TIMEOUT_SECONDS" in content
-    assert "PLAYWRIGHT_CHROMIUM_PATH" in content
+    assert "ENVIRONMENT: container" in content
+    assert "TZ: America/Manaus" in content
+    assert "PLAYWRIGHT_BROWSERS_PATH: /ms-playwright" in content
+    assert "PLAYWRIGHT_CHROMIUM_PATH" not in content
     assert "HOME: /tmp" in content
 
 
