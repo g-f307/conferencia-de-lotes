@@ -10,8 +10,8 @@ permissions:
   contents: read
 
 jobs:
-  tests:
-    name: Testes Python
+  lint:
+    name: Qualidade do código
     runs-on: ubuntu-latest
     steps:
       - name: Obter o código
@@ -27,11 +27,76 @@ jobs:
       - name: Instalar dependências
         run: python -m pip install --requirement requirements-dev.txt
 
-      - name: Executar testes
-        run: python -m pytest -q
+      - name: Executar análise estática
+        run: >-
+          python -m ruff check
+          --select E4,E7,E9,F
+          --output-format=github
+          bot.py src tests scripts
 
-  docker:
-    name: Validar imagem Docker
+  tests:
+    name: Testes unitários
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Obter o código
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+
+      - name: Instalar dependências
+        run: python -m pip install --requirement requirements-dev.txt
+
+      - name: Executar testes unitários
+        run: python -m pytest -q --ignore=tests/e2e
+
+  test-e2e:
+    name: Testes E2E
+    needs: tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Obter o código
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+
+      - name: Instalar dependências
+        run: python -m pip install --requirement requirements-dev.txt
+
+      - name: Instalar Chromium Headless Shell
+        run: >-
+          python -m playwright install
+          --with-deps
+          --only-shell
+          chromium
+
+      - name: Executar testes E2E
+        run: >-
+          python -m pytest tests/e2e/ -q
+          --basetemp=e2e-artifacts
+
+      - name: Publicar screenshots E2E
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots-e2e
+          path: e2e-artifacts/**/*.png
+          if-no-files-found: error
+          retention-days: 7
+
+  build-docker:
+    name: Validar imagem Docker e artefatos
+    needs: test-e2e
     runs-on: ubuntu-latest
     steps:
       - name: Obter o código
@@ -40,12 +105,60 @@ jobs:
       - name: Construir imagem
         run: docker build --tag conferencia-de-lotes:ci .
 
+      - name: Preparar diretórios de saída
+        run: mkdir -p ci-output/logs ci-output/relatorios ci-output/artefatos
+
       - name: Executar smoke test Playwright
         run: >-
           docker run --rm --shm-size=1g
+          --user "$(id -u):$(id -g)"
           --env MAESTRO_ENABLED=false
           --env VAULT_ENABLED=false
           --env WEB_AUTOMATION_ENABLED=true
           --env PROCESSING_DELAY_SECONDS=0
           --env REFERENCE_LOTES=L001,L002
+          --env BOT_ID=bot-conferencia-de-lotes-ci
+          --env EXECUTION_ID="github-actions-${GITHUB_RUN_ID}"
+          --env LOG_FILE=/outputs/logs/execucao.log
+          --env REPORT_DIR=/outputs/relatorios
+          --env WEB_ARTIFACT_DIR=/outputs/artefatos
+          --volume "${GITHUB_WORKSPACE}/ci-output:/outputs"
           conferencia-de-lotes:ci
+
+      - name: Validar artefatos produzidos
+        shell: bash
+        run: |
+          test -s ci-output/logs/execucao.log
+          test -s ci-output/relatorios/resumo_execucao.json
+          test -s ci-output/relatorios/relatorio_evidencias.pdf
+
+          screenshot="$(find ci-output/artefatos -type f -name '*.png' -size +0c -print -quit)"
+          test -n "$screenshot"
+
+          total_screenshots="$(find ci-output/artefatos -type f -name '*.png' -size +0c | wc -l)"
+          {
+            echo "### Evidências Docker"
+            echo "- Screenshots: $total_screenshots"
+            echo "- Log, resumo JSON e relatório PDF: válidos"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publicar relatórios Docker
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: relatorios-docker
+          path: |
+            ci-output/logs/execucao.log
+            ci-output/relatorios/resumo_execucao.json
+            ci-output/relatorios/relatorio_evidencias.pdf
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Publicar screenshots Docker
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots-docker
+          path: ci-output/artefatos/*.png
+          if-no-files-found: error
+          retention-days: 7

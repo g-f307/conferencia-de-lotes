@@ -13,3 +13,6 @@ dist/
 Atividade.pdf
 .pytest_tmp/
 .mydocs/
+ci-output/
+test-results/
+e2e-artifacts/

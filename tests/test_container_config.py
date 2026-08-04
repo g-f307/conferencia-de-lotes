@@ -59,6 +59,55 @@ def test_ci_executa_smoke_test_playwright_na_imagem():
     assert "conferencia-de-lotes:ci" in content
 
 
+def test_ci_encadeia_qualidade_testes_e_docker():
+    content = (
+        PROJECT_ROOT / ".github" / "workflows" / "ci.yml"
+    ).read_text(encoding="utf-8")
+
+    assert "  lint:\n    name: Qualidade do código" in content
+    assert "  tests:\n    name: Testes unitários\n    needs: lint" in content
+    assert "  test-e2e:\n    name: Testes E2E\n    needs: tests" in content
+    assert (
+        "  build-docker:\n"
+        "    name: Validar imagem Docker e artefatos\n"
+        "    needs: test-e2e"
+    ) in content
+
+
+def test_ci_executa_e_publica_evidencias_e2e():
+    content = (
+        PROJECT_ROOT / ".github" / "workflows" / "ci.yml"
+    ).read_text(encoding="utf-8")
+
+    assert "playwright install" in content
+    assert "--with-deps" in content
+    assert "--only-shell" in content
+    assert "python -m pytest tests/e2e/ -q" in content
+    assert "name: screenshots-e2e" in content
+    assert "--basetemp=e2e-artifacts" in content
+    assert "e2e-artifacts/**/*.png" in content
+
+
+def test_ci_valida_e_publica_artefatos_docker():
+    content = (
+        PROJECT_ROOT / ".github" / "workflows" / "ci.yml"
+    ).read_text(encoding="utf-8")
+
+    expected_outputs = (
+        "ci-output/logs/execucao.log",
+        "ci-output/relatorios/resumo_execucao.json",
+        "ci-output/relatorios/relatorio_evidencias.pdf",
+    )
+    assert all(f"test -s {path}" in content for path in expected_outputs)
+    assert "ci-output/artefatos" in content
+    assert "-size +0c" in content
+    assert content.count("actions/upload-artifact@v4") == 3
+    assert "name: relatorios-docker" in content
+    assert "name: screenshots-docker" in content
+    assert "MAESTRO_ENABLED=false" in content
+    assert "VAULT_ENABLED=false" in content
+
+
 def test_pacote_botcity_inclui_pagina_web_local():
     from scripts.build_botcity_package import iter_package_files
 
