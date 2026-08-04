@@ -16,8 +16,7 @@ RUN addgroup --system botcity \
 COPY requirements.txt ./
 RUN python -m pip install --upgrade pip \
     && python -m pip install --requirement requirements.txt \
-    && python -m playwright install-deps chromium \
-    && python -m playwright install chromium \
+    && python -m playwright install --with-deps --only-shell chromium \
     && chmod -R a+rX /ms-playwright \
     && rm -rf /var/lib/apt/lists/*
 

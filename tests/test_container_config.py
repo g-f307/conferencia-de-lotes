@@ -12,8 +12,11 @@ def test_dockerfile_instala_playwright_e_chromium_headless():
     assert "ENVIRONMENT=container" in content
     assert "TZ=America/Manaus" in content
     assert "PLAYWRIGHT_BROWSERS_PATH=/ms-playwright" in content
-    assert "python -m playwright install-deps chromium" in content
-    assert "python -m playwright install chromium" in content
+    assert (
+        "python -m playwright install --with-deps --only-shell chromium"
+        in content
+    )
+    assert "python -m playwright install-deps chromium" not in content
     assert "apt-get install --yes --no-install-recommends chromium" not in content
     assert "PLAYWRIGHT_CHROMIUM_PATH" not in content
     assert "chromedriver" not in content.lower()
