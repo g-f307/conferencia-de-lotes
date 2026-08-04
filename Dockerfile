@@ -4,7 +4,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     HOME=/tmp \
-    PLAYWRIGHT_CHROMIUM_PATH=/usr/bin/chromium
+    ENVIRONMENT=container \
+    TZ=America/Manaus \
+    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
 WORKDIR /app
 
@@ -12,11 +14,12 @@ RUN addgroup --system botcity \
     && adduser --system --ingroup botcity --home /app botcity
 
 COPY requirements.txt ./
-RUN apt-get update \
-    && apt-get install --yes --no-install-recommends chromium \
-    && rm -rf /var/lib/apt/lists/* \
-    && python -m pip install --upgrade pip \
-    && python -m pip install --requirement requirements.txt
+RUN python -m pip install --upgrade pip \
+    && python -m pip install --requirement requirements.txt \
+    && python -m playwright install-deps chromium \
+    && python -m playwright install chromium \
+    && chmod -R a+rX /ms-playwright \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY --chown=botcity:botcity bot.py ./
 COPY --chown=botcity:botcity src/ ./src/

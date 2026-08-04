@@ -34,11 +34,13 @@ def resolve_log_environment(
     record: logging.LogRecord,
     settings: Settings,
 ) -> str:
-    """Resolve o ambiente sem fixar local quando a execucao vem do Runner."""
+    """Resolve o ambiente informado pelo evento, Runner ou processo atual."""
     ambiente = getattr(record, "ambiente", None)
     if ambiente:
         return str(ambiente)
-    return "runner" if settings.runner_context else "local"
+    if settings.runner_context:
+        return "runner"
+    return os.getenv("ENVIRONMENT", "local").strip() or "local"
 
 
 class StructuredJsonFormatter(logging.Formatter):
