@@ -290,6 +290,8 @@ def test_sessao_inicia_headless_e_autentica_com_page_object(
 
     assert state["launch"]["headless"] is True
     assert "--no-sandbox" in state["launch"]["args"]
+    assert "--disable-dev-shm-usage" in state["launch"]["args"]
+    assert "--disable-gpu" in state["launch"]["args"]
     assert state["new_page"]["viewport"] == {"width": 1440, "height": 1200}
     assert state["timeout"] == 12_000
     assert state["goto"][0].endswith("/web/index-lotes/login.html")

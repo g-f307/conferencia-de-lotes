@@ -21,7 +21,11 @@ def browser_type_launch_args(
     launch_args = {
         **browser_type_launch_args,
         "headless": True,
-        "args": ["--no-sandbox", "--disable-dev-shm-usage"],
+        "args": [
+            "--no-sandbox",
+            "--disable-dev-shm-usage",
+            "--disable-gpu",
+        ],
     }
     browser_path = resolve_chromium_binary()
     if browser_path is not None:
