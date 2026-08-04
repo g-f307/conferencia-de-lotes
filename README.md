@@ -427,14 +427,18 @@ publicados como artefatos da task.
 ## Testes e integração contínua
 
 ```bash
-python -m pytest -q
+python -m ruff check --select E4,E7,E9,F bot.py src tests scripts
+python -m pytest -q --ignore=tests/e2e
+python -m pytest tests/e2e/ -q
 python -m pytest --cov=src --cov-report=term-missing --cov-fail-under=80
 ```
 
-O workflow `.github/workflows/ci.yml` executa a suíte, constrói a imagem Docker
-e roda um smoke test Playwright headless com massa e credencial efêmera
-controladas. Ele é acionado em Pull Requests e em alterações da `main`, sem
-utilizar credenciais reais.
+O workflow `.github/workflows/ci.yml` encadeia análise estática, testes
+unitários, testes E2E em Chromium real e validação da imagem Docker. O smoke
+test do container usa massa e credencial efêmera controladas, verifica log,
+resumo JSON, relatório PDF e screenshots e publica essas saídas como artefatos
+temporários do GitHub Actions. O workflow é acionado em Pull Requests e em
+alterações da `main`, sem utilizar credenciais reais.
 
 ## Tratamento de erros
 
