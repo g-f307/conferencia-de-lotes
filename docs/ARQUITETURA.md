@@ -201,7 +201,7 @@ O gateway atualiza os campos de saída antes de chamar `report_done` ou
 |---|---|---|---|---|
 | Local básico | memória | credencial efêmera | desabilitado | regras e fluxo |
 | Local web | memória | credencial efêmera | Playwright Chromium | integração e PNG |
-| Docker | memória por padrão | credencial efêmera | `/usr/bin/chromium` | reprodutibilidade |
+| Docker | memória por padrão | credencial efêmera | Headless Shell do Playwright | reprodutibilidade |
 | Runner | BotCity | Credentials Vault | Chromium configurado ou disponível | homologação |
 
 O ciclo completo de cada item — classificação, interação web e finalização no
@@ -267,6 +267,8 @@ dados_entrada/
 web/index-lotes/
 ```
 
-Playwright é dependência Python. No Docker, Chromium é instalado na imagem. No
-Runner, `PLAYWRIGHT_CHROMIUM_PATH` pode apontar para o navegador homologado; se
-ausente, a automação tenta um caminho padrão ou o bundle do Playwright.
+Playwright é dependência Python. No Docker, o Chromium Headless Shell é
+instalado em `/ms-playwright` e compartilhado com o usuário não privilegiado da
+imagem. No Runner, `PLAYWRIGHT_CHROMIUM_PATH` pode apontar para o navegador
+homologado; se ausente, a automação tenta um caminho padrão ou o bundle do
+Playwright.
