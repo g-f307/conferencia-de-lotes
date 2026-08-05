@@ -1,5 +1,7 @@
 # Conferência de Lotes
 
+[![CI](https://github.com/g-f307/conferencia-de-lotes/actions/workflows/ci.yml/badge.svg)](https://github.com/g-f307/conferencia-de-lotes/actions/workflows/ci.yml)
+
 Automação corporativa para conferência de registros de inspeção, com
 processamento resiliente por item, integração com BotCity Maestro e automação
 web controlada por Playwright.
@@ -184,6 +186,7 @@ o que evita referências específicas de uma máquina ou Runner.
 │   ├── ADERENCIA_PAGE_OBJECTS.md
 │   ├── ARQUITETURA.md
 │   ├── DEPLOY_BOTCITY.md
+│   ├── EXECUCAO_E2E_DOCKER_CI.md
 │   ├── REVISAO_BPMN_PDD.md
 │   ├── ROTEIRO_DEMONSTRACAO.md
 │   ├── diagrama_pdd.bpmn
@@ -208,6 +211,7 @@ o que evita referências específicas de uma máquina ou Runner.
 │   ├── vault_client.py
 │   └── web_automation.py
 ├── tests/
+│   └── e2e/                       # cenários reais com pytest-playwright
 ├── web/index-lotes/               # aplicação controlada
 ├── .env.example
 ├── bot.py
@@ -241,7 +245,7 @@ cd conferencia-de-lotes
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements-dev.txt
-python -m playwright install chromium
+python -m playwright install --with-deps --only-shell chromium
 cp .env.example .env
 ```
 
@@ -251,12 +255,15 @@ No PowerShell:
 python -m venv .venv
 .venv\Scripts\Activate.ps1
 python -m pip install -r requirements-dev.txt
-python -m playwright install chromium
+python -m playwright install --only-shell chromium
 Copy-Item .env.example .env
 ```
 
-O comando `playwright install chromium` é necessário somente quando não houver
-um Chromium compatível configurado em `PLAYWRIGHT_CHROMIUM_PATH`.
+`requirements-dev.txt` instala `pytest-playwright`. O comando seguinte instala
+o Chromium Headless Shell usado pelos testes; `--with-deps` também prepara as
+bibliotecas do sistema em distribuições Linux compatíveis. A instalação do
+bundle é dispensável quando `PLAYWRIGHT_CHROMIUM_PATH` aponta para um Chromium
+compatível já instalado.
 
 ## Variáveis de ambiente
 
@@ -357,18 +364,22 @@ artefatos/*.png
 
 ```bash
 mkdir -p logs relatorios artefatos
-docker compose up --build --abort-on-container-exit
-```
-
-Para habilitar o navegador:
-
-```bash
+docker compose build
 WEB_AUTOMATION_ENABLED=true docker compose run --rm conferencia-de-lotes
 ```
 
-A imagem instala Chromium e define
-`PLAYWRIGHT_CHROMIUM_PATH=/usr/bin/chromium`. Os diretórios de saída são
-montados no host.
+Em Linux, quando o usuário do host não possui UID/GID `1000`, exporte os IDs
+antes da execução para preservar a propriedade dos arquivos:
+
+```bash
+export LOCAL_UID="$(id -u)"
+export LOCAL_GID="$(id -g)"
+```
+
+A imagem instala somente o Chromium Headless Shell gerenciado pelo Playwright
+em `/ms-playwright`. O Compose monta `logs/`, `relatorios/` e `artefatos/` no
+host; os arquivos gerados permanecem disponíveis depois que o container é
+removido.
 
 ## BotCity Runner
 
@@ -426,19 +437,42 @@ publicados como artefatos da task.
 
 ## Testes e integração contínua
 
+As validações possuem responsabilidades diferentes:
+
+| Camada | Comando local | Finalidade |
+|---|---|---|
+| Qualidade | `python -m ruff check --select E4,E7,E9,F bot.py src tests scripts` | Erros estáticos e imports inválidos. |
+| Unitários e integração | `python -m pytest -q --ignore=tests/e2e` | Regras e componentes sem abrir navegador. |
+| E2E | `python -m pytest tests/e2e/ -q` | Formulário real em Chromium headless. |
+| Suíte completa | `python -m pytest -q` | Testes Python, incluindo E2E. |
+| Smoke test Docker | `WEB_AUTOMATION_ENABLED=true docker compose run --rm conferencia-de-lotes` | Imagem, navegador e persistência das saídas. |
+
 ```bash
 python -m ruff check --select E4,E7,E9,F bot.py src tests scripts
 python -m pytest -q --ignore=tests/e2e
 python -m pytest tests/e2e/ -q
+python -m pytest -q
 python -m pytest --cov=src --cov-report=term-missing --cov-fail-under=80
 ```
 
-O workflow `.github/workflows/ci.yml` encadeia análise estática, testes
-unitários, testes E2E em Chromium real e validação da imagem Docker. O smoke
-test do container usa massa e credencial efêmera controladas, verifica log,
-resumo JSON, relatório PDF e screenshots e publica essas saídas como artefatos
-temporários do GitHub Actions. O workflow é acionado em Pull Requests e em
-alterações da `main`, sem utilizar credenciais reais.
+O workflow `.github/workflows/ci.yml`, acionado em Pull Requests e pushes para
+`main`, executa a cadeia `lint -> tests -> test-e2e -> build-docker`. O último
+job usa massa e credencial efêmera controladas, verifica log, resumo JSON,
+relatório PDF e screenshots e publica os artefatos `screenshots-e2e`,
+`relatorios-docker` e `screenshots-docker` por sete dias.
+
+Para baixá-los, abra **Actions**, selecione a execução do workflow **CI** e use
+a seção **Artifacts** ao final da página. O procedimento completo e as
+limitações conhecidas estão em
+[`docs/EXECUCAO_E2E_DOCKER_CI.md`](docs/EXECUCAO_E2E_DOCKER_CI.md).
+
+## Limitações conhecidas
+
+- os testes web usam a aplicação local controlada, não um ERP real;
+- a CI valida o gateway em memória e não acessa BotCity Maestro ou Vault;
+- os artefatos do GitHub Actions possuem retenção temporária de sete dias;
+- JSON e PDF são os relatórios implementados atualmente; a necessidade de um
+  arquivo Excel ainda depende de confirmação do professor.
 
 ## Tratamento de erros
 
@@ -468,6 +502,7 @@ finalizada no Maestro como sucesso operacional.
 | Documento | Finalidade |
 |---|---|
 | [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md) | Componentes, sequência e limites. |
+| [`docs/EXECUCAO_E2E_DOCKER_CI.md`](docs/EXECUCAO_E2E_DOCKER_CI.md) | Instalação, testes E2E, Docker, pipeline e artefatos. |
 | [`docs/REVISAO_BPMN_PDD.md`](docs/REVISAO_BPMN_PDD.md) | Aderência do processo e das regras. |
 | [`docs/ADERENCIA_PAGE_OBJECTS.md`](docs/ADERENCIA_PAGE_OBJECTS.md) | Matriz técnica da entrega. |
 | [`docs/DEPLOY_BOTCITY.md`](docs/DEPLOY_BOTCITY.md) | Implantação, smoke test e rollback. |
