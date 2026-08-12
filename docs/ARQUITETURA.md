@@ -272,3 +272,54 @@ instalado em `/ms-playwright` e compartilhado com o usuário não privilegiado d
 imagem. No Runner, `PLAYWRIGHT_CHROMIUM_PATH` pode apontar para o navegador
 homologado; se ausente, a automação tenta um caminho padrão ou o bundle do
 Playwright.
+
+## Visão Arquitetural Paralela (Relatório Excel - Aula 22)
+
+O módulo de relatório executivo Excel atua como um fluxo independente e paralelo. Ele não substitui nem altera a automação Playwright ou o consumo via DataPool. O objetivo deste fluxo é fornecer uma consolidação analítica e visual das inspeções diretamente na planilha.
+
+```mermaid
+flowchart TB
+    subgraph Entrada
+        XLSX[Workbook de Inspeção]
+        BASE[Base de Referência]
+    end
+
+    subgraph Processamento Excel
+        CLI[gerar_relatorio.py]
+        READER[WorkbookReader]
+        VALIDATOR[ValidationService]
+        REPORTER[ExcelReporter]
+        MODELS[Modelos de Dados]
+    end
+
+    subgraph Regras de Negócio
+        RN1_12[RN01-RN12 Consolidadas]
+    end
+
+    subgraph Saída
+        OUT_XLSX[Relatório Final XLSX]
+        OUT_LOG[Logs de Execução]
+    end
+
+    XLSX --> READER
+    BASE --> READER
+    READER --> CLI
+    CLI --> VALIDATOR
+    VALIDATOR --> RN1_12
+    RN1_12 --> MODELS
+    VALIDATOR --> REPORTER
+    REPORTER --> OUT_XLSX
+    CLI --> OUT_LOG
+```
+
+### Componentes do Relatório Excel
+
+| Componente | Responsabilidade |
+|---|---|
+| `gerar_relatorio.py` | Entry point para a geração do relatório Excel. |
+| `src/excel_reporting/workbook_reader.py` | Ler planilhas e base de referência, consolidando os registros. |
+| `src/excel_reporting/validation_service.py` | Aplicar RN01–RN12, acumular violações e classificar os registros. |
+| `src/excel_reporting/reporting.py` (ExcelReporter) | Criar o workbook de saída com as abas segregadas e o dashboard. |
+| `src/excel_reporting/models.py` | Definir estruturas de dados (dataclasses) para o fluxo do relatório. |
+
+A validação de negócios neste fluxo acumula os erros de todas as regras violadas e determina a classificação final seguindo a prioridade: Erro de Entrada > Divergência > Ambíguo > Válido.

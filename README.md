@@ -63,7 +63,6 @@ Estão implementados:
 Não fazem parte desta versão:
 
 - captura de anexos de e-mail;
-- leitura direta de XLSX;
 - acesso ou atualização de ERP produtivo;
 - armazenamento de credenciais reais no repositório;
 - interface para resolução dos itens encaminhados à revisão;
@@ -160,9 +159,7 @@ a interface e não decidem o resultado do negócio.
 
 ### Validação RN01-RN12 para relatórios
 
-`src/excel_reporting/` contém um contrato independente para a futura leitura e
-consolidação de planilhas. Ele produz `RegistroValidado`, aceita `PENDENTE` e
-acumula todas as regras violadas antes de atribuir uma única classificação.
+`src/excel_reporting/` contém a implementação de leitura e consolidação de planilhas. Ele produz `RegistroValidado`, aceita `PENDENTE` e acumula todas as regras violadas antes de atribuir uma única classificação.
 
 A precedência é `Erro de Entrada > Divergência > Ambíguo > Válido`. Esse
 serviço não é importado pelo Performer e não altera as RN01-RN07 aplicadas ao
@@ -483,9 +480,7 @@ limitações conhecidas estão em
 
 - os testes web usam a aplicação local controlada, não um ERP real;
 - a CI valida o gateway em memória e não acessa BotCity Maestro ou Vault;
-- os artefatos do GitHub Actions possuem retenção temporária de sete dias;
-- JSON e PDF são os relatórios implementados atualmente; a necessidade de um
-  arquivo Excel ainda depende de confirmação do professor.
+- os artefatos do GitHub Actions possuem retenção temporária de sete dias.
 
 ## Tratamento de erros
 
@@ -538,6 +533,7 @@ Xavier.
 | `v1.2.0` | Selenium | Automação homologada no Runner. |
 | [`v1.3.0`](docs/RELEASE_V1.3.0.md) | Selenium com Page Objects | Separação da interface e do orquestrador. |
 | [`v1.4.0`](docs/RELEASE_V1.4.0.md) | Playwright com Page Objects | DataPool e evidências rastreáveis por item. |
+| [`v1.6.0`](docs/RELEASE_V1.6.0.md) | Playwright com Relatório Excel | Dashboard Excel integrado e evidências da Aula 22. |
 
 ## Licença
 

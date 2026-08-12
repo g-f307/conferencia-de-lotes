@@ -97,3 +97,16 @@ ocorre somente na aplicação local controlada.
 O BPMN permanece adequado como visão de negócio. A integração final melhora a
 rastreabilidade técnica ao relacionar resultado, log e evidência visual com
 cada item, sem mover regras para a interface ou acessar um sistema real.
+
+## Impacto do Relatório Executivo Excel (Aula 22)
+
+A entrega da Aula 22 adiciona um fluxo paralelo focado na consolidação, validação completa (RN01-RN12) e apresentação de resultados gerenciais no Excel.
+
+### O que muda:
+1. **Nova capacidade de entrada**: O sistema agora também suporta a leitura direta das abas diárias do arquivo `Inspeção de Lotes - Gabriel, Marcelo e Rebecca.xlsx`.
+2. **Avaliação estendida**: As validações agora englobam o conjunto total de regras (RN01-RN12), identificando falhas de padronização, ambiguidade e divergências de produto.
+3. **Consolidação em Dashboard**: O resultado final é entregue em uma nova planilha formatada, com abas segmentadas por classificação e um dashboard nativo gerencial.
+
+### O que não muda (sem impacto no fluxo orquestrado original):
+- O fluxo web Playwright e a esteira baseada no BotCity DataPool continuam idênticos e isolados.
+- O mapeamento BPMN anterior permanece fiel ao processo de conferência individual de lote, enquanto o fluxo Excel representa um procedimento analítico pós-processamento (ou um cenário alternativo não orquestrado de auditoria em lote).
