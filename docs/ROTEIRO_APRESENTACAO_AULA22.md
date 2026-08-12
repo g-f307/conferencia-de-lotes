@@ -3,7 +3,8 @@
 ## Duração e divisão
 
 Roteiro planejado para cinco minutos, sem executar etapas demoradas durante a
-fala. O relatório, o log e o PDF devem estar abertos antes do início.
+fala. O relatório, o log e o PDF exportado manualmente da aba `Resumo` devem
+estar abertos antes do início.
 
 | Tempo | Conteúdo | Evidência em tela |
 |---:|---|---|

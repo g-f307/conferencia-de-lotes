@@ -491,17 +491,19 @@ python gerar_relatorio.py --entrada dados_entrada/inspecao_lotes_10dias.xlsx \
 ```text
 relatorios/relatorio_conferencia_lotes.xlsx   # relatório com 6 abas
 logs/execucao_relatorio.log                   # log da execução
-artefatos/dashboard_resumo.pdf                # print da aba Resumo
+artefatos/dashboard_resumo.pdf                # evidência opcional, exportada manualmente
 ```
 
-Os três arquivos são gerados em runtime e não devem ser versionados.
+O comando gera automaticamente o XLSX e o log. Quando necessária para a
+entrega, a evidência em PDF deve ser exportada manualmente a partir da área de
+impressão da aba `Resumo`. Esses arquivos não devem ser versionados.
 
 ### Estrutura das seis abas
 
 | Aba | Conteúdo |
 |---|---|
 | `Resumo` | Indicadores KPI (total, válidos, divergências, ambíguos, erros de entrada), percentuais, gráfico de rosca com as quatro classificações e gráfico de linha com a evolução diária dos problemas. |
-| `Todos` | Os 250 registros consolidados com todas as colunas, classificação e regras violadas. |
+| `Todos` | Os 250 registros consolidados com classificação e motivo detalhado. |
 | `Válidos` | Registros aprovados sem violações. |
 | `Divergências` | Registros com divergência de referência, produto ou status. |
 | `Ambíguos` | Registros com status não reconhecido, encaminhados à revisão. |
@@ -517,8 +519,8 @@ Erro de Entrada > Divergência > Ambíguo > Válido
 ```
 
 Um registro com múltiplas regras violadas recebe a classificação de maior
-prioridade. Todas as regras violadas ficam registradas na coluna
-`regras_violadas`.
+prioridade. No modelo interno, as regras ficam em `regras_violadas`; no XLSX,
+elas são apresentadas na coluna `Motivo`.
 
 ### Deduplicação diária (RN11)
 

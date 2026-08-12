@@ -80,10 +80,20 @@ temporário e substituída de forma atômica, evitando deixar um relatório parc
 |---|---|---|
 | Relatório Excel | `relatorios/relatorio_conferencia_lotes.xlsx` | resultado segregado e dashboard executivo |
 | Log final | `logs/execucao_relatorio.log` | entrada, contagens, duração, saída e regras acionadas |
-| PDF da aba Resumo | `artefatos/dashboard_resumo.pdf` | evidência visual preparada para entrega |
+| PDF da aba Resumo | `artefatos/dashboard_resumo.pdf` | evidência visual opcional, exportada manualmente |
 
-Esses arquivos são gerados em runtime e não pertencem ao histórico Git. Devem
-ser anexados ao canal da atividade, a um artefato de CI ou à release.
+O comando gera automaticamente o relatório Excel e o log. O PDF não é criado
+pelo gerador e deve ser exportado manualmente quando exigido como evidência.
+Esses arquivos não pertencem ao histórico Git e podem ser anexados ao canal da
+atividade, a um artefato de CI ou à release.
+
+### Exportação opcional do PDF
+
+1. Abra `relatorios/relatorio_conferencia_lotes.xlsx` no Excel ou LibreOffice.
+2. Selecione a aba `Resumo`.
+3. Exporte somente a planilha selecionada como PDF, respeitando a área de
+   impressão configurada.
+4. Salve o arquivo como `artefatos/dashboard_resumo.pdf`.
 
 ## Estrutura das seis abas
 
@@ -127,8 +137,9 @@ totais e dos percentuais sempre corresponde a 250 registros e 100%.
 | RN11 | repetição do mesmo lote dentro da mesma aba diária |
 | RN12 | data presente e válida em `DD/MM/AAAA` |
 
-Todas as regras acionadas permanecem em `regras_violadas` e no motivo, mesmo
-quando a precedência determina uma classificação diferente.
+Todas as regras acionadas permanecem em `RegistroValidado.regras_violadas`,
+mesmo quando a precedência determina uma classificação diferente. No workbook,
+elas são apresentadas no texto da coluna `Motivo`.
 
 ## Normalização de status
 
@@ -250,9 +261,10 @@ testes. A mudança deve ser tratada como requisito de negócio, não apenas visu
 
 ### Como o relatório seria distribuído automaticamente no futuro?
 
-O comando pode ser executado em um job agendado e seus três artefatos publicados
-no BotCity Maestro, GitHub Actions ou armazenamento corporativo. Envio por
-e-mail e integração produtiva permanecem fora do escopo atual.
+O comando pode ser executado em um job agendado e publicar o XLSX e o log no
+BotCity Maestro, GitHub Actions ou armazenamento corporativo. O PDF também pode
+ser anexado depois da exportação manual. Envio por e-mail e integração
+produtiva permanecem fora do escopo atual.
 
 ## Limitações
 
@@ -277,11 +289,17 @@ e-mail e integração produtiva permanecem fora do escopo atual.
 
 ## Evidências da rodada final
 
-Antes da entrega, execute o gerador e preserve externamente:
+Antes da entrega, execute o gerador e preserve externamente as saídas
+automáticas:
 
 ```text
 relatorios/relatorio_conferencia_lotes.xlsx
 logs/execucao_relatorio.log
+```
+
+Quando solicitado, exporte manualmente a aba `Resumo` para:
+
+```text
 artefatos/dashboard_resumo.pdf
 ```
 
@@ -297,6 +315,6 @@ git check-ignore \
 ## Revisão cruzada
 
 A revisão deve ser registrada no Pull Request que encerra a Issue #55. O
-revisor deve conferir comandos, contagens, legibilidade do PDF, ausência dos
-artefatos no Git e aderência desta documentação ao workbook efetivamente
-gerado.
+revisor deve conferir comandos, contagens, ausência dos artefatos no Git e
+aderência desta documentação ao workbook efetivamente gerado. Quando o PDF for
+preparado, sua legibilidade também deve ser conferida.

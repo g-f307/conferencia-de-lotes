@@ -288,7 +288,7 @@ flowchart TB
         CLI[gerar_relatorio.py]
         READER[WorkbookReader]
         VALIDATOR[ValidationService]
-        REPORTER[ExcelReporter]
+        REPORTER[ReportWriter]
         MODELS[Modelos de Dados]
     end
 
@@ -319,7 +319,7 @@ flowchart TB
 | `gerar_relatorio.py` | Entry point para a geração do relatório Excel. |
 | `src/excel_reporting/workbook_reader.py` | Ler planilhas e base de referência, consolidando os registros. |
 | `src/excel_reporting/validation_service.py` | Aplicar RN01–RN12, acumular violações e classificar os registros. |
-| `src/excel_reporting/reporting.py` (ExcelReporter) | Criar o workbook de saída com as abas segregadas e o dashboard. |
+| `src/excel_reporting/report_writer.py` (`write_excel_report`) | Criar o workbook de saída com as abas segregadas e o dashboard. |
 | `src/excel_reporting/models.py` | Definir estruturas de dados (dataclasses) para o fluxo do relatório. |
 
 A validação de negócios neste fluxo acumula os erros de todas as regras violadas e determina a classificação final seguindo a prioridade: Erro de Entrada > Divergência > Ambíguo > Válido.

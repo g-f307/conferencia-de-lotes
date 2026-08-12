@@ -42,15 +42,20 @@ python -m pip install -r requirements-report.txt
 python gerar_relatorio.py
 ```
 
-Saídas esperadas:
+Saídas geradas pelo comando:
 
 ```text
 relatorios/relatorio_conferencia_lotes.xlsx
 logs/execucao_relatorio.log
+```
+
+Evidência opcional, exportada manualmente da aba `Resumo`:
+
+```text
 artefatos/dashboard_resumo.pdf
 ```
 
-Os três arquivos são anexos da entrega e não devem ser versionados.
+Os arquivos usados como anexos da entrega não devem ser versionados.
 
 ## Validação antes da publicação
 
@@ -69,7 +74,7 @@ Checklist:
 - [ ] Issue #55 concluída e Pull Request revisado;
 - [ ] CI aprovada na `main`;
 - [ ] XLSX final aberto e conferido;
-- [ ] PDF da aba `Resumo` legível;
+- [ ] PDF opcional da aba `Resumo` exportado manualmente e legível;
 - [ ] log da rodada final conferido;
 - [ ] artefatos gerados ausentes do histórico Git;
 - [ ] tag criada a partir do commit de merge da entrega;
@@ -84,7 +89,8 @@ Checklist:
 - Tipo: release estável, não marcar como pre-release
 - Comparação anterior: `v1.5.0`
 
-Anexar:
+Anexar o XLSX e o log. Se a evidência visual tiver sido preparada, anexar
+também o PDF exportado manualmente:
 
 ```text
 relatorio_conferencia_lotes.xlsx
