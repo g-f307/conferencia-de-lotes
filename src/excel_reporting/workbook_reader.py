@@ -114,6 +114,11 @@ def _mark_daily_duplicates(registros: list[dict[str, Any]]) -> dict[str, Counter
     for registro in registros:
         sheet_name = str(registro["aba_origem"])
         lote_id = _normalize_text(registro.get("lote_id"))
+        if not lote_id:
+            registro["duplicado_no_dia"] = False
+            registro["ocorrencia_lote_no_dia"] = 0
+            continue
+
         counters[sheet_name][lote_id] += 1
         registro["duplicado_no_dia"] = counters[sheet_name][lote_id] > 1
         registro["ocorrencia_lote_no_dia"] = counters[sheet_name][lote_id]
