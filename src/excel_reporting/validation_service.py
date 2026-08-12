@@ -7,6 +7,7 @@ quando uma categoria de maior precedência determina a classificação.
 
 from __future__ import annotations
 
+import math
 import re
 import unicodedata
 from datetime import datetime
@@ -44,8 +45,17 @@ REGRAS_DIVERGENCIA = {"RN05", "RN10", "RN11"}
 REGRAS_AMBIGUO = {"RN09"}
 
 
+def _valor_ausente(value: object) -> bool:
+    if value is None:
+        return True
+    try:
+        return math.isnan(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return False
+
+
 def _texto(value: object) -> str:
-    return "" if value is None else str(value).strip()
+    return "" if _valor_ausente(value) else str(value).strip()
 
 
 def _normalizar_comparacao(value: object) -> str:
@@ -104,7 +114,7 @@ def validar_registro(
     produto = _texto(registro.get("produto"))
     linha = _texto(registro.get("linha"))
     status_value = registro.get("status")
-    status_original = "" if status_value is None else str(status_value)
+    status_original = "" if _valor_ausente(status_value) else str(status_value)
     status_normalizado = _normalizar_status(status_original)
     observacao = _texto(registro.get("observacao"))
     data_referencia = _texto(registro.get("data"))
@@ -127,13 +137,13 @@ def validar_registro(
     if status_normalizado == "REPROVADO" and not observacao:
         regras.append("RN10")
 
-    data_valida = _data_valida(data_referencia)
-    chave_registro = (data_referencia, lote_id)
-    if data_valida and lote_id:
+    contexto_aba = _texto(aba_origem) or _texto(registro.get("aba_origem"))
+    chave_registro = (contexto_aba, lote_id)
+    if lote_id:
         if chave_registro in registros_vistos:
             regras.append("RN11")
         registros_vistos.add(chave_registro)
-    if not data_valida:
+    if not _data_valida(data_referencia):
         regras.append("RN12")
 
     return RegistroValidado(
@@ -144,7 +154,7 @@ def validar_registro(
         motivo=_motivo(regras),
         regras_violadas=tuple(regras),
         data_referencia=data_referencia,
-        aba_origem=_texto(aba_origem),
+        aba_origem=contexto_aba,
         linha_origem=linha_origem,
     )
 

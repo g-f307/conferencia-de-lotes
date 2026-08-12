@@ -101,6 +101,22 @@ def test_rn04_status_obrigatorio_sem_duplicar_rn09():
     assert resultado.regras_violadas == ("RN04",)
 
 
+@pytest.mark.parametrize(
+    ("campo", "regra"),
+    (
+        ("lote_id", "RN01"),
+        ("produto", "RN02"),
+        ("linha", "RN03"),
+        ("status", "RN04"),
+    ),
+)
+def test_nan_e_tratado_como_ausencia_nos_campos_obrigatorios(campo, regra):
+    resultado = validar_diretamente(registro_valido(**{campo: float("nan")}))
+
+    assert resultado.classificacao == CLASSIFICACAO_ERRO_ENTRADA
+    assert resultado.regras_violadas == (regra,)
+
+
 def test_rn05_lote_deve_existir_na_referencia():
     resultado = validar_diretamente(registro_valido(lote_id="L999"))
 
@@ -154,12 +170,27 @@ def test_rn10_reprovado_ou_nok_sem_observacao_e_divergencia():
         assert resultado.regras_violadas == ("RN10",)
 
 
+def test_rn10_nan_e_tratado_como_observacao_ausente():
+    resultado = validar_diretamente(
+        registro_valido(status="REPROVADO", observacao=float("nan")),
+    )
+
+    assert resultado.classificacao == CLASSIFICACAO_DIVERGENCIA
+    assert resultado.regras_violadas == ("RN10",)
+
+
 def test_rn11_segunda_ocorrencia_do_lote_no_mesmo_dia_e_divergencia():
     service = ValidationService(REFERENCIAS)
 
-    primeira = service.validar_registro(registro_valido(), linha_origem=2)
-    segunda = service.validar_registro(registro_valido(), linha_origem=3)
-    terceira = service.validar_registro(registro_valido(), linha_origem=4)
+    primeira = service.validar_registro(
+        registro_valido(), aba_origem="Insp_14_06_2026", linha_origem=2
+    )
+    segunda = service.validar_registro(
+        registro_valido(), aba_origem="Insp_14_06_2026", linha_origem=3
+    )
+    terceira = service.validar_registro(
+        registro_valido(), aba_origem="Insp_14_06_2026", linha_origem=4
+    )
 
     assert primeira.classificacao == CLASSIFICACAO_VALIDO
     assert segunda.classificacao == CLASSIFICACAO_DIVERGENCIA
@@ -168,19 +199,65 @@ def test_rn11_segunda_ocorrencia_do_lote_no_mesmo_dia_e_divergencia():
     assert terceira.regras_violadas == ("RN11",)
 
 
-def test_rn11_mesmo_lote_em_dias_diferentes_e_valido():
+def test_rn11_mesmo_lote_em_abas_diferentes_e_valido():
     service = ValidationService(REFERENCIAS)
 
-    primeira = service.validar_registro(registro_valido(data="14/06/2026"))
-    segunda = service.validar_registro(registro_valido(data="15/06/2026"))
+    primeira = service.validar_registro(
+        registro_valido(), aba_origem="Insp_14_06_2026"
+    )
+    segunda = service.validar_registro(
+        registro_valido(), aba_origem="Insp_15_06_2026"
+    )
 
     assert primeira.classificacao == CLASSIFICACAO_VALIDO
     assert segunda.classificacao == CLASSIFICACAO_VALIDO
 
 
+def test_rn11_usa_aba_origem_presente_no_registro_consolidado():
+    service = ValidationService(REFERENCIAS)
+
+    primeira = service.validar_registro(
+        registro_valido(aba_origem="Insp_14_06_2026")
+    )
+    segunda = service.validar_registro(
+        registro_valido(
+            aba_origem="Insp_15_06_2026",
+            data="15/06/2026",
+        )
+    )
+
+    assert primeira.aba_origem == "Insp_14_06_2026"
+    assert segunda.aba_origem == "Insp_15_06_2026"
+    assert primeira.classificacao == CLASSIFICACAO_VALIDO
+    assert segunda.classificacao == CLASSIFICACAO_VALIDO
+
+
+def test_rn11_mesma_aba_com_data_invalida_registra_rn11_e_rn12():
+    service = ValidationService(REFERENCIAS)
+
+    primeira = service.validar_registro(
+        registro_valido(data="data-invalida"), aba_origem="Insp_14_06_2026"
+    )
+    segunda = service.validar_registro(
+        registro_valido(data="data-invalida"), aba_origem="Insp_14_06_2026"
+    )
+
+    assert primeira.regras_violadas == ("RN12",)
+    assert segunda.regras_violadas == ("RN11", "RN12")
+    assert segunda.classificacao == CLASSIFICACAO_ERRO_ENTRADA
+
+
 def test_rn12_data_ausente_e_erro_de_entrada():
     resultado = validar_diretamente(registro_valido(data=""))
 
+    assert resultado.classificacao == CLASSIFICACAO_ERRO_ENTRADA
+    assert resultado.regras_violadas == ("RN12",)
+
+
+def test_rn12_nan_e_tratado_como_data_ausente():
+    resultado = validar_diretamente(registro_valido(data=float("nan")))
+
+    assert resultado.data_referencia == ""
     assert resultado.classificacao == CLASSIFICACAO_ERRO_ENTRADA
     assert resultado.regras_violadas == ("RN12",)
 
