@@ -158,6 +158,16 @@ condições explícitas de visibilidade, disponibilidade e confirmação.
 As regras permanecem em `src/validation.py`. Os Page Objects apenas representam
 a interface e não decidem o resultado do negócio.
 
+### Validação RN01-RN12 para relatórios
+
+`src/excel_reporting/` contém um contrato independente para a futura leitura e
+consolidação de planilhas. Ele produz `RegistroValidado`, aceita `PENDENTE` e
+acumula todas as regras violadas antes de atribuir uma única classificação.
+
+A precedência é `Erro de Entrada > Divergência > Ambíguo > Válido`. Esse
+serviço não é importado pelo Performer e não altera as RN01-RN07 aplicadas ao
+DataPool.
+
 ## Resultados por item
 
 | `resultado_validacao` | Finalização | Evidência |
@@ -196,6 +206,9 @@ o que evita referências específicas de uma máquina ou Runner.
 ├── scripts/
 │   └── build_botcity_package.py
 ├── src/
+│   ├── excel_reporting/
+│   │   ├── models.py
+│   │   └── validation_service.py
 │   ├── pages/
 │   │   ├── login_page.py
 │   │   └── form_page.py
