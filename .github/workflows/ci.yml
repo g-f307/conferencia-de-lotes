@@ -55,6 +55,15 @@ jobs:
       - name: Executar testes unitários
         run: python -m pytest -q --ignore=tests/e2e
 
+      - name: Validar geração do relatório Excel
+        shell: bash
+        run: |
+          python gerar_relatorio.py \
+            --entrada dados_entrada/inspecao_lotes_10dias.xlsx \
+            --saida relatorios/relatorio_conferencia_lotes.xlsx
+          test -s relatorios/relatorio_conferencia_lotes.xlsx
+          test -s logs/execucao_relatorio.log
+
   test-e2e:
     name: Testes E2E
     needs: tests
