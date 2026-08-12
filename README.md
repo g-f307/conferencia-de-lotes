@@ -56,7 +56,9 @@ Estão implementados:
 - logs estruturados no arquivo e no console;
 - resumo JSON, relatório PDF, artefatos e `finish_task`;
 - pacote ZIP para o BotCity Runner;
-- Docker e integração contínua.
+- Docker e integração contínua;
+- relatório executivo Excel com dashboard, gráficos nativos e validação
+  RN01–RN12.
 
 ## Fora do escopo
 
@@ -186,26 +188,34 @@ o que evita referências específicas de uma máquina ou Runner.
 ```text
 .
 ├── .github/workflows/ci.yml
-├── artefatos/                     # PNG gerado em runtime
+├── artefatos/                     # PNG e PDF gerados em runtime
 ├── dados_entrada/
-│   └── lotes_auditoria.csv
+│   ├── lotes_auditoria.csv
+│   └── inspecao_lotes_10dias.xlsx  # workbook de 10 dias (Aula 22)
 ├── docs/
 │   ├── ADERENCIA_PAGE_OBJECTS.md
 │   ├── ARQUITETURA.md
 │   ├── DEPLOY_BOTCITY.md
 │   ├── EXECUCAO_E2E_DOCKER_CI.md
+│   ├── RELATORIO_EXCEL_AULA22.md
+│   ├── RELEASE_V1.6.0.md
 │   ├── REVISAO_BPMN_PDD.md
+│   ├── ROTEIRO_APRESENTACAO_AULA22.md
 │   ├── ROTEIRO_DEMONSTRACAO.md
 │   ├── diagrama_pdd.bpmn
 │   └── diagrama_pdd.svg
 ├── logs/                          # JSON Lines gerado em runtime
-├── relatorios/                    # JSON e PDF gerados em runtime
+├── relatorios/                    # JSON, PDF e XLSX gerados em runtime
 ├── scripts/
 │   └── build_botcity_package.py
 ├── src/
 │   ├── excel_reporting/
+│   │   ├── __init__.py
 │   │   ├── models.py
-│   │   └── validation_service.py
+│   │   ├── report_writer.py
+│   │   ├── service.py
+│   │   ├── validation_service.py
+│   │   └── workbook_reader.py
 │   ├── pages/
 │   │   ├── login_page.py
 │   │   └── form_page.py
@@ -225,10 +235,12 @@ o que evita referências específicas de uma máquina ou Runner.
 ├── web/index-lotes/               # aplicação controlada
 ├── .env.example
 ├── bot.py
+├── gerar_relatorio.py             # entry point do relatório Excel
 ├── Dockerfile
 ├── docker-compose.yml
 ├── requirements.txt
-└── requirements-dev.txt
+├── requirements-dev.txt
+└── requirements-report.txt        # dependências do relatório Excel
 ```
 
 `.env`, logs, relatórios, PNG, pacotes e caches não são versionados. Os
@@ -445,6 +457,84 @@ Eventos relevantes:
 erros técnicos e a lista de caminhos das evidências. O PDF e o JSON são
 publicados como artefatos da task.
 
+## Relatório executivo Excel (Aula 22)
+
+O módulo `src/excel_reporting/` implementa um fluxo independente que lê o
+workbook de inspeção, aplica RN01–RN12, classifica os 250 registros e gera um
+relatório formatado com dashboard nativo do Excel.
+
+Esse fluxo não substitui a automação Playwright/DataPool. Ele opera como uma
+camada analítica paralela para consolidação gerencial.
+
+### Instalação das dependências
+
+```bash
+python -m pip install -r requirements-report.txt
+```
+
+### Execução
+
+```bash
+python gerar_relatorio.py
+```
+
+Argumentos opcionais:
+
+```bash
+python gerar_relatorio.py --entrada dados_entrada/inspecao_lotes_10dias.xlsx \
+                          --saida relatorios/relatorio_conferencia_lotes.xlsx \
+                          --log logs/execucao_relatorio.log
+```
+
+### Saídas
+
+```text
+relatorios/relatorio_conferencia_lotes.xlsx   # relatório com 6 abas
+logs/execucao_relatorio.log                   # log da execução
+artefatos/dashboard_resumo.pdf                # print da aba Resumo
+```
+
+Os três arquivos são gerados em runtime e não devem ser versionados.
+
+### Estrutura das seis abas
+
+| Aba | Conteúdo |
+|---|---|
+| `Resumo` | Indicadores KPI (total, válidos, divergências, ambíguos, erros de entrada), percentuais, gráfico de rosca com as quatro classificações e gráfico de linha com a evolução diária dos problemas. |
+| `Todos` | Os 250 registros consolidados com todas as colunas, classificação e regras violadas. |
+| `Válidos` | Registros aprovados sem violações. |
+| `Divergências` | Registros com divergência de referência, produto ou status. |
+| `Ambíguos` | Registros com status não reconhecido, encaminhados à revisão. |
+| `Erros de Entrada` | Registros com campos obrigatórios ausentes ou estrutura inválida. |
+
+### Classificações
+
+Cada registro recebe exatamente uma classificação final, determinada pela
+precedência:
+
+```text
+Erro de Entrada > Divergência > Ambíguo > Válido
+```
+
+Um registro com múltiplas regras violadas recebe a classificação de maior
+prioridade. Todas as regras violadas ficam registradas na coluna
+`regras_violadas`.
+
+### Deduplicação diária (RN11)
+
+A regra RN11 identifica duplicatas pela chave `(aba_origem, lote_id)`. Dentro
+de cada aba diária, somente a primeira ocorrência de cada lote é preservada;
+as demais são marcadas como duplicatas.
+
+### Indicadores e gráficos
+
+- **Gráfico de rosca**: distribuição percentual das quatro classificações.
+- **Gráfico de evolução**: linha temporal com o número de problemas
+  (divergências + ambíguos + erros) por dia ao longo das 10 abas.
+
+A documentação completa, incluindo solução de problemas e perguntas da banca,
+está em [`docs/RELATORIO_EXCEL_AULA22.md`](docs/RELATORIO_EXCEL_AULA22.md).
+
 ## Testes e integração contínua
 
 As validações possuem responsabilidades diferentes:
@@ -516,8 +606,11 @@ finalizada no Maestro como sucesso operacional.
 | [`docs/DEPLOY_BOTCITY.md`](docs/DEPLOY_BOTCITY.md) | Implantação, smoke test e rollback. |
 | [`docs/ROTEIRO_DEMONSTRACAO.md`](docs/ROTEIRO_DEMONSTRACAO.md) | Roteiro objetivo da demonstração. |
 | [`docs/EVOLUCAO_AUTOMACAO_WEB.md`](docs/EVOLUCAO_AUTOMACAO_WEB.md) | Histórico e comparação entre Selenium e Playwright. |
+| [`docs/RELATORIO_EXCEL_AULA22.md`](docs/RELATORIO_EXCEL_AULA22.md) | Documentação completa do relatório Excel e perguntas da banca. |
+| [`docs/ROTEIRO_APRESENTACAO_AULA22.md`](docs/ROTEIRO_APRESENTACAO_AULA22.md) | Roteiro de apresentação de cinco minutos. |
 | [`docs/RELEASE_V1.3.0.md`](docs/RELEASE_V1.3.0.md) | Notas da versão Selenium com Page Objects. |
 | [`docs/RELEASE_V1.4.0.md`](docs/RELEASE_V1.4.0.md) | Notas e checklist da candidata Playwright. |
+| [`docs/RELEASE_V1.6.0.md`](docs/RELEASE_V1.6.0.md) | Notas e checklist da entrega Excel (Aula 22). |
 
 ## Equipe
 
