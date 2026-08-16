@@ -2,8 +2,12 @@ import logging
 
 import pytest
 
+from src.bot import LOGGER as BOT_LOGGER
 from src.bot import LotePerformer, QueueItemFetchError
 from src.vault_client import VaultClient
+
+
+pytestmark = pytest.mark.unit
 
 
 class FakeQueue:
@@ -135,8 +139,12 @@ def test_performer_logs_only_username_not_password(caplog):
     queue = FakeQueue([item()])
     performer = LotePerformer(queue, {"L001"}, VaultClient(FakeVaultProvider()))
 
-    with caplog.at_level(logging.INFO):
-        performer.run()
+    BOT_LOGGER.addHandler(caplog.handler)
+    try:
+        with caplog.at_level(logging.INFO, logger=BOT_LOGGER.name):
+            performer.run()
+    finally:
+        BOT_LOGGER.removeHandler(caplog.handler)
 
     log_text = caplog.text
     assert "rebecca.erp" in log_text

@@ -18,6 +18,9 @@ from src.web_automation import (
 )
 
 
+pytestmark = pytest.mark.unit
+
+
 class FakePage:
     def __init__(self, state, *, screenshot_error=None):
         self.state = state

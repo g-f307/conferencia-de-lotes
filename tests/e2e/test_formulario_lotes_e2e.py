@@ -3,7 +3,12 @@
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from src.pages import FormPage
+
+
+pytestmark = pytest.mark.browser
 
 
 def dados_lote(**overrides: str) -> dict[str, str]:

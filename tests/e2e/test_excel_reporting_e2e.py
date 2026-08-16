@@ -12,8 +12,9 @@ from src.excel_reporting import REPORT_SHEET_NAMES
 from src.excel_reporting.service import gerar_relatorio_excel
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 REAL_WORKBOOK_PATH = PROJECT_ROOT / "dados_entrada" / "inspecao_lotes_10dias.xlsx"
+pytestmark = pytest.mark.e2e
 
 
 def test_report_service_processes_real_dataset_end_to_end(tmp_path):

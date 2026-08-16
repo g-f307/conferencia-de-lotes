@@ -1,6 +1,7 @@
 from collections import Counter
 from pathlib import Path
 
+import pytest
 from openpyxl import Workbook
 
 from src.excel_reporting.workbook_reader import (
@@ -10,8 +11,9 @@ from src.excel_reporting.workbook_reader import (
 )
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 REAL_WORKBOOK_PATH = PROJECT_ROOT / "dados_entrada" / "inspecao_lotes_10dias.xlsx"
+pytestmark = pytest.mark.integration
 
 DAILY_HEADER = [
     "lote_id",

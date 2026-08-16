@@ -4,6 +4,7 @@ from src.validation import HumanReviewStatus, ValidationError, normalize_status,
 
 
 REFERENCE_LOTES = {"L001", "L002"}
+pytestmark = [pytest.mark.unit, pytest.mark.regression]
 
 
 def valid_item(**overrides):

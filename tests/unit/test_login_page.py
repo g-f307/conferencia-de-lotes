@@ -4,6 +4,9 @@ from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from src.pages.login_page import LoginPage, LoginPageTimeoutError
 
 
+pytestmark = pytest.mark.unit
+
+
 class FakeLocator:
     def __init__(self, *, timeout=False):
         self.actions = []

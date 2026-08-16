@@ -3,6 +3,9 @@ import pytest
 from src.vault_client import BotCityVaultProvider, VaultClient, VaultCredentialError
 
 
+pytestmark = pytest.mark.unit
+
+
 class Provider:
     def __init__(self, credential):
         self.credential = credential

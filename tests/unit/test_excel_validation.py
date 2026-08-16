@@ -14,6 +14,7 @@ from src.excel_reporting import (
 
 
 REFERENCIAS = {"L001", "L002"}
+pytestmark = [pytest.mark.unit, pytest.mark.regression]
 
 
 def registro_valido(**overrides: object) -> dict[str, object]:
