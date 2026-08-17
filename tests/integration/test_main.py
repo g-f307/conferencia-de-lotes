@@ -1,11 +1,16 @@
 import json
 from dataclasses import replace
 
+import pytest
+
 from src.config import Settings
 from src.logging_config import configure_logging
 from src.main import run, save_execution_report
 from src.models import ExecutionResult
 from src.vault_client import VaultClient
+
+
+pytestmark = pytest.mark.integration
 
 
 class FakeAlertGateway:

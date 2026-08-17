@@ -18,6 +18,9 @@ from src.validation import HumanReviewRequired
 from src.vault_client import VaultClient
 
 
+pytestmark = pytest.mark.integration
+
+
 class FakeGateway:
     def __init__(self):
         self.created = []

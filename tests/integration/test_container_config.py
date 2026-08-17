@@ -1,8 +1,11 @@
 from pathlib import Path
 from zipfile import ZipFile
 
+import pytest
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+pytestmark = pytest.mark.integration
 
 
 def test_dockerfile_instala_playwright_e_chromium_headless():

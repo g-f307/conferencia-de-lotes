@@ -1,9 +1,14 @@
 import json
 
+import pytest
+
 from src.bot import DATAPOOL_LOG_LABEL, LOGGER as BOT_LOGGER
 from src.config import Settings
 from src.logging_config import LOGGER_NAME, configure_logging
 from src.vault_client import LOGGER as VAULT_LOGGER
+
+
+pytestmark = pytest.mark.integration
 
 
 def configured_logger(tmp_path, monkeypatch, **environment):

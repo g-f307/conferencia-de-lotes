@@ -1,4 +1,9 @@
+import pytest
+
 from src.reporting import generate_evidence_pdf
+
+
+pytestmark = pytest.mark.integration
 
 
 def test_generate_evidence_pdf_com_imagem(tmp_path):

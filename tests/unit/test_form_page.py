@@ -10,6 +10,9 @@ from src.pages.form_page import (
 )
 
 
+pytestmark = pytest.mark.unit
+
+
 class FakeLocator:
     def __init__(self, *, text="", result="APROVADO", timeout=False):
         self.actions = []

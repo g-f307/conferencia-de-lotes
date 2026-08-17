@@ -10,6 +10,9 @@ from src.config import (
 )
 
 
+pytestmark = pytest.mark.unit
+
+
 @pytest.mark.parametrize(
     ("value", "expected"),
     [("true", True), ("SIM", True), ("1", True), ("false", False), (None, False)],
