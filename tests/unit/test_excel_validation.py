@@ -133,6 +133,7 @@ def test_rn06_normaliza_ok_para_aprovado():
     assert resultado.classificacao == CLASSIFICACAO_VALIDO
 
 
+@pytest.mark.regression
 def test_rn07_normaliza_nok_para_reprovado():
     resultado = validar_diretamente(
         registro_valido(status="nok", observacao="Avaria"),
@@ -160,6 +161,7 @@ def test_rn09_status_desconhecido_e_ambiguo():
     assert resultado.regras_violadas == ("RN09",)
 
 
+@pytest.mark.regression
 def test_rn10_reprovado_ou_nok_sem_observacao_e_divergencia():
     for status in ("REPROVADO", "NOK"):
         resultado = validar_diretamente(
@@ -304,6 +306,7 @@ def test_multiplas_violacoes_mantem_todas_as_regras_e_uma_classificacao():
     )
 
 
+@pytest.mark.regression
 def test_precedencia_divergencia_sobre_ambiguo():
     resultado = validar_diretamente(
         registro_valido(lote_id="L999", status="cancelado"),
