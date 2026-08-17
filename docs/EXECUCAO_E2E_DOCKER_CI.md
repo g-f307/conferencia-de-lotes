@@ -129,14 +129,16 @@ sequenciais:
 ```text
 lint
   └── tests
-        └── test-e2e
-              └── build-docker
+        └── coverage
+              └── test-e2e
+                    └── build-docker
 ```
 
 | Job | Ação principal | Saída |
 |---|---|---|
 | `lint` | executa Ruff | diagnóstico no check da PR |
-| `tests` | ignora `tests/e2e/` | resultado dos testes sem navegador |
+| `tests` | executa separadamente os markers `unit`, `integration`, `regression` e `e2e` | resultado de cada camada, incluindo razões de `SKIP` e `XFAIL` |
+| `coverage` | executa a suíte completa e exige cobertura mínima de 80% | `coverage-report` com XML e HTML navegável |
 | `test-e2e` | instala Chromium e executa `tests/e2e/` | `screenshots-e2e` |
 | `build-docker` | constrói e executa a imagem com Playwright | `relatorios-docker` e `screenshots-docker` |
 
@@ -157,13 +159,15 @@ e os identificadores usados na execução são exclusivos da CI.
 
 1. Abra a aba **Actions** do repositório.
 2. Selecione o workflow **CI** e a execução desejada.
-3. Aguarde os quatro jobs ficarem verdes.
-4. Na seção **Artifacts**, baixe `screenshots-e2e`, `relatorios-docker` ou
-   `screenshots-docker`.
+3. Aguarde os cinco jobs ficarem verdes.
+4. Na seção **Artifacts**, baixe `coverage-report`, `screenshots-e2e`,
+   `relatorios-docker` ou `screenshots-docker`.
 
-Os artefatos ficam disponíveis por sete dias. `relatorios-docker` contém o log
-JSON Lines, o resumo JSON e o relatório PDF; os outros dois pacotes contêm as
-capturas dos testes E2E e da execução Docker, respectivamente.
+Os artefatos ficam disponíveis por sete dias. `coverage-report` contém
+`coverage.xml` e o relatório navegável em `htmlcov/index.html`;
+`relatorios-docker` contém o log JSON Lines, o resumo JSON e o relatório PDF;
+os outros dois pacotes contêm as capturas dos testes E2E e da execução Docker,
+respectivamente.
 
 ## Arquivos fora do Git
 
@@ -178,6 +182,9 @@ artefatos/*.png
 ci-output/
 test-results/
 e2e-artifacts/
+.coverage
+coverage.xml
+htmlcov/
 ```
 
 Confirme as regras sem adicionar os arquivos ao índice:

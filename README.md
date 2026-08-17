@@ -197,6 +197,7 @@ o que evita referências específicas de uma máquina ou Runner.
 │   ├── ARQUITETURA.md
 │   ├── DEPLOY_BOTCITY.md
 │   ├── EXECUCAO_E2E_DOCKER_CI.md
+│   ├── HOMOLOGACAO_TESTES_AULA23.md
 │   ├── RELATORIO_EXCEL_AULA22.md
 │   ├── RELEASE_V1.6.0.md
 │   ├── REVISAO_BPMN_PDD.md
@@ -539,34 +540,63 @@ está em [`docs/RELATORIO_EXCEL_AULA22.md`](docs/RELATORIO_EXCEL_AULA22.md).
 
 ## Testes e integração contínua
 
-As validações possuem responsabilidades diferentes:
+Instale as dependências de desenvolvimento e o Chromium antes da primeira
+execução, conforme a seção [Instalação](#instalação). As camadas possuem
+responsabilidades e markers distintos:
 
 | Camada | Comando local | Finalidade |
 |---|---|---|
-| Qualidade | `python -m ruff check --select E4,E7,E9,F bot.py src tests scripts` | Erros estáticos e imports inválidos. |
-| Unitários e integração | `python -m pytest -q --ignore=tests/e2e` | Regras e componentes sem abrir navegador. |
-| E2E | `python -m pytest tests/e2e/ -q` | Formulário real em Chromium headless. |
-| Suíte completa | `python -m pytest -q` | Testes Python, incluindo E2E. |
+| Qualidade | `python -m ruff check --select E4,E7,E9,F bot.py gerar_relatorio.py src tests scripts` | Erros estáticos e imports inválidos. |
+| Unitários | `python -m pytest -m unit -q` | Funções, regras e classes isoladas. |
+| Integração | `python -m pytest -m integration -q -rsx` | Colaboração entre leitura, validação, relatório e arquivos temporários. |
+| Regressão | `python -m pytest -m regression -q -rxX` | Comportamentos críticos que não podem voltar a falhar. |
+| E2E controlado | `python -m pytest -m e2e -q -rsx` | Pipeline Excel completo, sem navegador ou serviço externo. |
+| Navegador | `python -m pytest -m browser -q` | Formulário real em Chromium headless. |
+| Suíte completa | `python -m pytest -q` | Todas as camadas, incluindo navegador. |
+| Cobertura | `python -m pytest --cov=src --cov-report=term-missing --cov-report=xml --cov-report=html --cov-fail-under=80` | Suíte completa, linhas ausentes e relatórios XML/HTML. |
 | Smoke test Docker | `WEB_AUTOMATION_ENABLED=true docker compose run --rm conferencia-de-lotes` | Imagem, navegador e persistência das saídas. |
 
 ```bash
-python -m ruff check --select E4,E7,E9,F bot.py src tests scripts
-python -m pytest -q --ignore=tests/e2e
-python -m pytest tests/e2e/ -q
+python -m ruff check --select E4,E7,E9,F bot.py gerar_relatorio.py src tests scripts
+python -m pytest -m unit -q
+python -m pytest -m integration -q -rsx
+python -m pytest -m regression -q -rxX
+python -m pytest -m e2e -q -rsx
+python -m pytest -m browser -q
 python -m pytest -q
-python -m pytest --cov=src --cov-report=term-missing --cov-fail-under=80
+python -m pytest \
+  --cov=src \
+  --cov-report=term-missing \
+  --cov-report=xml \
+  --cov-report=html \
+  --cov-fail-under=80
 ```
 
+`regression` protege regras ou correções existentes e qualquer falha bloqueia a
+suíte. `skip` indica que um cenário não pode ser executado porque a
+funcionalidade ainda não existe. `xfail` executa uma limitação conhecida e
+espera uma falha específica; com `strict=True`, uma correção inesperada produz
+`XPASS` e exige revisão do teste.
+
+O E2E controlado da Aula 23 cria o workbook em `tmp_path` e valida o pipeline
+Excel sem navegador, internet ou credenciais. Os testes `browser` são separados
+e validam a aplicação local com Chromium real.
+
 O workflow `.github/workflows/ci.yml`, acionado em Pull Requests e pushes para
-`main`, executa a cadeia `lint -> tests -> test-e2e -> build-docker`. O último
-job usa massa e credencial efêmera controladas, verifica log, resumo JSON,
-relatório PDF e screenshots e publica os artefatos `screenshots-e2e`,
-`relatorios-docker` e `screenshots-docker` por sete dias.
+`main`, executa a cadeia
+`lint -> tests -> coverage -> test-e2e -> build-docker`. O job `tests` valida os
+quatro markers, e `coverage` reprova resultados abaixo de 80%, mostra linhas não
+cobertas e publica `coverage-report`. O último job usa massa e credencial
+efêmera controladas, verifica log, resumo JSON, relatório PDF e screenshots e
+publica `screenshots-e2e`, `relatorios-docker` e `screenshots-docker` por sete
+dias.
 
 Para baixá-los, abra **Actions**, selecione a execução do workflow **CI** e use
-a seção **Artifacts** ao final da página. O procedimento completo e as
-limitações conhecidas estão em
-[`docs/EXECUCAO_E2E_DOCKER_CI.md`](docs/EXECUCAO_E2E_DOCKER_CI.md).
+a seção **Artifacts** ao final da página. O pacote `coverage-report` contém
+`coverage.xml` e o relatório navegável em `htmlcov/index.html`. Esses arquivos
+são gerados em runtime e ignorados pelo Git. A homologação, os resultados por
+camada e as perguntas da banca estão em
+[`docs/HOMOLOGACAO_TESTES_AULA23.md`](docs/HOMOLOGACAO_TESTES_AULA23.md).
 
 ## Limitações conhecidas
 
@@ -603,6 +633,7 @@ finalizada no Maestro como sucesso operacional.
 |---|---|
 | [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md) | Componentes, sequência e limites. |
 | [`docs/EXECUCAO_E2E_DOCKER_CI.md`](docs/EXECUCAO_E2E_DOCKER_CI.md) | Instalação, testes E2E, Docker, pipeline e artefatos. |
+| [`docs/HOMOLOGACAO_TESTES_AULA23.md`](docs/HOMOLOGACAO_TESTES_AULA23.md) | Cobertura, camadas, limitações e respostas da Aula 23. |
 | [`docs/REVISAO_BPMN_PDD.md`](docs/REVISAO_BPMN_PDD.md) | Aderência do processo e das regras. |
 | [`docs/ADERENCIA_PAGE_OBJECTS.md`](docs/ADERENCIA_PAGE_OBJECTS.md) | Matriz técnica da entrega. |
 | [`docs/DEPLOY_BOTCITY.md`](docs/DEPLOY_BOTCITY.md) | Implantação, smoke test e rollback. |
