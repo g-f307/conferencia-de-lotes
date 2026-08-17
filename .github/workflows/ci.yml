@@ -32,10 +32,10 @@ jobs:
           python -m ruff check
           --select E4,E7,E9,F
           --output-format=github
-          bot.py src tests scripts
+          bot.py gerar_relatorio.py src tests scripts
 
   tests:
-    name: Testes unitários
+    name: Testes por camada
     needs: lint
     runs-on: ubuntu-latest
     steps:
@@ -53,7 +53,16 @@ jobs:
         run: python -m pip install --requirement requirements-dev.txt
 
       - name: Executar testes unitários
-        run: python -m pytest -q --ignore=tests/e2e
+        run: python -m pytest -m unit -q
+
+      - name: Executar testes de integração
+        run: python -m pytest -m integration -q -rsx
+
+      - name: Executar testes de regressão
+        run: python -m pytest -m regression -q -rxX
+
+      - name: Executar E2E controlado
+        run: python -m pytest -m e2e -q -rsx
 
       - name: Validar geração do relatório Excel
         shell: bash
@@ -64,9 +73,54 @@ jobs:
           test -s relatorios/relatorio_conferencia_lotes.xlsx
           test -s logs/execucao_relatorio.log
 
+  coverage:
+    name: Cobertura mínima
+    needs: tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Obter o código
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+
+      - name: Instalar dependências
+        run: python -m pip install --requirement requirements-dev.txt
+
+      - name: Instalar Chromium Headless Shell
+        run: >-
+          python -m playwright install
+          --with-deps
+          --only-shell
+          chromium
+
+      - name: Executar suíte com cobertura mínima
+        run: >-
+          python -m pytest
+          --cov=src
+          --cov-report=term-missing
+          --cov-report=xml
+          --cov-report=html
+          --cov-fail-under=80
+
+      - name: Publicar relatório de cobertura
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: |
+            coverage.xml
+            htmlcov/
+          if-no-files-found: error
+          retention-days: 7
+
   test-e2e:
     name: Testes E2E
-    needs: tests
+    needs: coverage
     runs-on: ubuntu-latest
     steps:
       - name: Obter o código

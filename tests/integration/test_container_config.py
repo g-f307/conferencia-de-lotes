@@ -68,13 +68,32 @@ def test_ci_encadeia_qualidade_testes_e_docker():
     ).read_text(encoding="utf-8")
 
     assert "  lint:\n    name: Qualidade do código" in content
-    assert "  tests:\n    name: Testes unitários\n    needs: lint" in content
-    assert "  test-e2e:\n    name: Testes E2E\n    needs: tests" in content
+    assert "  tests:\n    name: Testes por camada\n    needs: lint" in content
+    assert "  coverage:\n    name: Cobertura mínima\n    needs: tests" in content
+    assert "  test-e2e:\n    name: Testes E2E\n    needs: coverage" in content
     assert (
         "  build-docker:\n"
         "    name: Validar imagem Docker e artefatos\n"
         "    needs: test-e2e"
     ) in content
+
+
+def test_ci_executa_markers_e_publica_cobertura():
+    content = (
+        PROJECT_ROOT / ".github" / "workflows" / "ci.yml"
+    ).read_text(encoding="utf-8")
+
+    for marker in ("unit", "integration", "regression", "e2e"):
+        assert f"python -m pytest -m {marker}" in content
+
+    assert "--cov=src" in content
+    assert "--cov-report=term-missing" in content
+    assert "--cov-report=xml" in content
+    assert "--cov-report=html" in content
+    assert "--cov-fail-under=80" in content
+    assert "name: coverage-report" in content
+    assert "coverage.xml" in content
+    assert "htmlcov/" in content
 
 
 def test_ci_executa_e_publica_evidencias_e2e():
@@ -104,7 +123,7 @@ def test_ci_valida_e_publica_artefatos_docker():
     assert all(f"test -s {path}" in content for path in expected_outputs)
     assert "ci-output/artefatos" in content
     assert "-size +0c" in content
-    assert content.count("actions/upload-artifact@v4") == 3
+    assert content.count("actions/upload-artifact@v4") == 4
     assert "name: relatorios-docker" in content
     assert "name: screenshots-docker" in content
     assert "MAESTRO_ENABLED=false" in content
