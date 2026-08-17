@@ -60,13 +60,19 @@ Na homologação foram coletados 239 testes:
 - 1 ignorado de forma explícita (`SKIPPED`);
 - 1 falha esperada e documentada (`XFAIL`);
 - 0 falhas inesperadas;
-- cobertura total: 93,51%;
+- cobertura total aproximada: 93,5%;
 - limite obrigatório: 80%.
 
 O relatório de terminal usa `term-missing` e identifica os números das linhas
 não exercitadas. O XML é escrito em `coverage.xml` e a versão HTML em
 `htmlcov/index.html`. `.coverage`, `coverage.xml` e `htmlcov/` não são
 versionados.
+
+O percentual e a quantidade de statements pertencem a cada execução e podem
+apresentar pequenas variações conforme as versões do Python, do Coverage.py e
+das dependências instaladas. Por isso, a homologação registra a cobertura como
+aproximadamente 93,5%; o artefato `coverage-report` produzido pelo GitHub
+Actions no commit avaliado é a evidência oficial dos valores exatos.
 
 ## Resultados por camada
 
@@ -151,9 +157,10 @@ workbook controlado e versionado em `dados_entrada/`.
 
 ### A cobertura está concentrada apenas em código fácil?
 
-Não. A medição inclui os 1.648 statements de `src`, inclusive integração,
-orquestração, navegador e gateway. Os módulos de menor cobertura continuam
-acima de 80% e suas linhas ausentes permanecem expostas no relatório.
+Não. A medição inclui todo o pacote `src`, inclusive integração, orquestração,
+navegador e gateway. Os módulos de menor cobertura continuam expostos no
+relatório, assim como as linhas não exercitadas. A contagem exata deve ser
+consultada no artefato `coverage-report` da execução avaliada.
 
 ### Como executar somente os testes de regressão?
 
