@@ -138,3 +138,56 @@ def test_dicionario_cobre_termos_formulas_e_todas_as_regras(consolidated_workboo
     } <= terms
     assert {f"RN{number:02d}" for number in range(1, 13)} <= terms
     assert all(row[2] and row[3] for row in rows)
+
+
+def test_geracao_do_resumo_executivo_markdown(tmp_path):
+    from src.markdown_reporting import gerar_resumo_executivo
+    from src.operational_indicators import OperationalIndicators
+
+    indicadores = OperationalIndicators(
+        total_registros=100,
+        validos_qtd=55,
+        validos_pct=55.56,
+        divergencias_qtd=20,
+        divergencias_pct=20.25,
+        ambiguos_qtd=15,
+        ambiguos_pct=15.12,
+        erros_entrada_qtd=10,
+        erros_entrada_pct=10.07,
+        regra_mais_acionada_codigo="RN05",
+        regra_mais_acionada_nome="Lote inexistente",
+        regra_mais_acionada_qtd=20,
+        taxa_qualidade_entrada=89.93,
+        taxa_revisao_humana=15.12,
+        taxa_retrabalho=20.25,
+        ganho_estimado_tempo_minutos=175.0,
+        ganho_estimado_tempo_horas=2.916,
+    )
+
+    saida = tmp_path / "resumo_executivo.md"
+    resultado = gerar_resumo_executivo(indicadores, saida)
+
+    assert resultado.exists()
+    assert resultado == saida
+
+    conteudo = saida.read_text(encoding="utf-8")
+
+    assert "# Resumo Executivo: Conferência de Lotes" in conteudo
+    assert "| Total de Registros Processados | 100 |" in conteudo
+    assert "55 (55.6%)" in conteudo
+    assert "20 (20.2%)" in conteudo
+    assert "15 (15.1%)" in conteudo
+    assert "10 (10.1%)" in conteudo
+    assert "| Regra Mais Acionada | RN05 (20 ocorrências) |" in conteudo
+    assert "| Taxa de Qualidade da Entrada | 89.9% |" in conteudo
+    assert "| Taxa de Revisão Humana | 15.1% |" in conteudo
+    assert "| Taxa de Retrabalho | 20.2% |" in conteudo
+    assert "| Ganho Estimado de Tempo | 175.00 min &#124; 2.92 h |" in conteudo
+
+    assert "2,0 minutos" in conteudo
+    assert "0,25 minutos" in conteudo
+    assert "Observação Metodológica:" in conteudo
+
+    assert "OperationalIndicators" not in conteudo
+    assert "RegistroValidado" not in conteudo
+    assert "openpyxl" not in conteudo
