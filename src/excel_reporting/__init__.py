@@ -4,6 +4,9 @@ from src.excel_reporting.models import RegistroValidado
 from src.excel_reporting.report_writer import (
     BUSINESS_COLUMNS,
     CLASSIFICATION_SHEETS,
+    DATA_SHEET_NAMES,
+    DICTIONARY_COLUMNS,
+    RANKING_COLUMNS,
     REPORT_SHEET_NAMES,
     write_excel_report,
 )
@@ -38,9 +41,12 @@ __all__ = [
     "CLASSIFICACAO_VALIDO",
     "CLASSIFICATION_SHEETS",
     "DAILY_SHEET_PATTERN",
+    "DATA_SHEET_NAMES",
     "DEFAULT_LOG_PATH",
-    "DEFAULT_WORKBOOK_PATH",
     "DEFAULT_REPORT_PATH",
+    "DEFAULT_WORKBOOK_PATH",
+    "DICTIONARY_COLUMNS",
+    "RANKING_COLUMNS",
     "REPORT_SHEET_NAMES",
     "RegistroValidado",
     "ReportExecutionResult",

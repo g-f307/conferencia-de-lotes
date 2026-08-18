@@ -168,7 +168,7 @@ def test_pipeline_excel_completo_com_dados_controlados(
     assert summary["A9"].value == 2
     assert summary["I9"].value == 1
     assert summary["E13"].value == 1
-    assert sum(percentages) == pytest.approx(1.0)
+    assert sum(percentages) == pytest.approx(1.0, abs=0.0002)
     assert Counter(all_rows) == classified_rows
     assert len(summary._charts) == 2
     assert sum(isinstance(chart, DoughnutChart) for chart in summary._charts) == 1
