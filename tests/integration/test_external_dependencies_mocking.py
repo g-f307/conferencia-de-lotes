@@ -68,7 +68,7 @@ def test_fluxo_controlado_integra_leitura_validacao_relatorio_e_log(
     # Assert
     workbook = load_workbook(output_path)
     log_text = log_path.read_text(encoding="utf-8")
-    temporary_output = Path(write_report_mock.call_args.args[1])
+    temporary_output = Path(write_report_mock.call_args.args[2])
 
     assert workbook.sheetnames == list(REPORT_SHEET_NAMES)
     assert result.total_registros == 6
@@ -89,6 +89,9 @@ def test_fluxo_controlado_integra_leitura_validacao_relatorio_e_log(
     assert "data_hora=2026-08-16T12:30:45" in log_text
     assert "duracao_segundos=1.250" in log_text
     assert "total_registros=6" in log_text
+    assert "taxa_qualidade_entrada=" in log_text
+    assert "ganho_estimado_tempo_minutos=" in log_text
+    assert (diretorio_saida / "resumo_executivo.md").is_file()
     base_mock.assert_called_once_with(workbook_sintetico)
     assert perf_counter_mock.call_count == 2
     write_report_mock.assert_called_once()
@@ -108,7 +111,7 @@ def test_falha_na_escrita_remove_arquivo_temporario(
     log_path = diretorio_saida / "execucao.log"
     base_mock = MagicMock(return_value=base_referencia_simulada)
 
-    def interromper_escrita(_registros, temporary_path):
+    def interromper_escrita(_registros, _indicators, temporary_path):
         Path(temporary_path).write_bytes(b"arquivo parcial")
         raise OSError("falha controlada de escrita")
 

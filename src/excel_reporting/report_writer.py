@@ -27,7 +27,6 @@ from src.excel_reporting.validation_service import (
 from src.operational_indicators import (
     OperationalIndicators,
     _percentual,
-    calcular_indicadores,
 )
 
 REPORT_SHEET_NAMES = (
@@ -147,6 +146,7 @@ RESERVED_RULE_DESCRIPTION = (
 
 def write_excel_report(
     registros: Iterable[RegistroValidado],
+    indicators: OperationalIndicators,
     output_path: str | Path,
 ) -> Path:
     """Grava o workbook executivo com oito abas e dados segregados."""
@@ -156,7 +156,6 @@ def write_excel_report(
     ordered_records = sorted(registros, key=_record_order_key)
     _validate_classifications(ordered_records)
     all_rows = [_business_row(record) for record in ordered_records]
-    indicators = calcular_indicadores(ordered_records)
     ranking_rows = _ranking_rows(ordered_records)
     dictionary_rows = _dictionary_rows()
 
@@ -485,9 +484,14 @@ def _write_summary_cards(
     sheet: Any,
     indicators: OperationalIndicators,
 ) -> None:
-    for label_range, value_range, label, attribute, color, is_percentage in (
-        SUMMARY_CARDS
-    ):
+    for (
+        label_range,
+        value_range,
+        label,
+        attribute,
+        color,
+        is_percentage,
+    ) in SUMMARY_CARDS:
         sheet.merge_cells(label_range)
         sheet.merge_cells(value_range)
         label_cell = sheet[label_range.split(":")[0]]

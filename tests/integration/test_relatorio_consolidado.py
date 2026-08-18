@@ -60,8 +60,10 @@ def consolidated_workbook(tmp_path):
         _record(4, CLASSIFICACAO_ERRO_ENTRADA, rule="RN01"),
         *[_record(sequence, CLASSIFICACAO_VALIDO) for sequence in range(5, 10)],
     ]
+    from src.operational_indicators import calcular_indicadores
     output = tmp_path / "relatorio_conferencia_lotes.xlsx"
-    write_excel_report(records, output)
+    indicators = calcular_indicadores(records)
+    write_excel_report(records, indicators, output)
     return load_workbook(output)
 
 

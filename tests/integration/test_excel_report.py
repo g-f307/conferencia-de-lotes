@@ -115,8 +115,10 @@ def classified_records() -> list[RegistroValidado]:
 
 
 def _load_generated_report(tmp_path, records):
+    from src.operational_indicators import calcular_indicadores
     output = tmp_path / "relatorio_conferencia_lotes.xlsx"
-    returned_path = write_excel_report(records, output)
+    indicators = calcular_indicadores(records)
+    returned_path = write_excel_report(records, indicators, output)
     assert returned_path == output
     return output, load_workbook(output)
 
@@ -235,9 +237,11 @@ def test_summary_is_prepared_without_extra_technical_sheets(
 
 def test_unknown_classification_fails_instead_of_losing_a_record(tmp_path):
     invalid_record = _record(lote="L999", classification="Nova classificação")
+    from src.operational_indicators import calcular_indicadores
+    indicators = calcular_indicadores([invalid_record])
 
     with pytest.raises(ValueError, match="Nova classificação"):
-        write_excel_report([invalid_record], tmp_path / "relatorio.xlsx")
+        write_excel_report([invalid_record], indicators, tmp_path / "relatorio.xlsx")
 
 
 def test_real_workbook_generates_250_rows_without_mixing_categories(tmp_path):

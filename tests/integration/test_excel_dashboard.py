@@ -36,7 +36,9 @@ def dashboard_workbook(tmp_path_factory):
         for record in source.registros
     ]
     output = tmp_path_factory.mktemp("dashboard") / "relatorio_conferencia_lotes.xlsx"
-    write_excel_report(validated, output)
+    from src.operational_indicators import calcular_indicadores
+    indicators = calcular_indicadores(validated)
+    write_excel_report(validated, indicators, output)
     return load_workbook(output)
 
 
@@ -167,7 +169,9 @@ def test_dashboard_limits_evolution_to_ten_most_recent_days(tmp_path):
     ]
     output = tmp_path / "dashboard-11-dias.xlsx"
 
-    write_excel_report(records, output)
+    from src.operational_indicators import calcular_indicadores
+    indicators = calcular_indicadores(records)
+    write_excel_report(records, indicators, output)
     summary = load_workbook(output)["Resumo"]
     chart_dates = [
         summary.cell(row=row, column=21).value.date() for row in range(2, 12)
