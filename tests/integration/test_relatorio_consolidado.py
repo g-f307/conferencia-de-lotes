@@ -183,7 +183,7 @@ def test_geracao_do_resumo_executivo_markdown(tmp_path):
     assert "| Taxa de Revisão Humana | 15.1% |" in conteudo
     assert "| Taxa de Retrabalho | 20.2% |" in conteudo
     assert "| Ganho Estimado de Tempo | 175.00 min &#124; 2.92 h |" in conteudo
-    
+
     assert "2,0 minutos" in conteudo
     assert "0,25 minutos" in conteudo
     assert "Observação Metodológica:" in conteudo
