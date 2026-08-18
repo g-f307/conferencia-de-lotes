@@ -104,7 +104,7 @@ def test_fluxo_controlado_integra_leitura_validacao_relatorio_e_log(
     write_report_mock.assert_called_once()
     markdown_mock.assert_called_once()
     calcular_mock.assert_called_once()
-    
+
     excel_indicators = write_report_mock.call_args.args[1]
     markdown_indicators = markdown_mock.call_args.args[0]
     assert excel_indicators is markdown_indicators
