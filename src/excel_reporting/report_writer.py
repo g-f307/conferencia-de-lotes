@@ -406,12 +406,16 @@ def _reference_date(
         return value
 
     text = str(value).strip()
-    for date_format in ("%Y-%m-%d", "%d/%m/%Y"):
-        try:
-            return datetime.strptime(text, date_format).date()
-        except ValueError:
-            continue
-    return text
+    try:
+        return date.fromisoformat(text)
+    except ValueError:
+        pass
+
+    try:
+        day, month, year = (int(part) for part in text.split("/"))
+        return date(year, month, day)
+    except ValueError:
+        return text
 
 
 def _record_order_key(record: RegistroValidado) -> tuple[date, str, int]:
