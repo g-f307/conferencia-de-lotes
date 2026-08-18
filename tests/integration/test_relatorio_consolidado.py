@@ -138,3 +138,51 @@ def test_dicionario_cobre_termos_formulas_e_todas_as_regras(consolidated_workboo
     } <= terms
     assert {f"RN{number:02d}" for number in range(1, 13)} <= terms
     assert all(row[2] and row[3] for row in rows)
+
+
+def test_geracao_do_resumo_executivo_markdown(tmp_path):
+    from src.operational_indicators import OperationalIndicators
+    from src.markdown_reporting import gerar_resumo_executivo
+
+    indicadores = OperationalIndicators(
+        total_registros=100,
+        validos_qtd=80,
+        validos_pct=80.0,
+        divergencias_qtd=10,
+        divergencias_pct=10.0,
+        ambiguos_qtd=5,
+        ambiguos_pct=5.0,
+        erros_entrada_qtd=5,
+        erros_entrada_pct=5.0,
+        regra_mais_acionada_codigo="RN05",
+        regra_mais_acionada_nome="Lote inexistente",
+        regra_mais_acionada_qtd=10,
+        taxa_qualidade_entrada=95.0,
+        taxa_revisao_humana=5.0,
+        taxa_retrabalho=10.0,
+        ganho_estimado_tempo_minutos=175.0,
+        ganho_estimado_tempo_horas=2.92,
+    )
+
+    saida = tmp_path / "resumo_executivo.md"
+    resultado = gerar_resumo_executivo(indicadores, saida)
+
+    assert resultado.exists()
+    assert resultado == saida
+
+    conteudo = saida.read_text(encoding="utf-8")
+
+    assert "# Resumo Executivo: Conferência de Lotes" in conteudo
+    assert "| Total de Registros Processados | 100 |" in conteudo
+    assert "80 (80.0%)" in conteudo
+    assert "RN05" in conteudo
+    assert "Lote inexistente" in conteudo
+    assert "175.0" in conteudo
+    assert "2.92" in conteudo
+    assert "2,0 minutos" in conteudo
+    assert "0,25 minutos" in conteudo
+    assert "Observação Metodológica:" in conteudo
+
+    assert "OperationalIndicators" not in conteudo
+    assert "RegistroValidado" not in conteudo
+    assert "openpyxl" not in conteudo
