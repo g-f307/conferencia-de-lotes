@@ -317,6 +317,27 @@ def test_precedencia_divergencia_sobre_ambiguo():
     assert resultado.classificacao == CLASSIFICACAO_DIVERGENCIA
 
 
+@pytest.mark.regression
+def test_precedencia_da_regra_aplicada():
+    resultado_erro = validar_diretamente(
+        registro_valido(produto="", lote_id="L999", status="cancelado"),
+    )
+    assert resultado_erro.classificacao == CLASSIFICACAO_ERRO_ENTRADA
+    assert resultado_erro.regra_aplicada == "RN02"
+
+    resultado_div = validar_diretamente(
+        registro_valido(lote_id="L999", status="cancelado"),
+    )
+    assert resultado_div.classificacao == CLASSIFICACAO_DIVERGENCIA
+    assert resultado_div.regra_aplicada == "RN05"
+
+    resultado_amb = validar_diretamente(
+        registro_valido(status="cancelado"),
+    )
+    assert resultado_amb.classificacao == CLASSIFICACAO_AMBIGUO
+    assert resultado_amb.regra_aplicada == "RN09"
+
+
 def test_servico_pode_reiniciar_contexto_de_duplicidade():
     service = ValidationService(REFERENCIAS)
     service.validar_registro(registro_valido())

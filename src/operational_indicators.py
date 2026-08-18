@@ -2,7 +2,6 @@
 
 from collections import Counter
 from dataclasses import dataclass
-from typing import List
 
 from src.excel_reporting.models import RegistroValidado
 from src.excel_reporting.validation_service import MOTIVOS
@@ -39,7 +38,7 @@ class OperationalIndicators:
 
 
 def calcular_indicadores(
-    registros: List[RegistroValidado],
+    registros: list[RegistroValidado],
     tempo_manual_min: float = 2.0,
     tempo_auto_min: float = 0.25,
 ) -> OperationalIndicators:

@@ -1,5 +1,4 @@
 import pytest
-from types import MappingProxyType
 
 from src.excel_reporting.models import RegistroValidado
 from src.operational_indicators import _percentual, calcular_indicadores
@@ -74,6 +73,20 @@ def test_calcular_indicadores_regra_mais_acionada():
     assert indicadores.regra_mais_acionada_codigo == "RN01"
     assert indicadores.regra_mais_acionada_qtd == 2
     assert indicadores.regra_mais_acionada_nome == "Lote não informado"
+
+
+@pytest.mark.unit
+def test_calcular_indicadores_regra_mais_acionada_desempate():
+    registros = [
+        _criar_registro("Erro de Entrada", "RN01"),
+        _criar_registro("Divergência", "RN05"),
+        _criar_registro("Divergência", "RN05"),
+        _criar_registro("Erro de Entrada", "RN01"),
+    ]
+    indicadores = calcular_indicadores(registros)
+
+    assert indicadores.regra_mais_acionada_codigo == "RN01"
+    assert indicadores.regra_mais_acionada_qtd == 2
 
 
 @pytest.mark.unit
