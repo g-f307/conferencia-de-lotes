@@ -20,6 +20,7 @@ class RegistroValidado:
     data_referencia: str
     aba_origem: str
     linha_origem: int
+    regra_aplicada: str = ""
 
     def __post_init__(self) -> None:
         snapshot = MappingProxyType(dict(self.campos_originais))
@@ -38,4 +39,5 @@ class RegistroValidado:
             "data_referencia": self.data_referencia,
             "aba_origem": self.aba_origem,
             "linha_origem": self.linha_origem,
+            "regra_aplicada": self.regra_aplicada,
         }
