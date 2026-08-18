@@ -100,6 +100,25 @@ def _motivo(regras_violadas: Iterable[str]) -> str:
     return "; ".join(f"{regra}: {MOTIVOS[regra]}" for regra in regras)
 
 
+def _regra_principal(regras_violadas: Iterable[str], classificacao: str) -> str:
+    regras = tuple(regras_violadas)
+    if not regras:
+        return ""
+    if classificacao == CLASSIFICACAO_ERRO_ENTRADA:
+        for r in regras:
+            if r in REGRAS_ERRO_ENTRADA:
+                return r
+    if classificacao == CLASSIFICACAO_DIVERGENCIA:
+        for r in regras:
+            if r in REGRAS_DIVERGENCIA:
+                return r
+    if classificacao == CLASSIFICACAO_AMBIGUO:
+        for r in regras:
+            if r in REGRAS_AMBIGUO:
+                return r
+    return regras[0]
+
+
 def validar_registro(
     registro: Mapping[str, object],
     lotes_referencia: Iterable[object],
@@ -146,16 +165,18 @@ def validar_registro(
     if not _data_valida(data_referencia):
         regras.append("RN12")
 
+    classificacao = _classificar(regras)
     return RegistroValidado(
         campos_originais=original,
         status_original=status_original,
         status_normalizado=status_normalizado,
-        classificacao=_classificar(regras),
+        classificacao=classificacao,
         motivo=_motivo(regras),
         regras_violadas=tuple(regras),
         data_referencia=data_referencia,
         aba_origem=contexto_aba,
         linha_origem=linha_origem,
+        regra_aplicada=_regra_principal(regras, classificacao),
     )
 
 
