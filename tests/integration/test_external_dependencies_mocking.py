@@ -39,6 +39,8 @@ def test_fluxo_controlado_integra_leitura_validacao_relatorio_e_log(
     base_mock = MagicMock(return_value=base_referencia_simulada)
     perf_counter_mock = MagicMock(side_effect=(100.0, 101.25))
     write_report_mock = MagicMock(wraps=service_module.write_excel_report)
+    markdown_mock = MagicMock(wraps=service_module.gerar_resumo_executivo)
+    calcular_mock = MagicMock(wraps=service_module.calcular_indicadores)
     network_mock = MagicMock(side_effect=AssertionError("rede nao permitida"))
     credential_mock = MagicMock(
         side_effect=AssertionError("credencial real nao permitida")
@@ -51,6 +53,8 @@ def test_fluxo_controlado_integra_leitura_validacao_relatorio_e_log(
     monkeypatch.setattr(service_module.time, "perf_counter", perf_counter_mock)
     monkeypatch.setattr(service_module, "datetime", FixedDateTime)
     monkeypatch.setattr(service_module, "write_excel_report", write_report_mock)
+    monkeypatch.setattr(service_module, "gerar_resumo_executivo", markdown_mock)
+    monkeypatch.setattr(service_module, "calcular_indicadores", calcular_mock)
     monkeypatch.setattr(socket, "create_connection", network_mock)
     monkeypatch.setattr(
         BotCityVaultProvider,
@@ -68,7 +72,7 @@ def test_fluxo_controlado_integra_leitura_validacao_relatorio_e_log(
     # Assert
     workbook = load_workbook(output_path)
     log_text = log_path.read_text(encoding="utf-8")
-    temporary_output = Path(write_report_mock.call_args.args[1])
+    temporary_output = Path(write_report_mock.call_args.args[2])
 
     assert workbook.sheetnames == list(REPORT_SHEET_NAMES)
     assert result.total_registros == 6
@@ -89,9 +93,22 @@ def test_fluxo_controlado_integra_leitura_validacao_relatorio_e_log(
     assert "data_hora=2026-08-16T12:30:45" in log_text
     assert "duracao_segundos=1.250" in log_text
     assert "total_registros=6" in log_text
+    assert "taxa_qualidade_entrada=" in log_text
+    assert "ganho_estimado_tempo_minutos=" in log_text
+    assert "regra_mais_acionada_descricao=" in log_text
+    assert "regra_mais_acionada_qtd=" in log_text
+    assert "ganho_estimado_tempo_horas=" in log_text
+    assert (diretorio_saida / "resumo_executivo.md").is_file()
     base_mock.assert_called_once_with(workbook_sintetico)
     assert perf_counter_mock.call_count == 2
     write_report_mock.assert_called_once()
+    markdown_mock.assert_called_once()
+    calcular_mock.assert_called_once()
+
+    excel_indicators = write_report_mock.call_args.args[1]
+    markdown_indicators = markdown_mock.call_args.args[0]
+    assert excel_indicators is markdown_indicators
+
     network_mock.assert_not_called()
     credential_mock.assert_not_called()
     workbook.close()
@@ -108,7 +125,7 @@ def test_falha_na_escrita_remove_arquivo_temporario(
     log_path = diretorio_saida / "execucao.log"
     base_mock = MagicMock(return_value=base_referencia_simulada)
 
-    def interromper_escrita(_registros, temporary_path):
+    def interromper_escrita(_registros, _indicators, temporary_path):
         Path(temporary_path).write_bytes(b"arquivo parcial")
         raise OSError("falha controlada de escrita")
 
@@ -134,3 +151,34 @@ def test_falha_na_escrita_remove_arquivo_temporario(
     assert list(diretorio_saida.glob("*.tmp.xlsx")) == []
     base_mock.assert_called_once_with(workbook_sintetico)
     write_report_mock.assert_called_once()
+
+
+def test_falha_na_geracao_markdown_previne_publicacao_do_excel(
+    workbook_sintetico: Path,
+    base_referencia_simulada: list[dict[str, object]],
+    diretorio_saida: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output_path = diretorio_saida / "relatorio.xlsx"
+    log_path = diretorio_saida / "execucao.log"
+    markdown_path = diretorio_saida / "resumo_executivo.md"
+    base_mock = MagicMock(return_value=base_referencia_simulada)
+
+    def interromper_markdown(_indicadores, temporary_path):
+        Path(temporary_path).write_text("markdown parcial")
+        raise OSError("falha ao gerar markdown")
+
+    markdown_mock = MagicMock(side_effect=interromper_markdown)
+    monkeypatch.setattr(workbook_reader_module, "read_reference_base", base_mock)
+    monkeypatch.setattr(service_module, "gerar_resumo_executivo", markdown_mock)
+
+    with pytest.raises(OSError, match="falha ao gerar markdown"):
+        gerar_relatorio_excel(
+            workbook_sintetico,
+            output_path,
+            log_path=log_path,
+        )
+
+    assert not output_path.exists()
+    assert not markdown_path.exists()
+    assert not list(diretorio_saida.glob("*.tmp"))
