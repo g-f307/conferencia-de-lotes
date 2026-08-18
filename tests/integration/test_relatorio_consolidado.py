@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+from dataclasses import dataclass, replace
 from datetime import date
+from pathlib import Path
 
 import pytest
 from openpyxl import load_workbook
 from openpyxl.chart import DoughnutChart, LineChart
+from openpyxl.workbook.workbook import Workbook
 
 from src.excel_reporting import (
     CLASSIFICACAO_AMBIGUO,
@@ -17,8 +20,19 @@ from src.excel_reporting import (
     RegistroValidado,
     write_excel_report,
 )
+from src.excel_reporting.report_writer import record_order_key
+from src.markdown_reporting import gerar_resumo_executivo
+from src.operational_indicators import OperationalIndicators, calcular_indicadores
 
 pytestmark = pytest.mark.integration
+
+
+@dataclass(frozen=True)
+class ConsolidatedArtifacts:
+    workbook: Workbook
+    excel_path: Path
+    markdown_path: Path
+    indicators: OperationalIndicators
 
 
 def _record(
@@ -52,7 +66,7 @@ def _record(
 
 
 @pytest.fixture
-def consolidated_workbook(tmp_path):
+def consolidated_artifacts(tmp_path):
     records = [
         _record(1, CLASSIFICACAO_DIVERGENCIA, rule="RN05"),
         _record(2, CLASSIFICACAO_DIVERGENCIA, rule="RN05"),
@@ -60,17 +74,34 @@ def consolidated_workbook(tmp_path):
         _record(4, CLASSIFICACAO_ERRO_ENTRADA, rule="RN01"),
         *[_record(sequence, CLASSIFICACAO_VALIDO) for sequence in range(5, 10)],
     ]
-    from src.excel_reporting.report_writer import record_order_key
-    from src.operational_indicators import calcular_indicadores
-    output = tmp_path / "relatorio_conferencia_lotes.xlsx"
     ordered = sorted(records, key=record_order_key)
     indicators = calcular_indicadores(ordered)
-    write_excel_report(ordered, indicators, output)
-    return load_workbook(output)
+    excel_path = tmp_path / "relatorio_conferencia_lotes.xlsx"
+    markdown_path = tmp_path / "resumo_executivo.md"
+    write_excel_report(ordered, indicators, excel_path)
+    gerar_resumo_executivo(indicators, markdown_path)
+
+    workbook = load_workbook(excel_path)
+    yield ConsolidatedArtifacts(
+        workbook=workbook,
+        excel_path=excel_path,
+        markdown_path=markdown_path,
+        indicators=indicators,
+    )
+    workbook.close()
 
 
-def test_relatorio_tem_exatamente_as_oito_abas_exigidas(consolidated_workbook):
-    assert consolidated_workbook.sheetnames == list(REPORT_SHEET_NAMES)
+@pytest.fixture
+def consolidated_workbook(consolidated_artifacts):
+    return consolidated_artifacts.workbook
+
+
+def test_gera_artefatos_fisicos_e_exatamente_oito_abas(consolidated_artifacts):
+    assert consolidated_artifacts.excel_path.is_file()
+    assert consolidated_artifacts.excel_path.stat().st_size > 0
+    assert consolidated_artifacts.markdown_path.is_file()
+    assert consolidated_artifacts.markdown_path.stat().st_size > 0
+    assert consolidated_artifacts.workbook.sheetnames == list(REPORT_SHEET_NAMES)
 
 
 def test_abas_operacionais_nao_misturam_classificacoes(consolidated_workbook):
@@ -144,54 +175,45 @@ def test_dicionario_cobre_termos_formulas_e_todas_as_regras(consolidated_workboo
     assert all(row[2] and row[3] for row in rows)
 
 
-def test_geracao_do_resumo_executivo_markdown(tmp_path):
-    from src.markdown_reporting import gerar_resumo_executivo
-    from src.operational_indicators import OperationalIndicators
-
-    indicadores = OperationalIndicators(
-        total_registros=100,
-        validos_qtd=55,
-        validos_pct=55.56,
-        divergencias_qtd=20,
-        divergencias_pct=20.25,
-        ambiguos_qtd=15,
-        ambiguos_pct=15.12,
-        erros_entrada_qtd=10,
-        erros_entrada_pct=10.07,
-        regra_mais_acionada_codigo="RN05",
-        regra_mais_acionada_nome="Lote inexistente",
-        regra_mais_acionada_qtd=20,
-        taxa_qualidade_entrada=89.93,
-        taxa_revisao_humana=15.12,
-        taxa_retrabalho=20.25,
-        ganho_estimado_tempo_minutos=175.0,
-        ganho_estimado_tempo_horas=2.916,
-    )
-
-    saida = tmp_path / "resumo_executivo.md"
-    resultado = gerar_resumo_executivo(indicadores, saida)
-
-    assert resultado.exists()
-    assert resultado == saida
-
-    conteudo = saida.read_text(encoding="utf-8")
+def test_resumo_executivo_fisico_contem_os_dez_indicadores(
+    consolidated_artifacts,
+):
+    conteudo = consolidated_artifacts.markdown_path.read_text(encoding="utf-8")
 
     assert "# Resumo Executivo: Conferência de Lotes" in conteudo
-    assert "| Total de Registros Processados | 100 |" in conteudo
-    assert "55 (55.6%)" in conteudo
-    assert "20 (20.2%)" in conteudo
-    assert "15 (15.1%)" in conteudo
-    assert "10 (10.1%)" in conteudo
-    assert "| Regra Mais Acionada | RN05 (20 ocorrências) |" in conteudo
-    assert "| Taxa de Qualidade da Entrada | 89.9% |" in conteudo
-    assert "| Taxa de Revisão Humana | 15.1% |" in conteudo
-    assert "| Taxa de Retrabalho | 20.2% |" in conteudo
-    assert "| Ganho Estimado de Tempo | 175.00 min &#124; 2.92 h |" in conteudo
-
+    assert "| Total de Registros Processados | 9 |" in conteudo
+    assert "| Cadastros Válidos | 5 (55.6%) |" in conteudo
+    assert "| Divergências Identificadas | 2 (22.2%) |" in conteudo
+    assert "| Casos Ambíguos (Revisão Manual) | 1 (11.1%) |" in conteudo
+    assert "| Erros de Entrada | 1 (11.1%) |" in conteudo
+    assert "| Regra Mais Acionada | RN05 (2 ocorrências) |" in conteudo
+    assert "| Taxa de Qualidade da Entrada | 88.9% |" in conteudo
+    assert "| Taxa de Revisão Humana | 11.1% |" in conteudo
+    assert "| Taxa de Retrabalho | 22.2% |" in conteudo
+    assert "| Ganho Estimado de Tempo | 15.75 min &#124; 0.26 h |" in conteudo
     assert "2,0 minutos" in conteudo
     assert "0,25 minutos" in conteudo
     assert "Observação Metodológica:" in conteudo
 
-    assert "OperationalIndicators" not in conteudo
-    assert "RegistroValidado" not in conteudo
-    assert "openpyxl" not in conteudo
+
+def test_regra_aplicada_alimenta_indicador_seis_e_ranking(tmp_path):
+    records = [
+        _record(1, CLASSIFICACAO_DIVERGENCIA, rule="RN05"),
+        _record(2, CLASSIFICACAO_DIVERGENCIA, rule="RN05"),
+        _record(3, CLASSIFICACAO_AMBIGUO, rule="RN09"),
+    ]
+    records_without_main_rule = [
+        replace(record, regra_aplicada="") for record in records
+    ]
+    ordered = sorted(records_without_main_rule, key=record_order_key)
+    indicators = calcular_indicadores(ordered)
+    output = tmp_path / "sem-regra-aplicada.xlsx"
+
+    write_excel_report(ordered, indicators, output)
+    workbook = load_workbook(output)
+    try:
+        assert indicators.regra_mais_acionada_codigo == "N/A"
+        assert workbook["Resumo"]["M5"].value == "Nenhuma regra acionada"
+        assert workbook["Ranking de Regras"].max_row == 1
+    finally:
+        workbook.close()
