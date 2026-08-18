@@ -19,13 +19,15 @@ def gerar_resumo_executivo(
 | Indicador | Resultado |
 |---|---|
 | Total de Registros Processados | {indicadores.total_registros} |
-| Cadastros Válidos | {indicadores.validos_qtd} ({indicadores.validos_pct}%) |
-| Divergências Identificadas | {indicadores.divergencias_qtd} ({indicadores.divergencias_pct}%) |
-| Casos Ambíguos (Revisão Manual) | {indicadores.ambiguos_qtd} ({indicadores.ambiguos_pct}%) |
-| Erros de Entrada | {indicadores.erros_entrada_qtd} ({indicadores.erros_entrada_pct}%) |
-| Taxa de Qualidade da Entrada | {indicadores.taxa_qualidade_entrada}% |
-| Taxa de Revisão Humana | {indicadores.taxa_revisao_humana}% |
-| Taxa de Retrabalho | {indicadores.taxa_retrabalho}% |
+| Cadastros Válidos | {indicadores.validos_qtd} ({indicadores.validos_pct:.1f}%) |
+| Divergências Identificadas | {indicadores.divergencias_qtd} ({indicadores.divergencias_pct:.1f}%) |
+| Casos Ambíguos (Revisão Manual) | {indicadores.ambiguos_qtd} ({indicadores.ambiguos_pct:.1f}%) |
+| Erros de Entrada | {indicadores.erros_entrada_qtd} ({indicadores.erros_entrada_pct:.1f}%) |
+| Regra Mais Acionada | {indicadores.regra_mais_acionada_codigo} ({indicadores.regra_mais_acionada_qtd} ocorrências) |
+| Taxa de Qualidade da Entrada | {indicadores.taxa_qualidade_entrada:.1f}% |
+| Taxa de Revisão Humana | {indicadores.taxa_revisao_humana:.1f}% |
+| Taxa de Retrabalho | {indicadores.taxa_retrabalho:.1f}% |
+| Ganho Estimado de Tempo | {indicadores.ganho_estimado_tempo_minutos:.2f} min &#124; {indicadores.ganho_estimado_tempo_horas:.2f} h |
 
 ## Destaque Operacional
 
