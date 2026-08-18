@@ -71,6 +71,7 @@ def test_registro_validado_e_dataclass_serializavel():
         "data_referencia": "14/06/2026",
         "aba_origem": "Inspecoes",
         "linha_origem": 7,
+        "regra_aplicada": "",
     }
 
 
