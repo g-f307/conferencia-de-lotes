@@ -4,8 +4,8 @@
 
 | Item | Informação |
 |---|---|
-| Data | 29 de julho de 2026 |
-| Escopo | BPMN, RN01–RN07, DataPool, Playwright, Page Objects e evidências por item |
+| Data | 18 de agosto de 2026 |
+| Escopo | BPMN, RN01–RN12, DataPool, Playwright, indicadores operacionais e saídas Excel/Markdown |
 | BPMN | `docs/diagrama_pdd.bpmn` |
 | Visualização | `docs/diagrama_pdd.svg` |
 | Regras-base | `docs/Regras de validação a aplicar - Gabriel, Marcelo e Rebecca.docx.pdf` |
@@ -110,3 +110,99 @@ A entrega da Aula 22 adiciona um fluxo paralelo focado na consolidação, valida
 ### O que não muda (sem impacto no fluxo orquestrado original):
 - O fluxo web Playwright e a esteira baseada no BotCity DataPool continuam idênticos e isolados.
 - O mapeamento BPMN anterior permanece fiel ao processo de conferência individual de lote, enquanto o fluxo Excel representa um procedimento analítico pós-processamento (ou um cenário alternativo não orquestrado de auditoria em lote).
+
+## Consolidação operacional e saídas duplas (Aula 24)
+
+A Aula 24 amplia o procedimento analítico sem mover regras para a camada de
+apresentação. Após a validação RN01–RN12, o orquestrador ordena os registros e
+calcula uma única instância imutável de `OperationalIndicators`. Essa mesma
+instância alimenta o Dashboard Excel e o resumo executivo Markdown.
+
+```mermaid
+flowchart LR
+    INPUT[Workbook de 10 dias] --> READ[Leitura das abas]
+    READ --> VALIDATE[Validação RN01–RN12]
+    VALIDATE --> ORDER[Ordenação determinística]
+    ORDER --> METRICS[Cálculo único dos 10 indicadores]
+    METRICS --> XLSXTMP[XLSX temporário]
+    METRICS --> MDTMP[Markdown temporário]
+    XLSXTMP --> PUBLISH[Publicação conjunta]
+    MDTMP --> PUBLISH
+    PUBLISH --> LOG[Log estruturado]
+```
+
+### Responsabilidades do fluxo analítico
+
+| Etapa | Componente | Responsabilidade e evidência |
+|---|---|---|
+| Ler | `workbook_reader.py` | Carregar Base de Referência e abas diárias sem depender de arquivo manual adicional. |
+| Validar | `validation_service.py` | Aplicar RN01–RN12, precedência e `regra_aplicada`. |
+| Consolidar | `operational_indicators.py` | Produzir contagens, percentuais, taxas, regra principal e ganho estimado. |
+| Orquestrar | `excel_reporting/service.py` | Calcular uma vez, compartilhar a instância e impedir publicação parcial se uma geração falhar. |
+| Apresentar | `report_writer.py` | Produzir o Dashboard Executivo, cinco abas operacionais, Ranking e Dicionário. |
+| Comunicar | `markdown_reporting.py` | Produzir texto gerencial com os mesmos números do Dashboard. |
+| Auditar | `execucao_relatorio.log` | Registrar métricas, duração, caminhos e regra mais acionada sem credenciais. |
+
+### Impacto no processo
+
+O BPMN principal continua adequado para a conferência individual executada no
+DataPool. Para o cenário analítico em lote, o PDD passa a reconhecer uma etapa
+posterior de consolidação e publicação de duas representações do mesmo estado:
+
+1. o Excel é a evidência detalhada, navegável e auditável;
+2. o Markdown é a síntese para e-mail ou apresentação executiva;
+3. o log fornece rastreabilidade técnica sem recalcular indicadores.
+
+As saídas são geradas em caminhos temporários e somente depois promovidas aos
+nomes finais. Uma falha antes da publicação remove os temporários e evita que
+um Excel novo seja combinado com um Markdown antigo.
+
+### Escalabilidade das regras
+
+Uma RN13 associada a uma classificação existente exige alteração no motor de
+validação e ampliação do intervalo documentado no Dicionário. Ranking,
+indicadores e Markdown consomem `regra_aplicada` genericamente e não precisam
+de fórmula nova. Uma classificação inédita, por outro lado, exige nova aba,
+cor, série gráfica e atualização dos mapas de classificação.
+
+### Ganho estimado de tempo
+
+O indicador considera `2,0` minutos por registro no processo manual e `0,25`
+minuto no automatizado. Trata-se de premissa didática. Para uso produtivo, o
+processo precisaria capturar timestamps por etapa, estabelecer uma linha de
+base manual observada, armazenar histórico, separar espera e retrabalho e
+acompanhar distribuições de tempo, não apenas uma média fixa.
+
+## Perguntas prováveis da banca — Aula 24
+
+### Como provar que Excel e Markdown usam os mesmos números?
+
+`excel_reporting/service.py` chama `calcular_indicadores()` uma vez e passa a
+mesma instância por identidade aos dois geradores. O teste de integração
+intercepta as chamadas, confirma `assert ... is ...` e valida os artefatos
+físicos.
+
+### O que quebra se `regra_aplicada` desaparecer?
+
+O indicador 6 deixa de identificar a regra principal e a aba Ranking fica sem
+ocorrências. O teste consolidado remove somente esse campo e comprova os dois
+efeitos, mantendo `regras_violadas` para demonstrar que não existe fallback
+silencioso.
+
+### Por que Ranking e Dicionário são abas separadas?
+
+O Dashboard permanece curto e decisório; o Ranking pode crescer a cada rodada
+e oferece ordenação e auditoria; o Dicionário é conteúdo estável de consulta.
+Separá-los evita misturar análise, detalhe operacional e glossário.
+
+### Por que o ganho estimado não é uma métrica de produção?
+
+Porque deriva de duas constantes didáticas, não de observações reais. Ele só
+se torna métrica produtiva com instrumentação, baseline manual, persistência
+histórica e tratamento estatístico das execuções.
+
+### O que muda se surgir RN13?
+
+Com classificação existente, mudam dois módulos de produção: o motor de
+validação e o intervalo do Dicionário. Ranking, indicador 6 e Markdown já são
+genéricos. Uma nova classificação exige também mudanças estruturais no Excel.
