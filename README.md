@@ -102,6 +102,10 @@ flowchart LR
     MAIN --> LOG[Logs JSON Lines]
     MAIN --> REPORT[Resumo JSON e PDF]
     MAIN --> MAESTRO[Artefatos e finish_task]
+    XLSX[Workbook de 10 dias] --> READER[Leitura e validação RN01–RN12]
+    READER --> INDICATORS[OperationalIndicators]
+    INDICATORS --> EXCEL[Dashboard Excel com 8 abas]
+    INDICATORS --> MARKDOWN[resumo_executivo.md]
 ```
 
 As responsabilidades principais são:
@@ -117,6 +121,10 @@ As responsabilidades principais são:
 | `src/pages/form_page.py` | Encapsular o formulário, a confirmação e a captura visual. |
 | `src/maestro_client.py` | Adaptar DataPool, alertas, artefatos e task. |
 | `src/vault_client.py` | Recuperar e validar a credencial somente em memória. |
+| `src/excel_reporting/service.py` | Orquestrar leitura, validação, cálculo único dos indicadores e publicação conjunta das saídas analíticas. |
+| `src/operational_indicators.py` | Consolidar os 10 indicadores operacionais sem dependência de Excel, disco ou interface. |
+| `src/excel_reporting/report_writer.py` | Transformar registros validados e indicadores no workbook executivo de 8 abas. |
+| `src/markdown_reporting.py` | Transformar o mesmo objeto de indicadores no resumo gerencial em Markdown. |
 
 Detalhes e diagramas de sequência estão em
 [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md).
@@ -143,6 +151,24 @@ Detalhes e diagramas de sequência estão em
 
 Não existem `sleep()` para sincronização da interface. A camada web aguarda
 condições explícitas de visibilidade, disponibilidade e confirmação.
+
+### Fluxo analítico Excel e Markdown
+
+O fluxo acionado por `gerar_relatorio.py` é independente da automação web:
+
+1. lê as abas diárias e a Base de Referência do workbook;
+2. aplica RN01–RN12 e define `classificacao` e `regra_aplicada`;
+3. ordena os registros de forma determinística;
+4. chama `calcular_indicadores()` exatamente uma vez;
+5. entrega a mesma instância de `OperationalIndicators` aos geradores Excel e
+   Markdown;
+6. gera as duas saídas em arquivos temporários;
+7. publica os artefatos finais somente após as duas gerações terminarem com
+   sucesso;
+8. grava no log as contagens, taxas, regra mais acionada e ganho estimado.
+
+Essa fonte única de verdade impede que o Dashboard e o resumo textual
+recalculem percentuais por caminhos diferentes.
 
 ## Regras de validação
 
@@ -197,6 +223,7 @@ o que evita referências específicas de uma máquina ou Runner.
 │   ├── ARQUITETURA.md
 │   ├── DEPLOY_BOTCITY.md
 │   ├── EXECUCAO_E2E_DOCKER_CI.md
+│   ├── CHECKLIST_FINAL_ACEITE_AULA24.md
 │   ├── HOMOLOGACAO_TESTES_AULA23.md
 │   ├── RELATORIO_EXCEL_AULA22.md
 │   ├── RELEASE_V1.6.0.md
@@ -226,7 +253,9 @@ o que evita referências específicas de uma máquina ou Runner.
 │   ├── logging_config.py
 │   ├── maestro_client.py
 │   ├── main.py
+│   ├── markdown_reporting.py
 │   ├── models.py
+│   ├── operational_indicators.py
 │   ├── reporting.py
 │   ├── validation.py
 │   ├── vault_client.py
@@ -241,7 +270,8 @@ o que evita referências específicas de uma máquina ou Runner.
 ├── docker-compose.yml
 ├── requirements.txt
 ├── requirements-dev.txt
-└── requirements-report.txt        # dependências do relatório Excel
+├── requirements-report.txt        # dependências do relatório Excel
+└── CHANGELOG.md                    # histórico versionado das entregas
 ```
 
 `.env`, logs, relatórios, PNG, pacotes e caches não são versionados. Os
@@ -458,11 +488,18 @@ Eventos relevantes:
 erros técnicos e a lista de caminhos das evidências. O PDF e o JSON são
 publicados como artefatos da task.
 
-## Relatório executivo Excel (Aula 22)
+O fluxo analítico grava `logs/execucao_relatorio.log` em formato `chave=valor`.
+Além das contagens e da duração, o arquivo registra percentuais, taxas, código,
+descrição e frequência da regra mais acionada e ganho estimado em minutos e
+horas. Ele não contém credenciais nem dados de autenticação.
+
+## Relatório executivo e indicadores operacionais (Aula 24)
 
 O módulo `src/excel_reporting/` implementa um fluxo independente que lê o
 workbook de inspeção, aplica RN01–RN12, classifica os 250 registros e gera um
-relatório formatado com dashboard nativo do Excel.
+relatório formatado com Dashboard Executivo nativo do Excel. A camada
+`src/operational_indicators.py` calcula os indicadores uma única vez e não
+importa Pandas, OpenPyXL, arquivos ou componentes de interface.
 
 Esse fluxo não substitui a automação Playwright/DataPool. Ele opera como uma
 camada analítica paralela para consolidação gerencial.
@@ -490,25 +527,30 @@ python gerar_relatorio.py --entrada dados_entrada/inspecao_lotes_10dias.xlsx \
 ### Saídas
 
 ```text
-relatorios/relatorio_conferencia_lotes.xlsx   # relatório com 6 abas
+relatorios/relatorio_conferencia_lotes.xlsx   # relatório com 8 abas
+relatorios/resumo_executivo.md                 # síntese gerencial dos indicadores
 logs/execucao_relatorio.log                   # log da execução
 artefatos/dashboard_resumo.pdf                # evidência opcional, exportada manualmente
 ```
 
-O comando gera automaticamente o XLSX e o log. Quando necessária para a
-entrega, a evidência em PDF deve ser exportada manualmente a partir da área de
-impressão da aba `Resumo`. Esses arquivos não devem ser versionados.
+O XLSX possui 8 abas; a referência a 6 abas correspondia à entrega histórica
+da Aula 22. O comando gera automaticamente XLSX, Markdown e log. Quando
+necessária para a entrega, a evidência em PDF deve ser exportada manualmente a
+partir da área de impressão da aba `Resumo`. Esses arquivos não devem ser
+versionados.
 
-### Estrutura das seis abas
+### Estrutura das oito abas
 
 | Aba | Conteúdo |
 |---|---|
-| `Resumo` | Indicadores KPI (total, válidos, divergências, ambíguos, erros de entrada), percentuais, gráfico de rosca com as quatro classificações e gráfico de linha com a evolução diária dos problemas. |
+| `Resumo` | Os 10 indicadores operacionais, metas visuais `✓`/`⚠`, gráfico de rosca das quatro classificações e gráfico de linha dos últimos 10 dias. |
 | `Todos` | Os 250 registros consolidados com classificação e motivo detalhado. |
 | `Válidos` | Registros aprovados sem violações. |
 | `Divergências` | Registros com divergência de referência, produto ou status. |
 | `Ambíguos` | Registros com status não reconhecido, encaminhados à revisão. |
 | `Erros de Entrada` | Registros com campos obrigatórios ausentes ou estrutura inválida. |
+| `Ranking de Regras` | Regras principais acionadas, ordenadas por frequência com `Counter.most_common()`. |
+| `Dicionário` | Glossário de termos, classificações, fórmulas, metas e RN01–RN12 em linguagem acessível. |
 
 ### Classificações
 
@@ -531,12 +573,57 @@ as demais são marcadas como duplicatas.
 
 ### Indicadores e gráficos
 
+- **Fonte matemática única**: `OperationalIndicators` concentra contagens,
+  percentuais, regra mais acionada, taxas e ganho de tempo.
+- **Qualidade da entrada**: registros sem erro de entrada, com meta maior que
+  80%.
+- **Revisão humana**: registros ambíguos, com meta menor que 15%.
+- **Retrabalho**: registros divergentes, com meta menor que 6%.
+- **Regra mais acionada**: código, descrição e quantidade da regra principal;
+  usa o mesmo `regra_aplicada` que alimenta o Ranking.
+- **Ganho estimado**: diferença entre o tempo manual e o automático, em
+  minutos e horas.
 - **Gráfico de rosca**: distribuição percentual das quatro classificações.
 - **Gráfico de evolução**: linha temporal com o número de problemas
   (divergências + ambíguos + erros) por dia ao longo das 10 abas.
 
-A documentação completa, incluindo solução de problemas e perguntas da banca,
-está em [`docs/RELATORIO_EXCEL_AULA22.md`](docs/RELATORIO_EXCEL_AULA22.md).
+### Premissas e limitações do ganho estimado
+
+O cálculo usa `2,0` minutos de trabalho humano e `0,25` minuto de automação por
+registro. Para `N` registros, a estimativa é:
+
+```text
+ganho em minutos = N × (2,0 − 0,25)
+ganho em horas = ganho em minutos ÷ 60
+```
+
+Esse indicador é didático, não uma métrica de produção: os tempos são
+premissas fixas e não foram cronometrados no processo real. Para transformá-lo
+em medição produtiva seria necessário registrar timestamps por etapa e por
+execução, medir uma amostra representativa do processo manual, separar espera,
+retrabalho e falhas, persistir o histórico e acompanhar média, mediana e
+percentis ao longo do tempo.
+
+### Evolução para uma 13ª regra
+
+No desenho atual, uma RN13 que utilize uma classificação existente exige
+mudança em dois módulos de produção:
+
+1. `src/excel_reporting/validation_service.py`, para declarar o motivo,
+   associar a regra à classificação e implementar sua condição;
+2. `src/excel_reporting/report_writer.py`, para ampliar o intervalo do
+   Dicionário de RN01–RN12 para RN01–RN13.
+
+`OperationalIndicators`, `Ranking de Regras`, Excel e Markdown não precisam de
+novo cálculo: eles consomem `regra_aplicada` de forma genérica. Também devem ser
+adicionados ou atualizados testes e documentação. Se RN13 criar uma quinta
+classificação, o mapa de classificações, as abas e os gráficos precisarão ser
+expandidos.
+
+A documentação histórica da versão de 6 abas permanece em
+[`docs/RELATORIO_EXCEL_AULA22.md`](docs/RELATORIO_EXCEL_AULA22.md). O aceite da
+versão atual está em
+[`docs/CHECKLIST_FINAL_ACEITE_AULA24.md`](docs/CHECKLIST_FINAL_ACEITE_AULA24.md).
 
 ## Testes e integração contínua
 
@@ -582,6 +669,12 @@ O E2E controlado da Aula 23 cria o workbook em `tmp_path` e valida o pipeline
 Excel sem navegador, internet ou credenciais. Os testes `browser` são separados
 e validam a aplicação local com Chromium real.
 
+Os testes da Aula 24 parametrizam os 10 indicadores, cobrem a divisão por zero,
+geram fisicamente XLSX e Markdown em `tmp_path` e validam as 8 abas, o Ranking
+e o contrato de `regra_aplicada`. Na rodada de aceite da #78, a suíte apresentou
+`254 passed`, `1 skipped`, `1 xfailed`, cobertura global de `93,87%` e cobertura
+de `100%` em `src/operational_indicators.py`.
+
 O workflow `.github/workflows/ci.yml`, acionado em Pull Requests e pushes para
 `main`, executa a cadeia
 `lint -> tests -> coverage -> test-e2e -> build-docker`. O job `tests` valida os
@@ -603,6 +696,10 @@ camada e as perguntas da banca estão em
 - os testes web usam a aplicação local controlada, não um ERP real;
 - a CI valida o gateway em memória e não acessa BotCity Maestro ou Vault;
 - os artefatos do GitHub Actions possuem retenção temporária de sete dias.
+- o ganho de tempo usa premissas fixas e ainda não representa uma medição
+  cronometrada de produção;
+- a atualização do workbook é completa; processamento incremental permanece
+  como evolução futura.
 
 ## Tratamento de erros
 
@@ -634,6 +731,7 @@ finalizada no Maestro como sucesso operacional.
 | [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md) | Componentes, sequência e limites. |
 | [`docs/EXECUCAO_E2E_DOCKER_CI.md`](docs/EXECUCAO_E2E_DOCKER_CI.md) | Instalação, testes E2E, Docker, pipeline e artefatos. |
 | [`docs/HOMOLOGACAO_TESTES_AULA23.md`](docs/HOMOLOGACAO_TESTES_AULA23.md) | Cobertura, camadas, limitações e respostas da Aula 23. |
+| [`docs/CHECKLIST_FINAL_ACEITE_AULA24.md`](docs/CHECKLIST_FINAL_ACEITE_AULA24.md) | Checklist A–H, evidências e respostas para o Demo Day. |
 | [`docs/REVISAO_BPMN_PDD.md`](docs/REVISAO_BPMN_PDD.md) | Aderência do processo e das regras. |
 | [`docs/ADERENCIA_PAGE_OBJECTS.md`](docs/ADERENCIA_PAGE_OBJECTS.md) | Matriz técnica da entrega. |
 | [`docs/DEPLOY_BOTCITY.md`](docs/DEPLOY_BOTCITY.md) | Implantação, smoke test e rollback. |
@@ -641,6 +739,7 @@ finalizada no Maestro como sucesso operacional.
 | [`docs/EVOLUCAO_AUTOMACAO_WEB.md`](docs/EVOLUCAO_AUTOMACAO_WEB.md) | Histórico e comparação entre Selenium e Playwright. |
 | [`docs/RELATORIO_EXCEL_AULA22.md`](docs/RELATORIO_EXCEL_AULA22.md) | Documentação completa do relatório Excel e perguntas da banca. |
 | [`docs/ROTEIRO_APRESENTACAO_AULA22.md`](docs/ROTEIRO_APRESENTACAO_AULA22.md) | Roteiro de apresentação de cinco minutos. |
+| [`CHANGELOG.md`](CHANGELOG.md) | Histórico das versões e mudanças da Aula 24. |
 | [`docs/RELEASE_V1.3.0.md`](docs/RELEASE_V1.3.0.md) | Notas da versão Selenium com Page Objects. |
 | [`docs/RELEASE_V1.4.0.md`](docs/RELEASE_V1.4.0.md) | Notas e checklist da candidata Playwright. |
 | [`docs/RELEASE_V1.6.0.md`](docs/RELEASE_V1.6.0.md) | Notas e checklist da entrega Excel (Aula 22). |
@@ -660,6 +759,8 @@ Xavier.
 | [`v1.3.0`](docs/RELEASE_V1.3.0.md) | Selenium com Page Objects | Separação da interface e do orquestrador. |
 | [`v1.4.0`](docs/RELEASE_V1.4.0.md) | Playwright com Page Objects | DataPool e evidências rastreáveis por item. |
 | [`v1.6.0`](docs/RELEASE_V1.6.0.md) | Playwright com Relatório Excel | Dashboard Excel integrado e evidências da Aula 22. |
+| `v1.7.0` | Suíte em camadas | Markers, regressão, E2E controlado e cobertura mínima da Aula 23. |
+| `v1.8.0` | Indicadores e saídas duplas | Dashboard de 8 abas, Markdown executivo e aceite da Aula 24. |
 
 ## Licença
 
