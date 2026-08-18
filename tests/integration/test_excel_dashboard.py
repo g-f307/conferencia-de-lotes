@@ -204,7 +204,7 @@ def test_daily_dashboard_values_match_all_records(dashboard_workbook):
         assert total_problems == divergence + ambiguous + input_errors
 
 
-def test_dashboard_keeps_six_sheets_and_auxiliary_tables_outside_print_area(
+def test_dashboard_keeps_eight_sheets_and_auxiliary_tables_outside_print_area(
     dashboard_workbook,
 ):
     summary = dashboard_workbook["Resumo"]
@@ -212,5 +212,5 @@ def test_dashboard_keeps_six_sheets_and_auxiliary_tables_outside_print_area(
     assert dashboard_workbook.sheetnames == list(REPORT_SHEET_NAMES)
     assert summary["R1"].value == "Classificação"
     assert summary["U1"].value == "Data"
-    assert str(summary.print_area) == "'Resumo'!$A$1:$P$34"
+    assert str(summary.print_area) == "'Resumo'!$A$1:$P$42"
     assert summary.page_setup.orientation == "landscape"

@@ -12,13 +12,14 @@ from src.excel_reporting import (
     CLASSIFICACAO_DIVERGENCIA,
     CLASSIFICACAO_ERRO_ENTRADA,
     CLASSIFICACAO_VALIDO,
+    CLASSIFICATION_SHEETS,
+    DATA_SHEET_NAMES,
     REPORT_SHEET_NAMES,
     RegistroValidado,
     ValidationService,
     read_workbook,
     write_excel_report,
 )
-
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 REAL_WORKBOOK_PATH = PROJECT_ROOT / "dados_entrada" / "inspecao_lotes_10dias.xlsx"
@@ -61,6 +62,7 @@ def _record(
         data_referencia="15/06/2026",
         aba_origem=sheet,
         linha_origem=line,
+        regra_aplicada=rules[0] if rules else "",
     )
 
 
@@ -119,7 +121,7 @@ def _load_generated_report(tmp_path, records):
     return output, load_workbook(output)
 
 
-def test_report_contains_exactly_six_required_sheets(tmp_path, classified_records):
+def test_report_contains_exactly_eight_required_sheets(tmp_path, classified_records):
     _, workbook = _load_generated_report(tmp_path, classified_records)
 
     assert workbook.sheetnames == list(REPORT_SHEET_NAMES)
@@ -143,7 +145,7 @@ def test_all_and_classification_sheets_have_expected_records(
 
     classified_total = sum(
         workbook[sheet_name].max_row - 1
-        for sheet_name in REPORT_SHEET_NAMES[2:]
+        for sheet_name in CLASSIFICATION_SHEETS.values()
     )
     assert classified_total == workbook["Todos"].max_row - 1
 
@@ -172,7 +174,7 @@ def test_columns_are_business_friendly_and_hide_technical_metadata(
 ):
     _, workbook = _load_generated_report(tmp_path, classified_records)
 
-    for sheet_name in REPORT_SHEET_NAMES[1:]:
+    for sheet_name in DATA_SHEET_NAMES:
         headers = tuple(cell.value for cell in workbook[sheet_name][1])
         assert headers == BUSINESS_COLUMNS
         assert "regras_violadas" not in headers
@@ -208,7 +210,7 @@ def test_data_sheets_receive_filters_freeze_panes_and_visual_formatting(
 ):
     _, workbook = _load_generated_report(tmp_path, classified_records)
 
-    for sheet_name in REPORT_SHEET_NAMES[1:]:
+    for sheet_name in DATA_SHEET_NAMES:
         sheet = workbook[sheet_name]
         assert sheet.freeze_panes == "A2"
         assert sheet.auto_filter.ref == sheet.dimensions
@@ -226,7 +228,7 @@ def test_summary_is_prepared_without_extra_technical_sheets(
     _, workbook = _load_generated_report(tmp_path, classified_records)
     summary = workbook["Resumo"]
 
-    assert summary["A1"].value == "Relatório de Conferência de Lotes"
+    assert summary["A1"].value == "Dashboard Executivo · Conferência de Lotes"
     assert "A1:J2" in {str(cell_range) for cell_range in summary.merged_cells.ranges}
     assert not summary.sheet_view.showGridLines
 
@@ -256,7 +258,7 @@ def test_real_workbook_generates_250_rows_without_mixing_categories(tmp_path):
     assert workbook["Todos"].max_row - 1 == 250
     assert sum(
         workbook[sheet_name].max_row - 1
-        for sheet_name in REPORT_SHEET_NAMES[2:]
+        for sheet_name in CLASSIFICATION_SHEETS.values()
     ) == 250
     assert {record.classificacao for record in validated} == {
         CLASSIFICACAO_VALIDO,
