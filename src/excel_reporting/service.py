@@ -1,11 +1,11 @@
 from __future__ import annotations
 
+import os
+import time
 from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-import os
-import time
 from typing import Any
 from uuid import uuid4
 
@@ -19,7 +19,8 @@ from src.excel_reporting.validation_service import (
     ValidationService,
 )
 from src.excel_reporting.workbook_reader import DEFAULT_WORKBOOK_PATH, read_workbook
-
+from src.markdown_reporting import gerar_resumo_executivo
+from src.operational_indicators import OperationalIndicators, calcular_indicadores
 
 DEFAULT_REPORT_PATH = Path("relatorios") / "relatorio_conferencia_lotes.xlsx"
 DEFAULT_LOG_PATH = Path("logs") / "execucao_relatorio.log"
@@ -39,6 +40,7 @@ class ReportExecutionResult:
     regras: dict[str, int]
     duracao_segundos: float
     registros_validados: list[dict[str, Any]]
+    indicadores: OperationalIndicators | None = None
 
     @property
     def total_classificacoes(self) -> int:
@@ -74,9 +76,13 @@ def gerar_relatorio_excel(
             for record in source.registros
         ]
         serialized = [record.to_dict() for record in validated]
+        indicators = calcular_indicadores(validated)
 
-        write_excel_report(validated, temp_path)
+        write_excel_report(validated, indicators, temp_path)
         os.replace(temp_path, output_path)
+
+        markdown_path = output_path.parent / "resumo_executivo.md"
+        gerar_resumo_executivo(indicators, markdown_path)
 
         duration = time.perf_counter() - started
         result = _build_result(
@@ -85,6 +91,7 @@ def gerar_relatorio_excel(
             log_file=log_file,
             validated=validated,
             serialized=serialized,
+            indicators=indicators,
             duration=duration,
         )
         _write_log(result)
@@ -116,6 +123,7 @@ def _build_result(
     log_file: Path,
     validated: list[RegistroValidado],
     serialized: list[dict[str, Any]],
+    indicators: OperationalIndicators,
     duration: float,
 ) -> ReportExecutionResult:
     classifications = Counter(record.classificacao for record in validated)
@@ -135,6 +143,7 @@ def _build_result(
         regras=dict(sorted(rules.items())),
         duracao_segundos=duration,
         registros_validados=serialized,
+        indicadores=indicators,
     )
 
 
@@ -149,6 +158,17 @@ def _write_log(result: ReportExecutionResult) -> None:
         f"erros_entrada={result.erros_entrada}",
         f"duracao_segundos={result.duracao_segundos:.3f}",
         f"relatorio={result.saida}",
-        "regras=" + ",".join(f"{rule}:{count}" for rule, count in result.regras.items()),
+        "regras="
+        + ",".join(f"{rule}:{count}" for rule, count in result.regras.items()),
     ]
+    if result.indicadores:
+        lines.extend(
+            [
+                f"taxa_qualidade_entrada={result.indicadores.taxa_qualidade_entrada}",
+                f"taxa_revisao_humana={result.indicadores.taxa_revisao_humana}",
+                f"taxa_retrabalho={result.indicadores.taxa_retrabalho}",
+                f"regra_mais_acionada={result.indicadores.regra_mais_acionada_codigo}",
+                f"ganho_estimado_tempo_minutos={result.indicadores.ganho_estimado_tempo_minutos}",
+            ]
+        )
     result.log_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
