@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
@@ -145,7 +145,7 @@ RESERVED_RULE_DESCRIPTION = (
 
 
 def write_excel_report(
-    registros: Iterable[RegistroValidado],
+    ordered_records: list[RegistroValidado],
     indicators: OperationalIndicators,
     output_path: str | Path,
 ) -> Path:
@@ -153,7 +153,6 @@ def write_excel_report(
     destination = Path(output_path)
     destination.parent.mkdir(parents=True, exist_ok=True)
 
-    ordered_records = sorted(registros, key=_record_order_key)
     _validate_classifications(ordered_records)
     all_rows = [_business_row(record) for record in ordered_records]
     ranking_rows = _ranking_rows(ordered_records)
@@ -417,7 +416,7 @@ def _reference_date(
         return text
 
 
-def _record_order_key(record: RegistroValidado) -> tuple[date, str, int]:
+def record_order_key(record: RegistroValidado) -> tuple[date, str, int]:
     reference = _reference_date(record, record.campos_originais)
     sortable_date = reference if isinstance(reference, date) else date.max
     line_order = record.linha_origem or _integer_value(

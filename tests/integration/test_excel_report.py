@@ -115,10 +115,12 @@ def classified_records() -> list[RegistroValidado]:
 
 
 def _load_generated_report(tmp_path, records):
+    from src.excel_reporting.report_writer import record_order_key
     from src.operational_indicators import calcular_indicadores
     output = tmp_path / "relatorio_conferencia_lotes.xlsx"
-    indicators = calcular_indicadores(records)
-    returned_path = write_excel_report(records, indicators, output)
+    ordered = sorted(records, key=record_order_key)
+    indicators = calcular_indicadores(ordered)
+    returned_path = write_excel_report(ordered, indicators, output)
     assert returned_path == output
     return output, load_workbook(output)
 
