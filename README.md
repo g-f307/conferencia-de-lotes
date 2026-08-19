@@ -106,6 +106,8 @@ flowchart LR
     READER --> INDICATORS[OperationalIndicators]
     INDICATORS --> EXCEL[Dashboard Excel com 8 abas]
     INDICATORS --> MARKDOWN[resumo_executivo.md]
+    TRAIN[train_ml_model.py] --> MODEL[classificador_lotes.pkl]
+    MODEL --> MLAPI[FastAPI /predict e /health]
 ```
 
 As responsabilidades principais são:
@@ -125,6 +127,8 @@ As responsabilidades principais são:
 | `src/operational_indicators.py` | Consolidar os 10 indicadores operacionais sem dependência de Excel, disco ou interface. |
 | `src/excel_reporting/report_writer.py` | Transformar registros validados e indicadores no workbook executivo de 8 abas. |
 | `src/markdown_reporting.py` | Transformar o mesmo objeto de indicadores no resumo gerencial em Markdown. |
+| `scripts/train_ml_model.py` | Gerar dados fictícios, treinar o Random Forest e serializar o pipeline. |
+| `api_ml/main.py` | Validar requisições e servir o classificador por `/predict` e `/health`. |
 
 Detalhes e diagramas de sequência estão em
 [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md).
@@ -215,9 +219,15 @@ o que evita referências específicas de uma máquina ou Runner.
 .
 ├── .github/workflows/ci.yml
 ├── artefatos/                     # PNG e PDF gerados em runtime
+├── api_ml/
+│   ├── Dockerfile                 # imagem isolada do serviço de ML
+│   ├── main.py                    # API FastAPI e contrato de predição
+│   └── requirements.txt
 ├── dados_entrada/
 │   ├── lotes_auditoria.csv
 │   └── inspecao_lotes_10dias.xlsx  # workbook de 10 dias (Aula 22)
+├── dados_ml/
+│   └── historico_lotes.csv        # dataset fictício reproduzível
 ├── docs/
 │   ├── ADERENCIA_PAGE_OBJECTS.md
 │   ├── ARQUITETURA.md
@@ -233,9 +243,12 @@ o que evita referências específicas de uma máquina ou Runner.
 │   ├── diagrama_pdd.bpmn
 │   └── diagrama_pdd.svg
 ├── logs/                          # JSON Lines gerado em runtime
+├── models/
+│   └── classificador_lotes.pkl    # pipeline Random Forest serializado
 ├── relatorios/                    # JSON, PDF e XLSX gerados em runtime
 ├── scripts/
-│   └── build_botcity_package.py
+│   ├── build_botcity_package.py
+│   └── train_ml_model.py
 ├── src/
 │   ├── excel_reporting/
 │   │   ├── __init__.py
@@ -343,6 +356,8 @@ compatível já instalado.
 | `WEB_ARTIFACT_DIR` | Capturas por item. | `artefatos` |
 | `WEB_TIMEOUT_SECONDS` | Timeout dos waits por condição. | `15` |
 | `PLAYWRIGHT_CHROMIUM_PATH` | Chromium explícito do Runner. | vazio |
+| `ML_MODEL_PATH` | Artefato carregado pela API de ML. | `models/classificador_lotes.pkl` |
+| `ML_API_PORT` | Porta da API de ML publicada pelo Docker Compose. | `8000` |
 
 Caminhos relativos são resolvidos a partir da raiz do projeto. A senha do ERP
 não é uma variável de ambiente deste projeto.
@@ -433,6 +448,109 @@ A imagem instala somente o Chromium Headless Shell gerenciado pelo Playwright
 em `/ms-playwright`. O Compose monta `logs/`, `relatorios/` e `artefatos/` no
 host; os arquivos gerados permanecem disponíveis depois que o container é
 removido.
+
+## API de Machine Learning (Aula 24-A)
+
+A camada de ML é um serviço separado do bot. Nesta etapa, `api_ml/` expõe o
+contrato de classificação; o consumo resiliente dos casos ambíguos será feito
+pela Issue #87, sem mover a predição para dentro do Performer.
+
+### Dataset e treinamento
+
+O dataset é inteiramente fictício e contém as 24 combinações dos quatro status
+ambíguos, três turnos e presença ou ausência de observação. A classe é
+consequência dessas features, e não escolhida antes delas. Para gerar o rótulo,
+o script calcula um score de risco com esta lógica:
+
+- `EM ANALISE`, `AJUSTE DE LINHA`, `PENDENTE` e
+  `ESPECIFICACAO EM REVISAO` possuem risco crescente;
+- os turnos `A`, `B` e `C` adicionam respectivamente zero, um ou dois pontos;
+- uma observação reduz dois pontos e sua ausência adiciona um ponto;
+- score menor ou igual a zero gera `valido_automatico`;
+- score entre um e dois gera `revisar`;
+- score maior ou igual a três gera `recusar_automatico`.
+
+Cada status ambíguo aparece nas três classes. O restante das 300 amostras
+repete combinações de forma balanceada, chegando a 100 registros por classe.
+A semente fixa torna o resultado e o modelo reproduzíveis. Nenhum dado do
+DataPool, ERP ou Credentials Vault é utilizado.
+
+As features são `status_raw`, `turno` e `tem_obs`. O pipeline aplica
+`OneHotEncoder` às categorias e treina um `RandomForestClassifier`; as classes
+são `valido_automatico`, `revisar` e `recusar_automatico`.
+
+Para recriar os 300 registros e o modelo:
+
+```bash
+python scripts/train_ml_model.py --samples 300 --seed 24
+```
+
+O comando grava:
+
+```text
+dados_ml/historico_lotes.csv
+models/classificador_lotes.pkl
+```
+
+Também mostra quantidade de amostras, divisão entre treino e teste, classes e
+acurácia. Valores abaixo de 200 amostras são rejeitados.
+
+### Execução e contrato
+
+Com o ambiente de desenvolvimento instalado, execute:
+
+```bash
+uvicorn api_ml.main:app --host 127.0.0.1 --port 8000
+```
+
+Em outro terminal, valide a saúde e faça uma predição:
+
+```bash
+curl --fail http://127.0.0.1:8000/health
+curl --fail --request POST http://127.0.0.1:8000/predict \
+  --header 'Content-Type: application/json' \
+  --data '{"lote_id":"L001","status_raw":"EM ANALISE","turno":"A","tem_obs":true}'
+```
+
+`status_raw` aceita apenas `EM ANALISE`, `AJUSTE DE LINHA`, `PENDENTE` ou
+`ESPECIFICACAO EM REVISAO`. `turno` aceita `A`, `B`, `C`, `Manhã`, `Tarde` ou
+`Noite`. Os textos são normalizados para o domínio treinado e valores fora
+dele retornam HTTP 422. Uma resposta possui este formato:
+
+```json
+{
+  "classe": "valido_automatico",
+  "probabilidade": 0.991181,
+  "nivel_confianca": "alta",
+  "acao": "valido_automatico"
+}
+```
+
+As ações seguem exatamente os limites do exercício:
+
+| Probabilidade | Confiança | Ação |
+|---|---|---|
+| `>= 0.85` | `alta` | classe automática prevista |
+| `>= 0.65` e `< 0.85` | `media` | `revisar` |
+| `< 0.65` | `baixa` | `revisar_prioritario` |
+
+O modelo é carregado uma vez no `lifespan`. Se o arquivo estiver ausente ou
+inválido, `/health` e `/predict` retornam HTTP 503 sem expor caminhos internos.
+
+### Docker Compose
+
+```bash
+docker compose build api-ml
+docker compose up --detach api-ml
+docker compose ps api-ml
+curl --fail http://127.0.0.1:8000/health
+docker compose down
+```
+
+O serviço `api-ml` usa uma imagem própria, executa sem privilégios, inclui
+somente a aplicação e o modelo e possui healthcheck. A porta do host pode ser
+alterada com `ML_API_PORT`; dentro da rede Compose a API permanece disponível
+em `http://api-ml:8000`.
 
 ## BotCity Runner
 
@@ -633,7 +751,7 @@ responsabilidades e markers distintos:
 
 | Camada | Comando local | Finalidade |
 |---|---|---|
-| Qualidade | `python -m ruff check --select E4,E7,E9,F bot.py gerar_relatorio.py src tests scripts` | Erros estáticos e imports inválidos. |
+| Qualidade | `python -m ruff check --select E4,E7,E9,F api_ml bot.py gerar_relatorio.py src tests scripts` | Erros estáticos e imports inválidos. |
 | Unitários | `python -m pytest -m unit -q` | Funções, regras e classes isoladas. |
 | Integração | `python -m pytest -m integration -q -rsx` | Colaboração entre leitura, validação, relatório e arquivos temporários. |
 | Regressão | `python -m pytest -m regression -q -rxX` | Comportamentos críticos que não podem voltar a falhar. |
@@ -644,7 +762,7 @@ responsabilidades e markers distintos:
 | Smoke test Docker | `WEB_AUTOMATION_ENABLED=true docker compose run --rm conferencia-de-lotes` | Imagem, navegador e persistência das saídas. |
 
 ```bash
-python -m ruff check --select E4,E7,E9,F bot.py gerar_relatorio.py src tests scripts
+python -m ruff check --select E4,E7,E9,F api_ml bot.py gerar_relatorio.py src tests scripts
 python -m pytest -m unit -q
 python -m pytest -m integration -q -rsx
 python -m pytest -m regression -q -rxX

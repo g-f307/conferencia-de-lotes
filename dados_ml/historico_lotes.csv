@@ -1,0 +1,301 @@
+lote_id,status_raw,turno,tem_obs,classe
+ML-0001,AJUSTE DE LINHA,A,True,valido_automatico
+ML-0002,EM ANALISE,B,True,valido_automatico
+ML-0003,EM ANALISE,C,True,valido_automatico
+ML-0004,ESPECIFICACAO EM REVISAO,A,False,recusar_automatico
+ML-0005,AJUSTE DE LINHA,B,False,recusar_automatico
+ML-0006,ESPECIFICACAO EM REVISAO,B,False,recusar_automatico
+ML-0007,ESPECIFICACAO EM REVISAO,A,False,recusar_automatico
+ML-0008,EM ANALISE,C,True,valido_automatico
+ML-0009,ESPECIFICACAO EM REVISAO,A,False,recusar_automatico
+ML-0010,AJUSTE DE LINHA,C,False,recusar_automatico
+ML-0011,AJUSTE DE LINHA,C,True,revisar
+ML-0012,PENDENTE,B,True,valido_automatico
+ML-0013,ESPECIFICACAO EM REVISAO,C,False,recusar_automatico
+ML-0014,AJUSTE DE LINHA,A,False,revisar
+ML-0015,PENDENTE,B,True,valido_automatico
+ML-0016,AJUSTE DE LINHA,B,True,valido_automatico
+ML-0017,EM ANALISE,C,True,valido_automatico
+ML-0018,AJUSTE DE LINHA,A,False,revisar
+ML-0019,ESPECIFICACAO EM REVISAO,B,False,recusar_automatico
+ML-0020,ESPECIFICACAO EM REVISAO,C,True,revisar
+ML-0021,PENDENTE,C,False,recusar_automatico
+ML-0022,PENDENTE,B,True,valido_automatico
+ML-0023,AJUSTE DE LINHA,C,True,revisar
+ML-0024,ESPECIFICACAO EM REVISAO,C,False,recusar_automatico
+ML-0025,AJUSTE DE LINHA,A,False,revisar
+ML-0026,PENDENTE,B,True,valido_automatico
+ML-0027,ESPECIFICACAO EM REVISAO,C,True,revisar
+ML-0028,AJUSTE DE LINHA,A,False,revisar
+ML-0029,PENDENTE,C,False,recusar_automatico
+ML-0030,EM ANALISE,B,True,valido_automatico
+ML-0031,EM ANALISE,C,True,valido_automatico
+ML-0032,ESPECIFICACAO EM REVISAO,C,True,revisar
+ML-0033,PENDENTE,C,True,revisar
+ML-0034,PENDENTE,A,False,revisar
+ML-0035,EM ANALISE,A,False,revisar
+ML-0036,ESPECIFICACAO EM REVISAO,A,False,recusar_automatico
+ML-0037,ESPECIFICACAO EM REVISAO,A,False,recusar_automatico
+ML-0038,ESPECIFICACAO EM REVISAO,A,False,recusar_automatico
+ML-0039,EM ANALISE,C,True,valido_automatico
+ML-0040,ESPECIFICACAO EM REVISAO,B,True,revisar
+ML-0041,AJUSTE DE LINHA,A,False,revisar
+ML-0042,PENDENTE,C,False,recusar_automatico
+ML-0043,ESPECIFICACAO EM REVISAO,C,False,recusar_automatico
+ML-0044,PENDENTE,C,False,recusar_automatico
+ML-0045,AJUSTE DE LINHA,B,False,recusar_automatico
+ML-0046,PENDENTE,C,False,recusar_automatico
+ML-0047,EM ANALISE,C,True,valido_automatico
+ML-0048,ESPECIFICACAO EM REVISAO,A,False,recusar_automatico
+ML-0049,ESPECIFICACAO EM REVISAO,C,False,recusar_automatico
+ML-0050,AJUSTE DE LINHA,B,False,recusar_automatico
+ML-0051,ESPECIFICACAO EM REVISAO,B,True,revisar
+ML-0052,EM ANALISE,B,False,revisar
+ML-0053,AJUSTE DE LINHA,B,True,valido_automatico
+ML-0054,PENDENTE,A,True,valido_automatico
+ML-0055,PENDENTE,C,False,recusar_automatico
+ML-0056,ESPECIFICACAO EM REVISAO,B,True,revisar
+ML-0057,PENDENTE,C,True,revisar
+ML-0058,AJUSTE DE LINHA,B,False,recusar_automatico
+ML-0059,PENDENTE,C,True,revisar
+ML-0060,ESPECIFICACAO EM REVISAO,B,False,recusar_automatico
+ML-0061,ESPECIFICACAO EM REVISAO,C,False,recusar_automatico
+ML-0062,PENDENTE,A,True,valido_automatico
+ML-0063,PENDENTE,A,False,revisar
+ML-0064,ESPECIFICACAO EM REVISAO,B,True,revisar
+ML-0065,ESPECIFICACAO EM REVISAO,B,False,recusar_automatico
+ML-0066,AJUSTE DE LINHA,C,True,revisar
+ML-0067,AJUSTE DE LINHA,C,True,revisar
+ML-0068,PENDENTE,C,True,revisar
+ML-0069,ESPECIFICACAO EM REVISAO,A,True,valido_automatico
+ML-0070,PENDENTE,C,False,recusar_automatico
+ML-0071,ESPECIFICACAO EM REVISAO,B,False,recusar_automatico
+ML-0072,AJUSTE DE LINHA,C,True,revisar
+ML-0073,ESPECIFICACAO EM REVISAO,C,True,revisar
+ML-0074,ESPECIFICACAO EM REVISAO,A,True,valido_automatico
+ML-0075,AJUSTE DE LINHA,A,True,valido_automatico
+ML-0076,ESPECIFICACAO EM REVISAO,C,True,revisar
+ML-0077,AJUSTE DE LINHA,C,True,revisar
+ML-0078,ESPECIFICACAO EM REVISAO,B,False,recusar_automatico
+ML-0079,ESPECIFICACAO EM REVISAO,B,False,recusar_automatico
+ML-0080,PENDENTE,A,True,valido_automatico
+ML-0081,ESPECIFICACAO EM REVISAO,C,True,revisar
+ML-0082,PENDENTE,C,False,recusar_automatico
+ML-0083,PENDENTE,A,False,revisar
+ML-0084,PENDENTE,B,True,valido_automatico
+ML-0085,EM ANALISE,B,True,valido_automatico
+ML-0086,EM ANALISE,A,True,valido_automatico
+ML-0087,AJUSTE DE LINHA,C,True,revisar
+ML-0088,PENDENTE,B,False,recusar_automatico
+ML-0089,ESPECIFICACAO EM REVISAO,A,True,valido_automatico
+ML-0090,EM ANALISE,B,True,valido_automatico
+ML-0091,AJUSTE DE LINHA,A,False,revisar
+ML-0092,EM ANALISE,C,True,valido_automatico
+ML-0093,AJUSTE DE LINHA,B,True,valido_automatico
+ML-0094,ESPECIFICACAO EM REVISAO,A,False,recusar_automatico
+ML-0095,PENDENTE,C,True,revisar
+ML-0096,AJUSTE DE LINHA,A,True,valido_automatico
+ML-0097,PENDENTE,B,True,valido_automatico
+ML-0098,AJUSTE DE LINHA,C,False,recusar_automatico
+ML-0099,ESPECIFICACAO EM REVISAO,C,True,revisar
+ML-0100,EM ANALISE,C,True,valido_automatico
+ML-0101,PENDENTE,B,True,valido_automatico
+ML-0102,EM ANALISE,B,False,revisar
+ML-0103,PENDENTE,A,True,valido_automatico
+ML-0104,ESPECIFICACAO EM REVISAO,B,False,recusar_automatico
+ML-0105,EM ANALISE,B,True,valido_automatico
+ML-0106,ESPECIFICACAO EM REVISAO,A,True,valido_automatico
+ML-0107,PENDENTE,C,True,revisar
+ML-0108,AJUSTE DE LINHA,A,True,valido_automatico
+ML-0109,PENDENTE,B,True,valido_automatico
+ML-0110,PENDENTE,B,True,valido_automatico
+ML-0111,AJUSTE DE LINHA,A,False,revisar
+ML-0112,AJUSTE DE LINHA,C,False,recusar_automatico
+ML-0113,AJUSTE DE LINHA,C,False,recusar_automatico
+ML-0114,ESPECIFICACAO EM REVISAO,B,False,recusar_automatico
+ML-0115,AJUSTE DE LINHA,C,True,revisar
+ML-0116,ESPECIFICACAO EM REVISAO,B,False,recusar_automatico
+ML-0117,AJUSTE DE LINHA,C,False,recusar_automatico
+ML-0118,ESPECIFICACAO EM REVISAO,B,False,recusar_automatico
+ML-0119,ESPECIFICACAO EM REVISAO,A,False,recusar_automatico
+ML-0120,AJUSTE DE LINHA,C,False,recusar_automatico
+ML-0121,PENDENTE,A,True,valido_automatico
+ML-0122,ESPECIFICACAO EM REVISAO,A,True,valido_automatico
+ML-0123,EM ANALISE,C,False,recusar_automatico
+ML-0124,AJUSTE DE LINHA,C,True,revisar
+ML-0125,EM ANALISE,C,True,valido_automatico
+ML-0126,EM ANALISE,C,False,recusar_automatico
+ML-0127,ESPECIFICACAO EM REVISAO,C,False,recusar_automatico
+ML-0128,PENDENTE,C,False,recusar_automatico
+ML-0129,EM ANALISE,B,True,valido_automatico
+ML-0130,ESPECIFICACAO EM REVISAO,A,True,valido_automatico
+ML-0131,EM ANALISE,A,False,revisar
+ML-0132,EM ANALISE,B,False,revisar
+ML-0133,AJUSTE DE LINHA,A,False,revisar
+ML-0134,EM ANALISE,B,False,revisar
+ML-0135,PENDENTE,A,True,valido_automatico
+ML-0136,ESPECIFICACAO EM REVISAO,B,True,revisar
+ML-0137,AJUSTE DE LINHA,A,True,valido_automatico
+ML-0138,ESPECIFICACAO EM REVISAO,B,False,recusar_automatico
+ML-0139,ESPECIFICACAO EM REVISAO,B,True,revisar
+ML-0140,EM ANALISE,A,True,valido_automatico
+ML-0141,ESPECIFICACAO EM REVISAO,B,False,recusar_automatico
+ML-0142,EM ANALISE,C,False,recusar_automatico
+ML-0143,ESPECIFICACAO EM REVISAO,B,True,revisar
+ML-0144,EM ANALISE,A,False,revisar
+ML-0145,PENDENTE,C,False,recusar_automatico
+ML-0146,AJUSTE DE LINHA,A,False,revisar
+ML-0147,EM ANALISE,A,True,valido_automatico
+ML-0148,ESPECIFICACAO EM REVISAO,B,True,revisar
+ML-0149,PENDENTE,B,True,valido_automatico
+ML-0150,PENDENTE,A,True,valido_automatico
+ML-0151,EM ANALISE,A,True,valido_automatico
+ML-0152,ESPECIFICACAO EM REVISAO,C,False,recusar_automatico
+ML-0153,ESPECIFICACAO EM REVISAO,B,True,revisar
+ML-0154,AJUSTE DE LINHA,A,False,revisar
+ML-0155,EM ANALISE,B,True,valido_automatico
+ML-0156,AJUSTE DE LINHA,C,False,recusar_automatico
+ML-0157,ESPECIFICACAO EM REVISAO,A,True,valido_automatico
+ML-0158,EM ANALISE,C,True,valido_automatico
+ML-0159,EM ANALISE,B,True,valido_automatico
+ML-0160,EM ANALISE,C,True,valido_automatico
+ML-0161,AJUSTE DE LINHA,A,False,revisar
+ML-0162,AJUSTE DE LINHA,C,True,revisar
+ML-0163,ESPECIFICACAO EM REVISAO,C,True,revisar
+ML-0164,ESPECIFICACAO EM REVISAO,C,True,revisar
+ML-0165,AJUSTE DE LINHA,B,False,recusar_automatico
+ML-0166,AJUSTE DE LINHA,B,True,valido_automatico
+ML-0167,ESPECIFICACAO EM REVISAO,A,False,recusar_automatico
+ML-0168,AJUSTE DE LINHA,B,True,valido_automatico
+ML-0169,AJUSTE DE LINHA,C,True,revisar
+ML-0170,PENDENTE,A,False,revisar
+ML-0171,ESPECIFICACAO EM REVISAO,A,False,recusar_automatico
+ML-0172,ESPECIFICACAO EM REVISAO,B,False,recusar_automatico
+ML-0173,ESPECIFICACAO EM REVISAO,C,False,recusar_automatico
+ML-0174,ESPECIFICACAO EM REVISAO,C,False,recusar_automatico
+ML-0175,PENDENTE,C,False,recusar_automatico
+ML-0176,AJUSTE DE LINHA,A,False,revisar
+ML-0177,EM ANALISE,B,True,valido_automatico
+ML-0178,EM ANALISE,A,True,valido_automatico
+ML-0179,AJUSTE DE LINHA,B,True,valido_automatico
+ML-0180,EM ANALISE,C,False,recusar_automatico
+ML-0181,ESPECIFICACAO EM REVISAO,B,True,revisar
+ML-0182,EM ANALISE,B,False,revisar
+ML-0183,EM ANALISE,B,False,revisar
+ML-0184,AJUSTE DE LINHA,C,True,revisar
+ML-0185,EM ANALISE,C,True,valido_automatico
+ML-0186,AJUSTE DE LINHA,A,False,revisar
+ML-0187,AJUSTE DE LINHA,C,True,revisar
+ML-0188,EM ANALISE,B,False,revisar
+ML-0189,PENDENTE,B,False,recusar_automatico
+ML-0190,ESPECIFICACAO EM REVISAO,A,True,valido_automatico
+ML-0191,ESPECIFICACAO EM REVISAO,A,False,recusar_automatico
+ML-0192,ESPECIFICACAO EM REVISAO,B,False,recusar_automatico
+ML-0193,PENDENTE,B,False,recusar_automatico
+ML-0194,EM ANALISE,B,True,valido_automatico
+ML-0195,PENDENTE,A,False,revisar
+ML-0196,ESPECIFICACAO EM REVISAO,C,True,revisar
+ML-0197,EM ANALISE,B,True,valido_automatico
+ML-0198,AJUSTE DE LINHA,A,True,valido_automatico
+ML-0199,PENDENTE,B,True,valido_automatico
+ML-0200,AJUSTE DE LINHA,A,True,valido_automatico
+ML-0201,ESPECIFICACAO EM REVISAO,C,True,revisar
+ML-0202,AJUSTE DE LINHA,A,False,revisar
+ML-0203,ESPECIFICACAO EM REVISAO,B,False,recusar_automatico
+ML-0204,EM ANALISE,B,False,revisar
+ML-0205,ESPECIFICACAO EM REVISAO,C,False,recusar_automatico
+ML-0206,ESPECIFICACAO EM REVISAO,B,True,revisar
+ML-0207,ESPECIFICACAO EM REVISAO,C,False,recusar_automatico
+ML-0208,ESPECIFICACAO EM REVISAO,C,True,revisar
+ML-0209,EM ANALISE,C,True,valido_automatico
+ML-0210,PENDENTE,A,False,revisar
+ML-0211,PENDENTE,C,False,recusar_automatico
+ML-0212,EM ANALISE,C,False,recusar_automatico
+ML-0213,ESPECIFICACAO EM REVISAO,B,False,recusar_automatico
+ML-0214,ESPECIFICACAO EM REVISAO,C,False,recusar_automatico
+ML-0215,ESPECIFICACAO EM REVISAO,A,True,valido_automatico
+ML-0216,EM ANALISE,C,False,recusar_automatico
+ML-0217,PENDENTE,B,True,valido_automatico
+ML-0218,AJUSTE DE LINHA,A,True,valido_automatico
+ML-0219,EM ANALISE,C,False,recusar_automatico
+ML-0220,EM ANALISE,B,True,valido_automatico
+ML-0221,AJUSTE DE LINHA,B,False,recusar_automatico
+ML-0222,AJUSTE DE LINHA,A,False,revisar
+ML-0223,ESPECIFICACAO EM REVISAO,B,True,revisar
+ML-0224,EM ANALISE,B,False,revisar
+ML-0225,ESPECIFICACAO EM REVISAO,C,False,recusar_automatico
+ML-0226,EM ANALISE,C,False,recusar_automatico
+ML-0227,PENDENTE,A,False,revisar
+ML-0228,ESPECIFICACAO EM REVISAO,C,True,revisar
+ML-0229,EM ANALISE,B,False,revisar
+ML-0230,AJUSTE DE LINHA,A,True,valido_automatico
+ML-0231,PENDENTE,C,True,revisar
+ML-0232,ESPECIFICACAO EM REVISAO,A,False,recusar_automatico
+ML-0233,PENDENTE,B,True,valido_automatico
+ML-0234,PENDENTE,C,True,revisar
+ML-0235,EM ANALISE,A,False,revisar
+ML-0236,AJUSTE DE LINHA,B,False,recusar_automatico
+ML-0237,AJUSTE DE LINHA,B,True,valido_automatico
+ML-0238,PENDENTE,A,False,revisar
+ML-0239,AJUSTE DE LINHA,A,True,valido_automatico
+ML-0240,PENDENTE,B,True,valido_automatico
+ML-0241,AJUSTE DE LINHA,A,False,revisar
+ML-0242,PENDENTE,B,True,valido_automatico
+ML-0243,EM ANALISE,A,True,valido_automatico
+ML-0244,PENDENTE,C,True,revisar
+ML-0245,ESPECIFICACAO EM REVISAO,A,False,recusar_automatico
+ML-0246,ESPECIFICACAO EM REVISAO,B,False,recusar_automatico
+ML-0247,AJUSTE DE LINHA,C,False,recusar_automatico
+ML-0248,AJUSTE DE LINHA,B,True,valido_automatico
+ML-0249,EM ANALISE,A,True,valido_automatico
+ML-0250,AJUSTE DE LINHA,B,False,recusar_automatico
+ML-0251,PENDENTE,A,True,valido_automatico
+ML-0252,AJUSTE DE LINHA,B,False,recusar_automatico
+ML-0253,AJUSTE DE LINHA,C,False,recusar_automatico
+ML-0254,AJUSTE DE LINHA,C,False,recusar_automatico
+ML-0255,PENDENTE,A,False,revisar
+ML-0256,PENDENTE,C,False,recusar_automatico
+ML-0257,AJUSTE DE LINHA,C,True,revisar
+ML-0258,PENDENTE,B,False,recusar_automatico
+ML-0259,PENDENTE,B,True,valido_automatico
+ML-0260,ESPECIFICACAO EM REVISAO,B,False,recusar_automatico
+ML-0261,ESPECIFICACAO EM REVISAO,C,True,revisar
+ML-0262,PENDENTE,A,True,valido_automatico
+ML-0263,AJUSTE DE LINHA,A,True,valido_automatico
+ML-0264,EM ANALISE,B,False,revisar
+ML-0265,PENDENTE,C,False,recusar_automatico
+ML-0266,AJUSTE DE LINHA,A,True,valido_automatico
+ML-0267,PENDENTE,A,False,revisar
+ML-0268,EM ANALISE,A,False,revisar
+ML-0269,EM ANALISE,A,True,valido_automatico
+ML-0270,AJUSTE DE LINHA,C,True,revisar
+ML-0271,EM ANALISE,A,False,revisar
+ML-0272,AJUSTE DE LINHA,A,True,valido_automatico
+ML-0273,EM ANALISE,C,False,recusar_automatico
+ML-0274,ESPECIFICACAO EM REVISAO,B,False,recusar_automatico
+ML-0275,EM ANALISE,A,True,valido_automatico
+ML-0276,ESPECIFICACAO EM REVISAO,C,True,revisar
+ML-0277,PENDENTE,B,True,valido_automatico
+ML-0278,ESPECIFICACAO EM REVISAO,C,True,revisar
+ML-0279,PENDENTE,B,True,valido_automatico
+ML-0280,EM ANALISE,B,False,revisar
+ML-0281,EM ANALISE,C,True,valido_automatico
+ML-0282,AJUSTE DE LINHA,A,True,valido_automatico
+ML-0283,EM ANALISE,C,True,valido_automatico
+ML-0284,PENDENTE,C,False,recusar_automatico
+ML-0285,ESPECIFICACAO EM REVISAO,A,False,recusar_automatico
+ML-0286,AJUSTE DE LINHA,C,False,recusar_automatico
+ML-0287,PENDENTE,C,False,recusar_automatico
+ML-0288,AJUSTE DE LINHA,C,False,recusar_automatico
+ML-0289,EM ANALISE,A,False,revisar
+ML-0290,ESPECIFICACAO EM REVISAO,A,False,recusar_automatico
+ML-0291,AJUSTE DE LINHA,B,True,valido_automatico
+ML-0292,ESPECIFICACAO EM REVISAO,C,False,recusar_automatico
+ML-0293,ESPECIFICACAO EM REVISAO,B,True,revisar
+ML-0294,EM ANALISE,A,True,valido_automatico
+ML-0295,AJUSTE DE LINHA,A,False,revisar
+ML-0296,PENDENTE,B,True,valido_automatico
+ML-0297,EM ANALISE,A,False,revisar
+ML-0298,AJUSTE DE LINHA,A,True,valido_automatico
+ML-0299,EM ANALISE,A,True,valido_automatico
+ML-0300,PENDENTE,A,True,valido_automatico
