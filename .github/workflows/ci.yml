@@ -165,7 +165,21 @@ jobs:
       - name: Obter o código
         uses: actions/checkout@v4
 
-      - name: Construir imagem
+      - name: Construir imagem da API ML
+        run: docker compose build api-ml
+
+      - name: Validar healthcheck da API ML
+        shell: bash
+        run: |
+          docker compose up --detach --wait --wait-timeout 60 api-ml
+          response="$(curl --fail --silent --show-error http://127.0.0.1:8000/health)"
+          test "$response" = '{"status":"healthy","model_loaded":true}'
+
+      - name: Encerrar serviço da API ML
+        if: always()
+        run: docker compose down --remove-orphans
+
+      - name: Construir imagem principal
         run: docker build --tag conferencia-de-lotes:ci .
 
       - name: Preparar diretórios de saída

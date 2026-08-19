@@ -103,6 +103,27 @@ def test_predict_rejects_invalid_shift():
     assert response.json()["detail"][0]["loc"][-1] == "turno"
 
 
+def test_predict_rejects_status_outside_training_domain():
+    response = run_async(
+        request(
+            create_app(MODEL_PATH),
+            "POST",
+            "/predict",
+            json={
+                "lote_id": "L005",
+                "status_raw": "Status desconhecido",
+                "turno": "A",
+                "tem_obs": True,
+            },
+        )
+    )
+
+    assert response.status_code == 422
+    detail = response.json()["detail"][0]
+    assert detail["loc"][-1] == "status_raw"
+    assert "status_raw deve ser um de" in detail["msg"]
+
+
 def test_health_reports_loaded_model():
     response = run_async(request(create_app(MODEL_PATH), "GET", "/health"))
 

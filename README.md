@@ -512,9 +512,10 @@ curl --fail --request POST http://127.0.0.1:8000/predict \
   --data '{"lote_id":"L001","status_raw":"EM ANALISE","turno":"A","tem_obs":true}'
 ```
 
-`turno` aceita `A`, `B`, `C`, `Manhã`, `Tarde` ou `Noite`, normalizando os
-nomes para o domínio treinado. Valores diferentes retornam HTTP 422. Uma
-resposta possui este formato:
+`status_raw` aceita apenas `EM ANALISE`, `AJUSTE DE LINHA`, `PENDENTE` ou
+`ESPECIFICACAO EM REVISAO`. `turno` aceita `A`, `B`, `C`, `Manhã`, `Tarde` ou
+`Noite`. Os textos são normalizados para o domínio treinado e valores fora
+dele retornam HTTP 422. Uma resposta possui este formato:
 
 ```json
 {

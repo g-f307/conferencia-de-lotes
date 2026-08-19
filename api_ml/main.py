@@ -27,6 +27,14 @@ TURNOS = {
     "TARDE": "B",
     "NOITE": "C",
 }
+ACCEPTED_STATUSES = frozenset(
+    {
+        "EM ANALISE",
+        "AJUSTE DE LINHA",
+        "ESPECIFICACAO EM REVISAO",
+        "PENDENTE",
+    }
+)
 
 PredictionClass = Literal[
     "valido_automatico",
@@ -76,6 +84,9 @@ class LoteInput(BaseModel):
         normalized = normalize_text(value)
         if not normalized:
             raise ValueError("status_raw nao pode ser vazio")
+        if normalized not in ACCEPTED_STATUSES:
+            accepted = ", ".join(sorted(ACCEPTED_STATUSES))
+            raise ValueError(f"status_raw deve ser um de: {accepted}")
         return normalized
 
     @field_validator("turno", mode="before")

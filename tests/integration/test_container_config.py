@@ -62,6 +62,18 @@ def test_ci_executa_smoke_test_playwright_na_imagem():
     assert "conferencia-de-lotes:ci" in content
 
 
+def test_ci_constroi_e_valida_healthcheck_da_api_ml():
+    content = (
+        PROJECT_ROOT / ".github" / "workflows" / "ci.yml"
+    ).read_text(encoding="utf-8")
+
+    assert "docker compose build api-ml" in content
+    assert "docker compose up --detach --wait --wait-timeout 60 api-ml" in content
+    assert "http://127.0.0.1:8000/health" in content
+    assert "{\"status\":\"healthy\",\"model_loaded\":true}" in content
+    assert "docker compose down --remove-orphans" in content
+
+
 def test_ci_encadeia_qualidade_testes_e_docker():
     content = (
         PROJECT_ROOT / ".github" / "workflows" / "ci.yml"
