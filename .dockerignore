@@ -12,6 +12,7 @@ __pycache__
 .coverage
 htmlcov
 dist
+dados_ml
 logs
 relatorios
 artefatos
