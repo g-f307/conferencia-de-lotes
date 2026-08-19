@@ -113,6 +113,9 @@ def test_ci_executa_markers_e_publica_cobertura():
     assert "--cov-report=xml" in content
     assert "--cov-report=html" in content
     assert "--cov-fail-under=80" in content
+    assert '          -m "not browser"' in content
+    assert "--timeout=60" in content
+    assert "    timeout-minutes: 20" in content
     assert "name: coverage-report" in content
     assert "coverage.xml" in content
     assert "htmlcov/" in content

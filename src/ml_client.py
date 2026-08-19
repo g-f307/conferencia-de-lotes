@@ -137,7 +137,6 @@ class MLClient:
             return None
 
         self._consecutive_failures = 0
-        self._log_prediction(lote_id, prediction)
         return prediction
 
     def _elapsed_ms(self, started_at: float) -> float:
@@ -220,21 +219,3 @@ class MLClient:
                     "falhas_consecutivas": self._consecutive_failures,
                 },
             )
-
-    @staticmethod
-    def _log_prediction(lote_id: str, prediction: MLPrediction) -> None:
-        LOGGER.info(
-            "Decisão recebida da API ML",
-            extra={
-                "evento": "DECISAO_ML",
-                "formulario": "MLClient",
-                "status": "SUCCESS",
-                "usuario": "sistema",
-                "lote_id": lote_id,
-                "classe": prediction.classe,
-                "probabilidade": prediction.probabilidade,
-                "nivel_confianca": prediction.nivel_confianca,
-                "acao": prediction.acao,
-                "latencia_ms": prediction.latencia_ms,
-            },
-        )

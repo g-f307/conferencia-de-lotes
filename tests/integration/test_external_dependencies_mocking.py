@@ -14,6 +14,7 @@ from src.excel_reporting import REPORT_SHEET_NAMES, gerar_relatorio_excel
 from src.excel_reporting import service as service_module
 from src.excel_reporting import workbook_reader as workbook_reader_module
 from src.vault_client import BotCityVaultProvider
+from src.ml_audit import MLDecisionAudit
 
 pytestmark = pytest.mark.integration
 
@@ -114,6 +115,46 @@ def test_fluxo_controlado_integra_leitura_validacao_relatorio_e_log(
     workbook.close()
 
 
+def test_orquestracao_repassa_decisoes_ml_e_informa_contagem(
+    workbook_sintetico: Path,
+    base_referencia_simulada: list[dict[str, object]],
+    diretorio_saida: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output_path = diretorio_saida / "relatorio-ml.xlsx"
+    log_path = diretorio_saida / "execucao-ml.log"
+    monkeypatch.setattr(
+        workbook_reader_module,
+        "read_reference_base",
+        MagicMock(return_value=base_referencia_simulada),
+    )
+    decision = MLDecisionAudit(
+        timestamp="2026-08-19T12:30:00+00:00",
+        execution_id="exec-123",
+        bot_id="bot-ml",
+        lote_id="L001",
+        classe="revisar",
+        probabilidade=0.75,
+        nivel_confianca="media",
+        acao="revisar",
+        resultado_aplicado="REVISAO",
+        latencia_ms=15.2,
+    )
+
+    result = gerar_relatorio_excel(
+        workbook_sintetico,
+        output_path,
+        log_path=log_path,
+        ml_decisions=(decision,),
+    )
+
+    workbook = load_workbook(output_path)
+    assert result.decisoes_ml == 1
+    assert workbook["Decisões de ML"].max_row == 2
+    assert "decisoes_ml=1" in log_path.read_text(encoding="utf-8")
+    workbook.close()
+
+
 def test_falha_na_escrita_remove_arquivo_temporario(
     workbook_sintetico: Path,
     base_referencia_simulada: list[dict[str, object]],
@@ -125,7 +166,14 @@ def test_falha_na_escrita_remove_arquivo_temporario(
     log_path = diretorio_saida / "execucao.log"
     base_mock = MagicMock(return_value=base_referencia_simulada)
 
-    def interromper_escrita(_registros, _indicators, temporary_path):
+    def interromper_escrita(
+        _registros,
+        _indicators,
+        temporary_path,
+        *,
+        ml_decisions=(),
+    ):
+        assert ml_decisions == ()
         Path(temporary_path).write_bytes(b"arquivo parcial")
         raise OSError("falha controlada de escrita")
 

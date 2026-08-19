@@ -24,6 +24,7 @@ class ExecutionResult:
     divergence_items: int = 0
     technical_errors: int = 0
     evidences: list[str] = field(default_factory=list)
+    ml_decisions: list[dict[str, Any]] = field(default_factory=list)
     errors: list[dict[str, Any]] = field(default_factory=list)
     started_at: str = field(default_factory=utc_now)
     finished_at: str | None = None

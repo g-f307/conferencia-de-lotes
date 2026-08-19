@@ -14,6 +14,7 @@ from src.dispatcher import dispatch_csv
 from src.item_processor import ItemProcessor
 from src.logging_config import configure_logging
 from src.maestro_client import MaestroClient
+from src.ml_audit import MLDecisionRecorder
 from src.ml_client import MLClient
 from src.models import ExecutionResult
 from src.vault_client import BotCityVaultProvider, VaultClient
@@ -133,6 +134,7 @@ def execution_result_from_performer(result: PerformerResult) -> ExecutionResult:
         divergence_items=result.divergences,
         technical_errors=result.system_errors,
         evidences=list(result.evidences),
+        ml_decisions=[decision.to_dict() for decision in result.ml_decisions],
     )
     execution.message = "Processamento concluido"
     return execution.complete()
@@ -325,6 +327,10 @@ def run(
             current_reference_lotes,
             ml_enabled=current_settings.ml_enabled,
             ml_client=current_ml_client,
+            decision_recorder=MLDecisionRecorder(
+                current_settings.bot_id,
+                current_settings.execution_id,
+            ),
         )
         performer = LotePerformer(
             client,

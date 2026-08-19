@@ -94,7 +94,6 @@ flowchart LR
     MAIN --> SESSION[Sessão Playwright headless]
     SESSION --> LOGIN[LoginPage]
     DP --> PERFORMER[LotePerformer]
-    PERFORMER --> RULES[RN01–RN07]
     PERFORMER --> SESSION
     SESSION --> FORM[FormPage]
     FORM --> PNG[PNG por item]
@@ -104,13 +103,18 @@ flowchart LR
     MAIN --> MAESTRO[Artefatos e finish_task]
     XLSX[Workbook de 10 dias] --> READER[Leitura e validação RN01–RN12]
     READER --> INDICATORS[OperationalIndicators]
-    INDICATORS --> EXCEL[Dashboard Excel com 8 abas]
+    INDICATORS --> EXCEL[Dashboard Excel com 9 abas]
     INDICATORS --> MARKDOWN[resumo_executivo.md]
     TRAIN[train_ml_model.py] --> MODEL[classificador_lotes.pkl]
     MODEL --> MLAPI[FastAPI /predict e /health]
     PERFORMER --> PROCESSOR[ItemProcessor]
+    PROCESSOR --> RULES[OperationalItemClassifier / RN01–RN07]
     PROCESSOR --> MLCLIENT[MLClient resiliente]
     MLCLIENT --> MLAPI
+    PROCESSOR --> MLAUDIT[MLDecisionAudit]
+    MLAUDIT --> LOG
+    MLAUDIT --> REPORT
+    MLAUDIT --> EXCEL
 ```
 
 As responsabilidades principais são:
@@ -128,12 +132,13 @@ As responsabilidades principais são:
 | `src/vault_client.py` | Recuperar e validar a credencial somente em memória. |
 | `src/excel_reporting/service.py` | Orquestrar leitura, validação, cálculo único dos indicadores e publicação conjunta das saídas analíticas. |
 | `src/operational_indicators.py` | Consolidar os 10 indicadores operacionais sem dependência de Excel, disco ou interface. |
-| `src/excel_reporting/report_writer.py` | Transformar registros validados e indicadores no workbook executivo de 8 abas. |
+| `src/excel_reporting/report_writer.py` | Transformar registros validados, indicadores e decisões de ML no workbook executivo de 9 abas. |
 | `src/markdown_reporting.py` | Transformar o mesmo objeto de indicadores no resumo gerencial em Markdown. |
 | `scripts/train_ml_model.py` | Gerar dados fictícios, treinar o Random Forest e serializar o pipeline. |
 | `api_ml/main.py` | Validar requisições e servir o classificador por `/predict` e `/health`. |
 | `src/item_processor.py` | Preservar a decisão determinística e complementar somente casos ambíguos com ML. |
 | `src/ml_client.py` | Consumir a API com timeout, validação de contrato, fallback e circuit breaker. |
+| `src/ml_audit.py` | Criar a fonte tipada compartilhada pelo log, resumo JSON e aba `Decisões de ML`. |
 
 Detalhes e diagramas de sequência estão em
 [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md).
@@ -147,15 +152,18 @@ Detalhes e diagramas de sequência estão em
 5. Quando habilitada, a sessão Playwright inicia em modo headless e
    `LoginPage.fazer_login()` utiliza a credencial recuperada.
 6. O Dispatcher publica o CSV no DataPool.
-7. O Performer obtém um item e o classificador operacional aplica RN01–RN07,
-   preservando o contrato já utilizado pelo DataPool.
-8. O `ItemProcessor` recebe essa decisão pronta. Quando habilitado, consulta o
-   `MLClient` somente se a primeira camada tiver retornado `REVISAO` e o status
-   pertencer ao domínio da API. Itens determinísticos não chamam a API.
+7. O Performer obtém um item e o entrega ao `ItemProcessor`, que executa o
+   classificador operacional com RN01–RN07 e preserva o contrato utilizado pelo
+   DataPool.
+8. Quando habilitado, o `ItemProcessor` consulta o `MLClient` somente se a
+   classificação determinística tiver retornado `REVISAO` e o status pertencer
+   ao domínio da API. Itens determinísticos não chamam a API.
 9. Confiança alta pode aprovar ou reprovar automaticamente. Confiança média,
    baixa ou classe de revisão mantém o item em revisão humana.
 10. Indisponibilidade da API gera `REVISAO_ML_OFFLINE`, finaliza o item com os
     outputs de revisão sem `report_error` e não interrompe os itens seguintes.
+    Cada predição ou fallback produz exatamente um `MLDecisionAudit`, inclusive
+    quando o circuit breaker já está aberto.
 11. `FormPage.preencher_lote()` apresenta o resultado do item na aplicação
    controlada e aguarda a confirmação.
 12. Uma captura `aprovado-*`, `reprovado-*`, `divergencia-*` ou `erro-*` é
@@ -655,8 +663,9 @@ Eventos relevantes:
 | `ENCERRAMENTO` | Confirma sucesso operacional. |
 
 `resumo_execucao.json` inclui total, aprovados, divergências, revisões,
-erros técnicos e a lista de caminhos das evidências. O PDF e o JSON são
-publicados como artefatos da task.
+erros técnicos, caminhos das evidências e `ml_decisions`. Cada decisão contém
+timestamp, IDs da execução e do bot, lote, predição, confiança, ação, resultado
+aplicado e latência. O PDF e o JSON são publicados como artefatos da task.
 
 Os campos de ML são propriedades estruturadas dentro de `detalhes`, e não
 texto concatenado na mensagem. O payload enviado à API contém somente
@@ -696,25 +705,27 @@ Argumentos opcionais:
 ```bash
 python gerar_relatorio.py --entrada dados_entrada/inspecao_lotes_10dias.xlsx \
                           --saida relatorios/relatorio_conferencia_lotes.xlsx \
-                          --log logs/execucao_relatorio.log
+                          --log logs/execucao_relatorio.log \
+                          --decisoes-ml relatorios/resumo_execucao.json
 ```
 
 ### Saídas
 
 ```text
-relatorios/relatorio_conferencia_lotes.xlsx   # relatório com 8 abas
+relatorios/relatorio_conferencia_lotes.xlsx   # relatório com 9 abas
 relatorios/resumo_executivo.md                 # síntese gerencial dos indicadores
 logs/execucao_relatorio.log                   # log da execução
 artefatos/dashboard_resumo.pdf                # evidência opcional, exportada manualmente
 ```
 
-O XLSX possui 8 abas; a referência a 6 abas correspondia à entrega histórica
-da Aula 22. O comando gera automaticamente XLSX, Markdown e log. Quando
+O XLSX possui 9 abas. As oito primeiras preservam integralmente a entrega da
+Aula 24; a nona acrescenta a auditoria de ML da Aula 24-A. O comando gera
+automaticamente XLSX, Markdown e log. Quando
 necessária para a entrega, a evidência em PDF deve ser exportada manualmente a
 partir da área de impressão da aba `Resumo`. Esses arquivos não devem ser
 versionados.
 
-### Estrutura das oito abas
+### Estrutura das nove abas
 
 | Aba | Conteúdo |
 |---|---|
@@ -726,6 +737,12 @@ versionados.
 | `Erros de Entrada` | Registros com campos obrigatórios ausentes ou estrutura inválida. |
 | `Ranking de Regras` | Regras principais acionadas, ordenadas por frequência com `Counter.most_common()`. |
 | `Dicionário` | Glossário de termos, classificações, fórmulas, metas e RN01–RN12 em linguagem acessível. |
+| `Decisões de ML` | Uma linha por lote consultado, com IDs, predição, resultado aplicado e latência; permanece com cabeçalhos quando não há decisões. |
+
+Os campos `Probabilidade` e `Latência (ms)` são numéricos. Em
+`REVISAO_ML_OFFLINE`, os campos que não vieram do modelo ficam vazios, sem
+valores artificiais. A aba recebe a mesma coleção tipada usada no log e no
+resumo; o gerador não interpreta logs nem consulta novamente a API.
 
 ### Classificações
 
@@ -845,10 +862,10 @@ Excel sem navegador, internet ou credenciais. Os testes `browser` são separados
 e validam a aplicação local com Chromium real.
 
 Os testes da Aula 24 parametrizam os 10 indicadores, cobrem a divisão por zero,
-geram fisicamente XLSX e Markdown em `tmp_path` e validam as 8 abas, o Ranking
-e o contrato de `regra_aplicada`. Na rodada de aceite da #78, a suíte apresentou
-`254 passed`, `1 skipped`, `1 xfailed`, cobertura global de `93,87%` e cobertura
-de `100%` em `src/operational_indicators.py`.
+geram fisicamente XLSX e Markdown em `tmp_path` e validam as abas, o Ranking e
+o contrato de `regra_aplicada`. A extensão da Aula 24-A cobre API, cliente,
+circuit breaker, auditoria, fallback e a nona aba sem fixar uma quantidade de
+testes que se torne obsoleta.
 
 O workflow `.github/workflows/ci.yml`, acionado em Pull Requests e pushes para
 `main`, executa a cadeia
@@ -906,6 +923,7 @@ finalizada no Maestro como sucesso operacional.
 | [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md) | Componentes, sequência e limites. |
 | [`docs/EXECUCAO_E2E_DOCKER_CI.md`](docs/EXECUCAO_E2E_DOCKER_CI.md) | Instalação, testes E2E, Docker, pipeline e artefatos. |
 | [`docs/HOMOLOGACAO_TESTES_AULA23.md`](docs/HOMOLOGACAO_TESTES_AULA23.md) | Cobertura, camadas, limitações e respostas da Aula 23. |
+| [`docs/ROTEIRO_TORNEIO_CLASSIFICADORES.md`](docs/ROTEIRO_TORNEIO_CLASSIFICADORES.md) | Demonstração de até oito minutos, sabotagem e coleta das evidências de ML. |
 | [`docs/CHECKLIST_FINAL_ACEITE_AULA24.md`](docs/CHECKLIST_FINAL_ACEITE_AULA24.md) | Checklist A–H, evidências e respostas para o Demo Day. |
 | [`docs/REVISAO_BPMN_PDD.md`](docs/REVISAO_BPMN_PDD.md) | Aderência do processo e das regras. |
 | [`docs/ADERENCIA_PAGE_OBJECTS.md`](docs/ADERENCIA_PAGE_OBJECTS.md) | Matriz técnica da entrega. |

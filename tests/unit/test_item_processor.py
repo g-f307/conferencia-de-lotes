@@ -11,6 +11,7 @@ from src.item_processor import (
     ItemClassification,
     ItemProcessor,
 )
+from src.ml_audit import MLDecisionRecorder
 from src.ml_client import MLPrediction
 from src.validation import HumanReviewRequired
 from src.vault_client import VaultClient
@@ -60,6 +61,10 @@ class FakeMLClient:
         return self.responses.pop(0)
 
 
+def decision_recorder() -> MLDecisionRecorder:
+    return MLDecisionRecorder("bot-test", "exec-test")
+
+
 def test_integracao_desabilitada_preserva_revisao_sem_chamar_api():
     client = FakeMLClient([prediction()])
     processor = ItemProcessor(
@@ -74,9 +79,23 @@ def test_integracao_desabilitada_preserva_revisao_sem_chamar_api():
     assert client.calls == []
 
 
+def test_integracao_habilitada_exige_recorder_com_contexto():
+    with pytest.raises(ValueError, match="MLDecisionRecorder.*bot_id.*execution_id"):
+        ItemProcessor(
+            {"L001"},
+            ml_enabled=True,
+            ml_client=FakeMLClient([prediction()]),
+        )
+
+
 def test_item_nao_ambiguo_nao_consulta_api():
     client = FakeMLClient([prediction()])
-    processor = ItemProcessor({"L001"}, ml_enabled=True, ml_client=client)
+    processor = ItemProcessor(
+        {"L001"},
+        ml_enabled=True,
+        ml_client=client,
+        decision_recorder=decision_recorder(),
+    )
 
     result = processor.process(item(status="APROVADO"))
 
@@ -86,7 +105,12 @@ def test_item_nao_ambiguo_nao_consulta_api():
 
 def test_status_fora_do_dominio_do_modelo_mantem_revisao_sem_chamada():
     client = FakeMLClient([prediction()])
-    processor = ItemProcessor({"L001"}, ml_enabled=True, ml_client=client)
+    processor = ItemProcessor(
+        {"L001"},
+        ml_enabled=True,
+        ml_client=client,
+        decision_recorder=decision_recorder(),
+    )
 
     result = processor.process(item(status="A REVISAR"))
 
@@ -106,7 +130,12 @@ def test_dominio_do_cliente_reflete_status_aceitos_pela_api():
 @pytest.mark.parametrize("status", ["AJUSTE DE LINHA", "ESPECIFICACAO EM REVISAO"])
 def test_status_do_modelo_nao_sobrepoe_resultado_deterministico(status: str):
     client = FakeMLClient([prediction()])
-    processor = ItemProcessor({"L001"}, ml_enabled=True, ml_client=client)
+    processor = ItemProcessor(
+        {"L001"},
+        ml_enabled=True,
+        ml_client=client,
+        decision_recorder=decision_recorder(),
+    )
 
     result = processor.process(item(status=status))
 
@@ -141,6 +170,7 @@ def test_decisao_ambiguo_de_classificador_injetado_pode_consultar_modelo():
         ml_enabled=True,
         ml_client=client,
         deterministic_classifier=deterministic,
+        decision_recorder=decision_recorder(),
     )
 
     result = processor.process(item(status="AJUSTE DE LINHA"))
@@ -159,6 +189,7 @@ def test_classificador_injetado_nao_ambiguo_impede_chamada_ao_modelo():
         ml_enabled=True,
         ml_client=client,
         deterministic_classifier=deterministic,
+        decision_recorder=decision_recorder(),
     )
 
     result = processor.process(item())
@@ -186,12 +217,19 @@ def test_confianca_alta_aplica_decisao_automatica(
     expected_result: str,
 ):
     client = FakeMLClient([ml_prediction])
-    processor = ItemProcessor({"L001"}, ml_enabled=True, ml_client=client)
+    processor = ItemProcessor(
+        {"L001"},
+        ml_enabled=True,
+        ml_client=client,
+        decision_recorder=decision_recorder(),
+    )
 
     result = processor.process(item())
 
     assert result.resultado == expected_result
     assert result.ml_prediction == ml_prediction
+    assert result.ml_decision is not None
+    assert result.ml_decision.resultado_aplicado == expected_result
     assert client.calls[0] == {
         "lote_id": "L001",
         "status_raw": "EM ANALISE",
@@ -224,6 +262,7 @@ def test_decisao_nao_automatica_permanece_em_revisao(
         {"L001"},
         ml_enabled=True,
         ml_client=FakeMLClient([ml_prediction]),
+        decision_recorder=decision_recorder(),
     )
 
     result = processor.process(item())
@@ -231,6 +270,8 @@ def test_decisao_nao_automatica_permanece_em_revisao(
     assert result.resultado == "REVISAO"
     assert result.review is not None
     assert result.ml_prediction == ml_prediction
+    assert result.ml_decision is not None
+    assert result.ml_decision.resultado_aplicado == "REVISAO"
 
 
 def test_api_indisponivel_gera_revisao_ml_offline():
@@ -238,6 +279,7 @@ def test_api_indisponivel_gera_revisao_ml_offline():
         {"L001"},
         ml_enabled=True,
         ml_client=FakeMLClient([None]),
+        decision_recorder=decision_recorder(),
     )
 
     result = processor.process(item())
@@ -245,6 +287,10 @@ def test_api_indisponivel_gera_revisao_ml_offline():
     assert result.resultado == ML_OFFLINE_RESULT
     assert result.review is not None
     assert "revisão humana" in result.review.reason
+    assert result.ml_decision is not None
+    assert result.ml_decision.classe is None
+    assert result.ml_decision.probabilidade is None
+    assert result.ml_decision.latencia_ms is None
 
 
 class FakeQueue:
@@ -289,6 +335,7 @@ def test_performer_continua_apos_fallback_e_processa_item_seguinte():
         {"L001", "L002"},
         ml_enabled=True,
         ml_client=FakeMLClient([None]),
+        decision_recorder=decision_recorder(),
     )
     performer = LotePerformer(
         queue,
@@ -311,3 +358,5 @@ def test_performer_continua_apos_fallback_e_processa_item_seguinte():
     assert queue.system_errors == []
     assert len(queue.done) == 1
     assert queue.done[0][0]["lote_id"] == "L002"
+    assert len(result.ml_decisions) == 1
+    assert result.ml_decisions[0].resultado_aplicado == ML_OFFLINE_RESULT

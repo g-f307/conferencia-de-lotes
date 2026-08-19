@@ -21,7 +21,9 @@ STRUCTURED_DETAIL_FIELDS = (
     "probabilidade",
     "nivel_confianca",
     "acao",
+    "resultado_aplicado",
     "latencia_ms",
+    "timestamp_decisao",
     "falhas_consecutivas",
     "ml_error_type",
 )
