@@ -152,6 +152,47 @@ def test_cli_reads_ml_decisions_from_execution_summary(tmp_path, capsys):
     workbook.close()
 
 
+def test_cli_rejeita_decisao_ml_sem_rastreabilidade(tmp_path, capsys):
+    output = tmp_path / "relatorio_cli_invalido.xlsx"
+    summary_path = tmp_path / "resumo_invalido.json"
+    summary_path.write_text(
+        json.dumps(
+            {
+                "ml_decisions": [
+                    {
+                        "timestamp": "2026-08-19T12:30:00+00:00",
+                        "bot_id": "bot-ml",
+                        "lote_id": "L001",
+                        "classe": "revisar",
+                        "probabilidade": 0.72,
+                        "nivel_confianca": "media",
+                        "acao": "revisar",
+                        "resultado_aplicado": "REVISAO",
+                        "latencia_ms": 18.4,
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    exit_code = main(
+        [
+            "--entrada",
+            str(REAL_WORKBOOK_PATH),
+            "--saida",
+            str(output),
+            "--decisoes-ml",
+            str(summary_path),
+        ]
+    )
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert "execution_id é obrigatório" in captured.err
+    assert not output.exists()
+
+
 def test_cli_returns_error_for_invalid_input(tmp_path, capsys):
     output = tmp_path / "relatorio_cli.xlsx"
 

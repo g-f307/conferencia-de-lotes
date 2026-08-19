@@ -108,6 +108,11 @@ class ItemProcessor:
     ) -> None:
         if ml_enabled and ml_client is None:
             raise ValueError("MLClient deve ser informado quando ML está habilitado")
+        if ml_enabled and decision_recorder is None:
+            raise ValueError(
+                "MLDecisionRecorder com bot_id e execution_id deve ser informado "
+                "quando ML está habilitado"
+            )
         if deterministic_classifier is None:
             if reference_lotes is None:
                 raise ValueError(
@@ -117,7 +122,7 @@ class ItemProcessor:
         self.deterministic_classifier = deterministic_classifier
         self.ml_enabled = ml_enabled
         self.ml_client = ml_client
-        self.decision_recorder = decision_recorder or MLDecisionRecorder()
+        self.decision_recorder = decision_recorder
 
     def process(self, item: Mapping[str, object]) -> ItemClassification:
         deterministic = self.deterministic_classifier.classify(item)
@@ -135,6 +140,7 @@ class ItemProcessor:
         deterministic_review: ItemClassification,
     ) -> ItemClassification:
         assert self.ml_client is not None
+        assert self.decision_recorder is not None
         lote_id = str(item.get("lote_id") or "").strip()
         prediction = self.ml_client.classificar(
             lote_id=lote_id,

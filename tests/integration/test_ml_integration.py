@@ -95,6 +95,10 @@ def test_fallback_e_falha_esperada_nao_expoem_observacao_nem_traceback(
         {"L001"},
         ml_enabled=True,
         ml_client=OfflineClient(),
+        decision_recorder=MLDecisionRecorder(
+            settings.bot_id,
+            settings.execution_id,
+        ),
     )
 
     result = processor.process(

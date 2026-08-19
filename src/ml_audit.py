@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 import logging
+import math
 from typing import Any, Callable, Mapping
 
 from src.logging_config import LOGGER_NAME
@@ -32,24 +33,48 @@ class MLDecisionAudit:
     resultado_aplicado: str
     latencia_ms: float | None
 
+    def __post_init__(self) -> None:
+        for field_name in (
+            "timestamp",
+            "execution_id",
+            "bot_id",
+            "lote_id",
+            "resultado_aplicado",
+        ):
+            value = _required_text(getattr(self, field_name), field_name)
+            object.__setattr__(self, field_name, value)
+
+        _validate_timestamp(self.timestamp)
+        for field_name in ("classe", "nivel_confianca", "acao"):
+            value = _optional_text(getattr(self, field_name), field_name)
+            object.__setattr__(self, field_name, value)
+
+        probability = _optional_number(self.probabilidade, "probabilidade")
+        if probability is not None and not 0 <= probability <= 1:
+            raise ValueError("probabilidade deve estar entre 0 e 1")
+        object.__setattr__(self, "probabilidade", probability)
+
+        latency = _optional_number(self.latencia_ms, "latencia_ms")
+        if latency is not None and latency < 0:
+            raise ValueError("latencia_ms não pode ser negativa")
+        object.__setattr__(self, "latencia_ms", latency)
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
     @classmethod
     def from_dict(cls, payload: Mapping[str, Any]) -> "MLDecisionAudit":
-        probability = payload.get("probabilidade")
-        latency = payload.get("latencia_ms")
         return cls(
-            timestamp=str(payload.get("timestamp") or ""),
-            execution_id=str(payload.get("execution_id") or ""),
-            bot_id=str(payload.get("bot_id") or ""),
-            lote_id=str(payload.get("lote_id") or ""),
-            classe=_optional_text(payload.get("classe")),
-            probabilidade=None if probability is None else float(probability),
-            nivel_confianca=_optional_text(payload.get("nivel_confianca")),
-            acao=_optional_text(payload.get("acao")),
-            resultado_aplicado=str(payload.get("resultado_aplicado") or ""),
-            latencia_ms=None if latency is None else float(latency),
+            timestamp=payload.get("timestamp"),
+            execution_id=payload.get("execution_id"),
+            bot_id=payload.get("bot_id"),
+            lote_id=payload.get("lote_id"),
+            classe=payload.get("classe"),
+            probabilidade=payload.get("probabilidade"),
+            nivel_confianca=payload.get("nivel_confianca"),
+            acao=payload.get("acao"),
+            resultado_aplicado=payload.get("resultado_aplicado"),
+            latencia_ms=payload.get("latencia_ms"),
         )
 
 
@@ -58,13 +83,13 @@ class MLDecisionRecorder:
 
     def __init__(
         self,
-        bot_id: str = "",
-        execution_id: str = "",
+        bot_id: str,
+        execution_id: str,
         *,
         clock: Clock = utc_now,
     ) -> None:
-        self.bot_id = bot_id
-        self.execution_id = execution_id
+        self.bot_id = _required_text(bot_id, "bot_id")
+        self.execution_id = _required_text(execution_id, "execution_id")
         self._clock = clock
         self._decisions: list[MLDecisionAudit] = []
 
@@ -141,5 +166,35 @@ class MLDecisionRecorder:
         )
 
 
-def _optional_text(value: Any) -> str | None:
-    return None if value is None else str(value)
+def _required_text(value: Any, field_name: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{field_name} é obrigatório e deve ser texto não vazio")
+    return value.strip()
+
+
+def _optional_text(value: Any, field_name: str) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{field_name} deve ser texto não vazio ou nulo")
+    return value.strip()
+
+
+def _optional_number(value: Any, field_name: str) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{field_name} deve ser numérico ou nulo")
+    converted = float(value)
+    if not math.isfinite(converted):
+        raise ValueError(f"{field_name} deve ser finito")
+    return converted
+
+
+def _validate_timestamp(value: str) -> None:
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError as exc:
+        raise ValueError("timestamp deve estar no formato ISO 8601") from exc
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ValueError("timestamp deve incluir fuso horário")
