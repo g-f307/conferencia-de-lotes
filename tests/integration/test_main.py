@@ -404,6 +404,12 @@ def test_run_integra_ml_sem_interromper_fluxo_quando_api_falha(tmp_path):
     assert client.business_errors == []
     assert client.system_errors == []
     assert client.finished_tasks[0][0] == "SUCCESS"
+    assert len(result.ml_decisions) == 2
+    assert result.ml_decisions[0]["bot_id"] == settings.bot_id
+    assert result.ml_decisions[0]["execution_id"] == settings.execution_id
+    assert result.ml_decisions[0]["resultado_aplicado"] == "APROVADO"
+    assert result.ml_decisions[1]["resultado_aplicado"] == "REVISAO_ML_OFFLINE"
+    assert client.artifacts[0][2]["ml_decisions"] == result.ml_decisions
 
 
 def test_run_falha_quando_next_da_fila_quebra(tmp_path):

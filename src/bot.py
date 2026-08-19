@@ -12,6 +12,7 @@ from src.item_processor import (
     ItemProcessor,
 )
 from src.logging_config import LOGGER_NAME
+from src.ml_audit import MLDecisionAudit
 from src.validation import HumanReviewRequired
 from src.vault_client import ErpCredential, VaultClient
 
@@ -86,6 +87,7 @@ class PerformerResult:
     system_errors: int = 0
     human_reviews: list[HumanReviewRequired] = field(default_factory=list)
     evidences: list[str] = field(default_factory=list)
+    ml_decisions: list[MLDecisionAudit] = field(default_factory=list)
 
     @property
     def approved(self) -> int:
@@ -150,6 +152,8 @@ class LotePerformer:
                     credential_logged = True
 
                 classification = self._classify(item)
+                if classification.ml_decision is not None:
+                    result.ml_decisions.append(classification.ml_decision)
                 evidence, message = self._process_web(item, classification)
                 outputs = self._outputs(
                     classification.resultado,

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
@@ -17,6 +17,7 @@ from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.table import Table, TableStyleInfo
 
 from src.excel_reporting.models import RegistroValidado
+from src.ml_audit import MLDecisionAudit
 from src.excel_reporting.validation_service import (
     CLASSIFICACAO_AMBIGUO,
     CLASSIFICACAO_DIVERGENCIA,
@@ -38,6 +39,7 @@ REPORT_SHEET_NAMES = (
     "Erros de Entrada",
     "Ranking de Regras",
     "Dicionário",
+    "Decisões de ML",
 )
 
 CLASSIFICATION_SHEETS = {
@@ -50,6 +52,7 @@ CLASSIFICATION_SHEETS = {
 DATA_SHEET_NAMES = ("Todos", *CLASSIFICATION_SHEETS.values())
 RANKING_SHEET_NAME = "Ranking de Regras"
 DICTIONARY_SHEET_NAME = "Dicionário"
+ML_DECISIONS_SHEET_NAME = "Decisões de ML"
 
 BUSINESS_COLUMNS = (
     "Data de referência",
@@ -76,6 +79,19 @@ DICTIONARY_COLUMNS = (
     "Termo",
     "Definição",
     "Fórmula / Meta de Referência",
+)
+
+ML_DECISION_COLUMNS = (
+    "Data/hora",
+    "ID da execução",
+    "ID do bot",
+    "Lote",
+    "Classe prevista",
+    "Probabilidade",
+    "Nível de confiança",
+    "Ação",
+    "Resultado aplicado",
+    "Latência (ms)",
 )
 
 HEADER_FILL = PatternFill(fill_type="solid", fgColor="1F4E78")
@@ -148,8 +164,9 @@ def write_excel_report(
     ordered_records: list[RegistroValidado],
     indicators: OperationalIndicators,
     output_path: str | Path,
+    ml_decisions: Iterable[MLDecisionAudit] = (),
 ) -> Path:
-    """Grava o workbook executivo com oito abas e dados segregados."""
+    """Grava o workbook executivo com nove abas e auditoria opcional de ML."""
     destination = Path(output_path)
     destination.parent.mkdir(parents=True, exist_ok=True)
 
@@ -157,6 +174,7 @@ def write_excel_report(
     all_rows = [_business_row(record) for record in ordered_records]
     ranking_rows = _ranking_rows(ordered_records)
     dictionary_rows = _dictionary_rows()
+    ml_decision_rows = [_ml_decision_row(decision) for decision in ml_decisions]
 
     with pd.ExcelWriter(destination, engine="openpyxl") as writer:
         pd.DataFrame().to_excel(writer, sheet_name="Resumo", index=False)
@@ -180,6 +198,11 @@ def write_excel_report(
             sheet_name=DICTIONARY_SHEET_NAME,
             index=False,
         )
+        pd.DataFrame(ml_decision_rows, columns=ML_DECISION_COLUMNS).to_excel(
+            writer,
+            sheet_name=ML_DECISIONS_SHEET_NAME,
+            index=False,
+        )
 
         workbook = writer.book
         _format_summary_sheet(workbook["Resumo"], ordered_records, indicators)
@@ -194,8 +217,38 @@ def write_excel_report(
             workbook[DICTIONARY_SHEET_NAME],
             table_name="TabelaDicionario",
         )
+        _format_ml_decisions_sheet(workbook[ML_DECISIONS_SHEET_NAME])
 
     return destination
+
+
+def _ml_decision_row(decision: MLDecisionAudit) -> dict[str, Any]:
+    return dict(
+        zip(
+            ML_DECISION_COLUMNS,
+            (
+                decision.timestamp,
+                decision.execution_id,
+                decision.bot_id,
+                decision.lote_id,
+                decision.classe,
+                decision.probabilidade,
+                decision.nivel_confianca,
+                decision.acao,
+                decision.resultado_aplicado,
+                decision.latencia_ms,
+            ),
+            strict=True,
+        )
+    )
+
+
+def _format_ml_decisions_sheet(sheet: Any) -> None:
+    _format_table_sheet(sheet, table_name="TabelaDecisoesML")
+    for cell in sheet["F"][1:]:
+        cell.number_format = "0.0000"
+    for cell in sheet["J"][1:]:
+        cell.number_format = "0.000"
 
 
 def _ranking_rows(records: list[RegistroValidado]) -> list[dict[str, Any]]:
@@ -335,6 +388,18 @@ def _dictionary_rows() -> list[dict[str, str]]:
             "✓",
             "O indicador atende à meta de referência.",
             "Comparação estrita com a meta exibida no cartão.",
+        ),
+        _dictionary_row(
+            "Auditoria de ML",
+            "Decisão de ML",
+            "Predição complementar aplicada a um lote ambíguo.",
+            "Uma linha por consulta ou fallback; usa a mesma fonte do log estruturado.",
+        ),
+        _dictionary_row(
+            "Auditoria de ML",
+            "REVISAO_ML_OFFLINE",
+            "Fallback seguro quando a API ML está indisponível.",
+            "Classe, probabilidade, confiança, ação e latência ficam vazias.",
         ),
         _dictionary_row(
             "Sinalização",

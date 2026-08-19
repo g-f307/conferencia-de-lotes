@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import time
 from collections import Counter
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -20,6 +21,7 @@ from src.excel_reporting.validation_service import (
 )
 from src.excel_reporting.workbook_reader import DEFAULT_WORKBOOK_PATH, read_workbook
 from src.markdown_reporting import gerar_resumo_executivo
+from src.ml_audit import MLDecisionAudit
 from src.operational_indicators import OperationalIndicators, calcular_indicadores
 
 DEFAULT_REPORT_PATH = Path("relatorios") / "relatorio_conferencia_lotes.xlsx"
@@ -40,6 +42,7 @@ class ReportExecutionResult:
     regras: dict[str, int]
     duracao_segundos: float
     registros_validados: list[dict[str, Any]]
+    decisoes_ml: int = 0
     indicadores: OperationalIndicators | None = None
 
     @property
@@ -52,6 +55,7 @@ def gerar_relatorio_excel(
     saida: str | Path = DEFAULT_REPORT_PATH,
     *,
     log_path: str | Path = DEFAULT_LOG_PATH,
+    ml_decisions: Iterable[MLDecisionAudit] = (),
 ) -> ReportExecutionResult:
     """Executa o fluxo completo de leitura, validacao e geracao do relatorio."""
     started = time.perf_counter()
@@ -60,6 +64,7 @@ def gerar_relatorio_excel(
     log_file = Path(log_path)
     temp_path = _temporary_output_path(output_path)
     temp_markdown_path = output_path.parent / f"{output_path.name}.md.tmp"
+    decisions = tuple(ml_decisions)
 
     _validate_input_path(input_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -81,7 +86,12 @@ def gerar_relatorio_excel(
         ordered_records = sorted(validated, key=record_order_key)
         indicators = calcular_indicadores(ordered_records)
 
-        write_excel_report(ordered_records, indicators, temp_path)
+        write_excel_report(
+            ordered_records,
+            indicators,
+            temp_path,
+            ml_decisions=decisions,
+        )
         gerar_resumo_executivo(indicators, temp_markdown_path)
 
         os.replace(temp_path, output_path)
@@ -97,6 +107,7 @@ def gerar_relatorio_excel(
             serialized=serialized,
             indicators=indicators,
             duration=duration,
+            ml_decisions_count=len(decisions),
         )
         _write_log(result)
         return result
@@ -130,6 +141,7 @@ def _build_result(
     serialized: list[dict[str, Any]],
     indicators: OperationalIndicators,
     duration: float,
+    ml_decisions_count: int,
 ) -> ReportExecutionResult:
     classifications = Counter(record.classificacao for record in validated)
     rules: Counter[str] = Counter()
@@ -148,6 +160,7 @@ def _build_result(
         regras=dict(sorted(rules.items())),
         duracao_segundos=duration,
         registros_validados=serialized,
+        decisoes_ml=ml_decisions_count,
         indicadores=indicators,
     )
 
@@ -161,6 +174,7 @@ def _write_log(result: ReportExecutionResult) -> None:
         f"divergencias={result.divergencias}",
         f"ambiguos={result.ambiguos}",
         f"erros_entrada={result.erros_entrada}",
+        f"decisoes_ml={result.decisoes_ml}",
         f"duracao_segundos={result.duracao_segundos:.3f}",
         f"relatorio={result.saida}",
         "regras="

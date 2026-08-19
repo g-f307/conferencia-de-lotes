@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-import logging
 from typing import Iterable, Mapping, Protocol
 
-from src.logging_config import LOGGER_NAME
+from src.ml_audit import MLDecisionAudit, MLDecisionRecorder
 from src.ml_client import MLPrediction
 from src.validation import (
     HumanReviewRequired,
@@ -17,7 +16,6 @@ from src.validation import (
 )
 
 
-LOGGER = logging.getLogger(LOGGER_NAME)
 ML_OFFLINE_RESULT = "REVISAO_ML_OFFLINE"
 API_MODEL_STATUSES = frozenset(
     {
@@ -47,6 +45,7 @@ class ItemClassification:
     validated: dict[str, str] = field(default_factory=dict)
     review: HumanReviewRequired | None = None
     ml_prediction: MLPrediction | None = None
+    ml_decision: MLDecisionAudit | None = None
 
 
 class DeterministicClassifier(Protocol):
@@ -105,6 +104,7 @@ class ItemProcessor:
         ml_enabled: bool = False,
         ml_client: PredictionClient | None = None,
         deterministic_classifier: DeterministicClassifier | None = None,
+        decision_recorder: MLDecisionRecorder | None = None,
     ) -> None:
         if ml_enabled and ml_client is None:
             raise ValueError("MLClient deve ser informado quando ML está habilitado")
@@ -117,6 +117,7 @@ class ItemProcessor:
         self.deterministic_classifier = deterministic_classifier
         self.ml_enabled = ml_enabled
         self.ml_client = ml_client
+        self.decision_recorder = decision_recorder or MLDecisionRecorder()
 
     def process(self, item: Mapping[str, object]) -> ItemClassification:
         deterministic = self.deterministic_classifier.classify(item)
@@ -147,48 +148,66 @@ class ItemProcessor:
                 status_original=str(item.get("status") or "").strip(),
                 reason="API ML indisponível; lote encaminhado para revisão humana",
             )
-            LOGGER.warning(
-                "Fallback de revisão humana aplicado por indisponibilidade da API ML",
-                extra={
-                    "evento": "REVISAO_ML_OFFLINE",
-                    "formulario": "ItemProcessor",
-                    "status": "FALLBACK",
-                    "usuario": "sistema",
-                    "lote_id": lote_id,
-                    "classe": ML_OFFLINE_RESULT,
-                    "acao": "revisar",
-                },
+            decision = self.decision_recorder.record_fallback(
+                lote_id,
+                ML_OFFLINE_RESULT,
             )
             return ItemClassification(
                 resultado=ML_OFFLINE_RESULT,
                 mensagem=review.reason,
                 review=review,
+                ml_decision=decision,
             )
 
         if self._is_high_confidence_action(
             prediction,
             "valido_automatico",
         ):
-            return ItemClassification(
+            return self._classification_with_prediction(
+                lote_id,
+                prediction,
                 resultado="APROVADO",
                 mensagem="Lote aprovado por decisão complementar de ML",
-                ml_prediction=prediction,
             )
         if self._is_high_confidence_action(
             prediction,
             "recusar_automatico",
         ):
-            return ItemClassification(
+            return self._classification_with_prediction(
+                lote_id,
+                prediction,
                 resultado="REPROVADO",
                 mensagem="Lote reprovado por decisão complementar de ML",
-                ml_prediction=prediction,
             )
 
-        return ItemClassification(
+        return self._classification_with_prediction(
+            lote_id,
+            prediction,
             resultado=deterministic_review.resultado,
             mensagem="Decisão de ML mantida em revisão humana",
             review=deterministic_review.review,
+        )
+
+    def _classification_with_prediction(
+        self,
+        lote_id: str,
+        prediction: MLPrediction,
+        *,
+        resultado: str,
+        mensagem: str,
+        review: HumanReviewRequired | None = None,
+    ) -> ItemClassification:
+        decision = self.decision_recorder.record_prediction(
+            lote_id,
+            prediction,
+            resultado,
+        )
+        return ItemClassification(
+            resultado=resultado,
+            mensagem=mensagem,
+            review=review,
             ml_prediction=prediction,
+            ml_decision=decision,
         )
 
     @staticmethod

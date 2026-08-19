@@ -14,12 +14,15 @@ from src.excel_reporting import (
     CLASSIFICACAO_VALIDO,
     CLASSIFICATION_SHEETS,
     DATA_SHEET_NAMES,
+    ML_DECISION_COLUMNS,
+    ML_DECISIONS_SHEET_NAME,
     REPORT_SHEET_NAMES,
     RegistroValidado,
     ValidationService,
     read_workbook,
     write_excel_report,
 )
+from src.ml_audit import MLDecisionAudit
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 REAL_WORKBOOK_PATH = PROJECT_ROOT / "dados_entrada" / "inspecao_lotes_10dias.xlsx"
@@ -125,10 +128,72 @@ def _load_generated_report(tmp_path, records):
     return output, load_workbook(output)
 
 
-def test_report_contains_exactly_eight_required_sheets(tmp_path, classified_records):
+def test_report_contains_exactly_nine_required_sheets(tmp_path, classified_records):
     _, workbook = _load_generated_report(tmp_path, classified_records)
 
     assert workbook.sheetnames == list(REPORT_SHEET_NAMES)
+    assert workbook.sheetnames[-1] == ML_DECISIONS_SHEET_NAME
+
+
+def test_ml_sheet_is_created_with_headers_when_there_are_no_decisions(
+    tmp_path,
+    classified_records,
+):
+    _, workbook = _load_generated_report(tmp_path, classified_records)
+    sheet = workbook[ML_DECISIONS_SHEET_NAME]
+
+    assert tuple(cell.value for cell in sheet[1]) == ML_DECISION_COLUMNS
+    assert sheet.max_row == 1
+    assert sheet.freeze_panes == "A2"
+
+
+def test_ml_sheet_uses_audit_records_and_preserves_numeric_fields(
+    tmp_path,
+    classified_records,
+):
+    from src.excel_reporting.report_writer import record_order_key
+    from src.operational_indicators import calcular_indicadores
+
+    output = tmp_path / "relatorio_ml.xlsx"
+    ordered = sorted(classified_records, key=record_order_key)
+    indicators = calcular_indicadores(ordered)
+    decisions = [
+        MLDecisionAudit(
+            timestamp="2026-08-19T12:30:00+00:00",
+            execution_id="exec-123",
+            bot_id="bot-ml",
+            lote_id="L001",
+            classe="valido_automatico",
+            probabilidade=0.91,
+            nivel_confianca="alta",
+            acao="valido_automatico",
+            resultado_aplicado="APROVADO",
+            latencia_ms=22.75,
+        ),
+        MLDecisionAudit(
+            timestamp="2026-08-19T12:31:00+00:00",
+            execution_id="exec-123",
+            bot_id="bot-ml",
+            lote_id="L002",
+            classe=None,
+            probabilidade=None,
+            nivel_confianca=None,
+            acao=None,
+            resultado_aplicado="REVISAO_ML_OFFLINE",
+            latencia_ms=None,
+        ),
+    ]
+
+    write_excel_report(ordered, indicators, output, ml_decisions=decisions)
+    workbook = load_workbook(output)
+    sheet = workbook[ML_DECISIONS_SHEET_NAME]
+
+    assert sheet.max_row == 3
+    assert sheet["D2"].value == "L001"
+    assert sheet["F2"].value == pytest.approx(0.91)
+    assert sheet["J2"].value == pytest.approx(22.75)
+    assert sheet["I3"].value == "REVISAO_ML_OFFLINE"
+    assert all(sheet.cell(3, column).value is None for column in (5, 6, 7, 8, 10))
 
 
 def test_all_and_classification_sheets_have_expected_records(

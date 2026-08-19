@@ -192,6 +192,8 @@ def test_confianca_alta_aplica_decisao_automatica(
 
     assert result.resultado == expected_result
     assert result.ml_prediction == ml_prediction
+    assert result.ml_decision is not None
+    assert result.ml_decision.resultado_aplicado == expected_result
     assert client.calls[0] == {
         "lote_id": "L001",
         "status_raw": "EM ANALISE",
@@ -231,6 +233,8 @@ def test_decisao_nao_automatica_permanece_em_revisao(
     assert result.resultado == "REVISAO"
     assert result.review is not None
     assert result.ml_prediction == ml_prediction
+    assert result.ml_decision is not None
+    assert result.ml_decision.resultado_aplicado == "REVISAO"
 
 
 def test_api_indisponivel_gera_revisao_ml_offline():
@@ -245,6 +249,10 @@ def test_api_indisponivel_gera_revisao_ml_offline():
     assert result.resultado == ML_OFFLINE_RESULT
     assert result.review is not None
     assert "revisão humana" in result.review.reason
+    assert result.ml_decision is not None
+    assert result.ml_decision.classe is None
+    assert result.ml_decision.probabilidade is None
+    assert result.ml_decision.latencia_ms is None
 
 
 class FakeQueue:
@@ -311,3 +319,5 @@ def test_performer_continua_apos_fallback_e_processa_item_seguinte():
     assert queue.system_errors == []
     assert len(queue.done) == 1
     assert queue.done[0][0]["lote_id"] == "L002"
+    assert len(result.ml_decisions) == 1
+    assert result.ml_decisions[0].resultado_aplicado == ML_OFFLINE_RESULT

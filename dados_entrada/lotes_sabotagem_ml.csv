@@ -1,0 +1,8 @@
+lote_id,produto,linha,turno,status,responsavel,data,observacao
+L001,Monitor,Linha A,Manha,PENDENTE,Equipe Demo,2026-08-19,
+L002,Teclado,Linha B,Tarde,EM ANALISE,Equipe Demo,2026-08-19,Conferir acabamento
+L001,Mouse,Linha C,Noite,PENDENTE,Equipe Demo,2026-08-19,
+L002,Notebook,Linha A,Manha,EM ANALISE,Equipe Demo,2026-08-19,Validar etiqueta
+L001,Impressora,Linha B,Tarde,PENDENTE,Equipe Demo,2026-08-19,
+L002,Scanner,Linha C,Noite,EM ANALISE,Equipe Demo,2026-08-19,Revisar embalagem
+L001,Webcam,Linha A,Manha,PENDENTE,Equipe Demo,2026-08-19,

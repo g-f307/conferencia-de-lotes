@@ -45,6 +45,14 @@ flowchart TB
         DISPATCHER[Dispatcher]
         PERFORMER[LotePerformer]
         RULES[RN01–RN07]
+        ITEM[ItemProcessor]
+        MLC[MLClient]
+        MLA[MLDecisionAudit]
+    end
+
+    subgraph ML
+        API[FastAPI /predict]
+        MODEL[Random Forest]
     end
 
     subgraph Web
@@ -73,7 +81,12 @@ flowchart TB
     DISPATCHER --> CLIENT
     CLIENT --> DP
     DP --> PERFORMER
-    PERFORMER --> RULES
+    PERFORMER --> ITEM
+    ITEM --> RULES
+    ITEM --> MLC
+    MLC --> API
+    API --> MODEL
+    ITEM --> MLA
     PERFORMER --> PW
     PW --> FORM
     FORM --> APP
@@ -81,6 +94,8 @@ flowchart TB
     PERFORMER --> CLIENT
     MAIN --> RESULT
     RESULT --> JSON
+    MLA --> RESULT
+    MLA --> LOG
     MAIN --> PDF
     MAIN --> LOG
     CLIENT --> TASK
@@ -103,6 +118,9 @@ flowchart TB
 | `src/vault_client.py` | Recuperar e validar a credencial com cache apenas em memória. |
 | `src/logging_config.py` | Produzir JSON Lines e sanitizar dados sensíveis. |
 | `src/models.py` | Padronizar o resumo serializável. |
+| `src/item_processor.py` | Consultar o ML somente após uma revisão determinística elegível e aplicar fallback seguro. |
+| `src/ml_client.py` | Isolar HTTP, timeout, contrato da resposta e circuit breaker. |
+| `src/ml_audit.py` | Registrar uma decisão tipada por consulta ou fallback e alimentar log e relatórios. |
 
 ## Page Objects
 
@@ -130,6 +148,8 @@ sequenceDiagram
     participant D as Dispatcher
     participant Q as DataPool
     participant P as Performer
+    participant I as ItemProcessor
+    participant ML as API ML
     participant F as FormPage
 
     R->>M: bot.py [server task_id token]
@@ -146,7 +166,18 @@ sequenceDiagram
     end
     loop enquanto houver item
         P->>Q: obter próximo item
-        P->>P: aplicar RN01–RN07
+        P->>I: processar item
+        I->>I: aplicar RN01–RN07 com OperationalItemClassifier
+        opt resultado ambíguo e ML habilitado
+            I->>ML: POST /predict
+            alt predição disponível
+                ML-->>I: classe, probabilidade, confiança e ação
+                I->>I: registrar decisão de ML
+            else API indisponível ou circuito aberto
+                I->>I: registrar REVISAO_ML_OFFLINE
+            end
+        end
+        I-->>P: resultado e MLDecisionAudit opcional
         P->>W: process_item(item, resultado, mensagem)
         W->>F: preencher_lote(dados)
         F->>F: aguardar confirmação
@@ -289,6 +320,7 @@ flowchart TB
         READER[WorkbookReader]
         VALIDATOR[ValidationService]
         REPORTER[ReportWriter]
+        AUDIT[MLDecisionAudit]
         MODELS[Modelos de Dados]
     end
 
@@ -308,6 +340,7 @@ flowchart TB
     VALIDATOR --> RN1_12
     RN1_12 --> MODELS
     VALIDATOR --> REPORTER
+    AUDIT --> REPORTER
     REPORTER --> OUT_XLSX
     CLI --> OUT_LOG
 ```
@@ -319,7 +352,13 @@ flowchart TB
 | `gerar_relatorio.py` | Entry point para a geração do relatório Excel. |
 | `src/excel_reporting/workbook_reader.py` | Ler planilhas e base de referência, consolidando os registros. |
 | `src/excel_reporting/validation_service.py` | Aplicar RN01–RN12, acumular violações e classificar os registros. |
-| `src/excel_reporting/report_writer.py` (`write_excel_report`) | Criar o workbook de saída com as abas segregadas e o dashboard. |
+| `src/excel_reporting/report_writer.py` (`write_excel_report`) | Criar o workbook de nove abas, incluindo `Decisões de ML` a partir da auditoria recebida. |
 | `src/excel_reporting/models.py` | Definir estruturas de dados (dataclasses) para o fluxo do relatório. |
+| `src/ml_audit.py` | Definir o contrato da auditoria compartilhada com o fluxo operacional. |
 
 A validação de negócios neste fluxo acumula os erros de todas as regras violadas e determina a classificação final seguindo a prioridade: Erro de Entrada > Divergência > Ambíguo > Válido.
+
+As oito abas originais e RN01–RN12 permanecem inalteradas. A nona aba recebe
+explicitamente `ml_decisions`; quando a coleção está vazia, somente os
+cabeçalhos são criados. O relatório nunca reconstrói decisões lendo o log e
+nunca repete uma chamada ao modelo.

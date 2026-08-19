@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
+import json
 from pathlib import Path
 
 import pytest
@@ -101,6 +102,54 @@ def test_cli_generates_report_and_prints_summary(tmp_path, capsys):
     assert log_path.is_file()
     assert "Relatorio gerado com sucesso" in captured.out
     assert "Total de registros: 250" in captured.out
+
+
+def test_cli_reads_ml_decisions_from_execution_summary(tmp_path, capsys):
+    output = tmp_path / "relatorio_cli_ml.xlsx"
+    log_path = tmp_path / "execucao_cli_ml.log"
+    summary_path = tmp_path / "resumo_execucao.json"
+    summary_path.write_text(
+        json.dumps(
+            {
+                "ml_decisions": [
+                    {
+                        "timestamp": "2026-08-19T12:30:00+00:00",
+                        "execution_id": "exec-cli",
+                        "bot_id": "bot-ml",
+                        "lote_id": "L001",
+                        "classe": "revisar",
+                        "probabilidade": 0.72,
+                        "nivel_confianca": "media",
+                        "acao": "revisar",
+                        "resultado_aplicado": "REVISAO",
+                        "latencia_ms": 18.4,
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    exit_code = main(
+        [
+            "--entrada",
+            str(REAL_WORKBOOK_PATH),
+            "--saida",
+            str(output),
+            "--log",
+            str(log_path),
+            "--decisoes-ml",
+            str(summary_path),
+        ]
+    )
+    captured = capsys.readouterr()
+    workbook = load_workbook(output)
+
+    assert exit_code == 0
+    assert workbook["Decisões de ML"].max_row == 2
+    assert workbook["Decisões de ML"]["D2"].value == "L001"
+    assert "Decisões de ML: 1" in captured.out
+    workbook.close()
 
 
 def test_cli_returns_error_for_invalid_input(tmp_path, capsys):
