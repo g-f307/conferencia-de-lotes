@@ -6,13 +6,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Protocol
 
-from src.logging_config import LOGGER_NAME
-from src.validation import (
-    HumanReviewRequired,
-    HumanReviewStatus,
-    ValidationError,
-    validate_lote,
+from src.item_processor import (
+    ML_OFFLINE_RESULT,
+    ItemClassification,
+    ItemProcessor,
 )
+from src.logging_config import LOGGER_NAME
+from src.validation import HumanReviewRequired
 from src.vault_client import ErpCredential, VaultClient
 
 
@@ -55,6 +55,13 @@ class QueueAdapter(Protocol):
         result: dict[str, str],
     ) -> None: ...
 
+    def mark_ml_offline_review(
+        self,
+        item: Mapping[str, object],
+        review: HumanReviewRequired,
+        result: dict[str, str],
+    ) -> None: ...
+
 
 class WebItemProcessor(Protocol):
     base_dir: Path
@@ -67,14 +74,6 @@ class WebItemProcessor(Protocol):
     ) -> Any: ...
 
     def capture_error(self, item: Mapping[str, object]) -> Path | None: ...
-
-
-@dataclass(frozen=True)
-class ItemClassification:
-    resultado: str
-    mensagem: str
-    validated: dict[str, str] = field(default_factory=dict)
-    review: HumanReviewRequired | None = None
 
 
 @dataclass
@@ -114,6 +113,7 @@ class LotePerformer:
         processing_delay_seconds: float = 0,
         sleep_fn: Callable[[float], None] = time.sleep,
         web_processor: WebItemProcessor | None = None,
+        item_processor: ItemProcessor | None = None,
     ) -> None:
         self.queue = queue
         self.reference_lotes = tuple(reference_lotes)
@@ -121,6 +121,9 @@ class LotePerformer:
         self.processing_delay_seconds = processing_delay_seconds
         self.sleep_fn = sleep_fn
         self.web_processor = web_processor
+        self.item_processor = item_processor or ItemProcessor(
+            self.reference_lotes,
+        )
 
     def run(self) -> PerformerResult:
         result = PerformerResult()
@@ -205,37 +208,7 @@ class LotePerformer:
         return item
 
     def _classify(self, item: Mapping[str, object]) -> ItemClassification:
-        try:
-            validated = validate_lote(item, self.reference_lotes)
-        except HumanReviewStatus as exc:
-            review = HumanReviewRequired(
-                lote_id=str(item.get("lote_id") or "").strip(),
-                status_original=exc.status,
-            )
-            return ItemClassification(
-                resultado="REVISAO",
-                mensagem=review.reason,
-                review=review,
-            )
-        except ValidationError as exc:
-            return ItemClassification(
-                resultado="DIVERGENCIA",
-                mensagem=str(exc),
-            )
-
-        if validated["status"] == "REPROVADO":
-            observation = validated.get("observacao") or "Divergência registrada"
-            return ItemClassification(
-                resultado="REPROVADO",
-                mensagem=f"Lote reprovado: {observation}",
-                validated=validated,
-            )
-
-        return ItemClassification(
-            resultado="APROVADO",
-            mensagem="Lote aprovado pelas regras RN01–RN07",
-            validated=validated,
-        )
+        return self.item_processor.process(item)
 
     def _process_web(
         self,
@@ -245,9 +218,14 @@ class LotePerformer:
         if self.web_processor is None:
             return "", classification.mensagem
 
+        web_resultado = (
+            "REVISAO"
+            if classification.resultado == ML_OFFLINE_RESULT
+            else classification.resultado
+        )
         web_result = self.web_processor.process_item(
             item,
-            classification.resultado,
+            web_resultado,
             classification.mensagem,
         )
         relative_path = self._relative_path(web_result.evidence_path)
@@ -319,6 +297,18 @@ class LotePerformer:
                 result.approved_items += 1
             else:
                 result.rejected_items += 1
+            if evidence:
+                result.evidences.append(evidence)
+            return
+
+        if classification.resultado == ML_OFFLINE_RESULT:
+            assert classification.review is not None
+            self.queue.mark_ml_offline_review(
+                item,
+                classification.review,
+                outputs,
+            )
+            result.human_reviews.append(classification.review)
             if evidence:
                 result.evidences.append(evidence)
             return

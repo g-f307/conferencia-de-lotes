@@ -76,6 +76,9 @@ class Settings:
     web_test_url: str
     web_artifact_dir: Path
     web_timeout_seconds: float | None
+    ml_enabled: bool
+    ml_api_url: str
+    ml_timeout_seconds: float | None
     runner_context: bool
 
     @classmethod
@@ -140,6 +143,12 @@ class Settings:
                 env.get("WEB_TIMEOUT_SECONDS"),
                 15.0,
             ),
+            ml_enabled=as_bool(env.get("ML_ENABLED"), False),
+            ml_api_url=env_or_default("ML_API_URL"),
+            ml_timeout_seconds=as_optional_float(
+                env.get("ML_TIMEOUT_SECONDS"),
+                3.0,
+            ),
             runner_context=runner_context,
         )
 
@@ -166,6 +175,30 @@ class Settings:
 
         if self.web_automation_enabled:
             self._validate_web_test_url()
+
+        if self.ml_enabled:
+            self._validate_ml_configuration()
+
+    def _validate_ml_configuration(self) -> None:
+        """Valida somente os parâmetros necessários quando ML está ativo."""
+        if not self.ml_api_url:
+            raise ValueError("ML_API_URL deve ser informado quando ML_ENABLED=true")
+        parsed_url = urlparse(self.ml_api_url)
+        if parsed_url.scheme not in {"http", "https"} or not parsed_url.netloc:
+            raise ValueError("ML_API_URL deve ser uma URL HTTP ou HTTPS válida")
+        if (
+            parsed_url.username
+            or parsed_url.password
+            or parsed_url.query
+            or parsed_url.fragment
+        ):
+            raise ValueError(
+                "ML_API_URL não deve conter credenciais ou parâmetros sensíveis"
+            )
+        if self.ml_timeout_seconds is None or self.ml_timeout_seconds <= 0:
+            raise ValueError(
+                "ML_TIMEOUT_SECONDS deve ser um número maior que zero"
+            )
 
     def _validate_web_test_url(self) -> None:
         """Garante que a página web e o timeout do Playwright sejam válidos."""

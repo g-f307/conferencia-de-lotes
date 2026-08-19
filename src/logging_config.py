@@ -15,6 +15,16 @@ LOGGER_NAME = "auditor_lotes"
 SENSITIVE_ASSIGNMENT_PATTERN = re.compile(
     r"(?i)\b(password|senha|token|api[_-]?key|chave)\b(\s*[:=]\s*)([^\s,;]+)"
 )
+STRUCTURED_DETAIL_FIELDS = (
+    "lote_id",
+    "classe",
+    "probabilidade",
+    "nivel_confianca",
+    "acao",
+    "latencia_ms",
+    "falhas_consecutivas",
+    "ml_error_type",
+)
 
 
 def sanitize_text(value: object, sensitive_values: tuple[str, ...] = ()) -> str:
@@ -96,6 +106,15 @@ class StructuredJsonFormatter(logging.Formatter):
                 exc_value,
                 self.sensitive_values,
             )
+
+        for field in STRUCTURED_DETAIL_FIELDS:
+            if hasattr(record, field):
+                value = getattr(record, field)
+                payload["detalhes"][field] = (
+                    sanitize_text(value, self.sensitive_values)
+                    if isinstance(value, str)
+                    else value
+                )
 
         return json.dumps(
             payload,

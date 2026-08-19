@@ -17,6 +17,7 @@ class FakeQueue:
         self.business_errors = []
         self.system_errors = []
         self.human_reviews = []
+        self.ml_offline_reviews = []
 
     def has_next(self):
         return bool(self.items)
@@ -35,6 +36,9 @@ class FakeQueue:
 
     def mark_human_review(self, item, review, result):
         self.human_reviews.append((item, review, result))
+
+    def mark_ml_offline_review(self, item, review, result):
+        self.ml_offline_reviews.append((item, review, result))
 
 
 class OrderedQueue(FakeQueue):

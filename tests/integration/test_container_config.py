@@ -51,6 +51,16 @@ def test_compose_mapeia_volumes_operacionais():
     assert "HOME: /tmp" in content
 
 
+def test_compose_conecta_bot_a_api_ml_por_nome_do_servico():
+    content = (PROJECT_ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+
+    assert "ML_ENABLED" in content
+    assert "ML_API_URL" in content
+    assert "http://api-ml:8000" in content
+    assert "ML_TIMEOUT_SECONDS" in content
+    assert "depends_on" not in content
+
+
 def test_ci_executa_smoke_test_playwright_na_imagem():
     content = (
         PROJECT_ROOT / ".github" / "workflows" / "ci.yml"
