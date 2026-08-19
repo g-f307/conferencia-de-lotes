@@ -108,6 +108,9 @@ flowchart LR
     INDICATORS --> MARKDOWN[resumo_executivo.md]
     TRAIN[train_ml_model.py] --> MODEL[classificador_lotes.pkl]
     MODEL --> MLAPI[FastAPI /predict e /health]
+    PERFORMER --> PROCESSOR[ItemProcessor]
+    PROCESSOR --> MLCLIENT[MLClient resiliente]
+    MLCLIENT --> MLAPI
 ```
 
 As responsabilidades principais são:
@@ -129,6 +132,8 @@ As responsabilidades principais são:
 | `src/markdown_reporting.py` | Transformar o mesmo objeto de indicadores no resumo gerencial em Markdown. |
 | `scripts/train_ml_model.py` | Gerar dados fictícios, treinar o Random Forest e serializar o pipeline. |
 | `api_ml/main.py` | Validar requisições e servir o classificador por `/predict` e `/health`. |
+| `src/item_processor.py` | Preservar a decisão determinística e complementar somente casos ambíguos com ML. |
+| `src/ml_client.py` | Consumir a API com timeout, validação de contrato, fallback e circuit breaker. |
 
 Detalhes e diagramas de sequência estão em
 [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md).
@@ -142,19 +147,42 @@ Detalhes e diagramas de sequência estão em
 5. Quando habilitada, a sessão Playwright inicia em modo headless e
    `LoginPage.fazer_login()` utiliza a credencial recuperada.
 6. O Dispatcher publica o CSV no DataPool.
-7. O Performer obtém um item e aplica RN01–RN07.
-8. `FormPage.preencher_lote()` apresenta o resultado do item na aplicação
+7. O Performer obtém um item e o classificador operacional aplica RN01–RN07,
+   preservando o contrato já utilizado pelo DataPool.
+8. O `ItemProcessor` recebe essa decisão pronta. Quando habilitado, consulta o
+   `MLClient` somente se a primeira camada tiver retornado `REVISAO` e o status
+   pertencer ao domínio da API. Itens determinísticos não chamam a API.
+9. Confiança alta pode aprovar ou reprovar automaticamente. Confiança média,
+   baixa ou classe de revisão mantém o item em revisão humana.
+10. Indisponibilidade da API gera `REVISAO_ML_OFFLINE`, finaliza o item com os
+    outputs de revisão sem `report_error` e não interrompe os itens seguintes.
+11. `FormPage.preencher_lote()` apresenta o resultado do item na aplicação
    controlada e aguarda a confirmação.
-9. Uma captura `aprovado-*`, `reprovado-*`, `divergencia-*` ou `erro-*` é
+12. Uma captura `aprovado-*`, `reprovado-*`, `divergencia-*` ou `erro-*` é
    produzida.
-10. `resultado_validacao`, `evidencia` e `mensagem_resultado` são atualizados no
+13. `resultado_validacao`, `evidencia` e `mensagem_resultado` são atualizados no
     DataPool antes de `report_done` ou `report_error`.
-11. O loop continua até o fim da fila.
-12. O resumo e o PDF são publicados, e a task é finalizada.
-13. Página, navegador e runtime Playwright são encerrados em `finally`.
+14. O loop continua até o fim da fila.
+15. O resumo e o PDF são publicados, e a task é finalizada.
+16. Página, navegador e runtime Playwright são encerrados em `finally`.
 
 Não existem `sleep()` para sincronização da interface. A camada web aguarda
 condições explícitas de visibilidade, disponibilidade e confirmação.
+
+### Fronteira das regras determinísticas
+
+O projeto possui dois contratos determinísticos deliberadamente separados:
+
+- o Performer e o DataPool mantêm RN01–RN07, inclusive os formatos e resultados
+  operacionais já homologados;
+- a consolidação analítica do Excel mantém RN01–RN12, incluindo contexto de aba,
+  duplicidade diária e data no formato `DD/MM/AAAA`.
+
+O `ItemProcessor` não reimplementa nenhuma dessas regras. Ele recebe uma
+`ItemClassification` de um `DeterministicClassifier` e complementa apenas o
+resultado `REVISAO`. O adaptador padrão é `OperationalItemClassifier`; outro
+fluxo pode injetar sua decisão determinística sem modificar o cliente ML. Essa
+fronteira evita alterar RN01–RN12 ou as classificações operacionais existentes.
 
 ### Fluxo analítico Excel e Markdown
 
@@ -358,6 +386,9 @@ compatível já instalado.
 | `PLAYWRIGHT_CHROMIUM_PATH` | Chromium explícito do Runner. | vazio |
 | `ML_MODEL_PATH` | Artefato carregado pela API de ML. | `models/classificador_lotes.pkl` |
 | `ML_API_PORT` | Porta da API de ML publicada pelo Docker Compose. | `8000` |
+| `ML_ENABLED` | Ativa a consulta de ML para casos ambíguos elegíveis. | `false` |
+| `ML_API_URL` | URL base da API consumida pelo bot. | `http://127.0.0.1:8000` local |
+| `ML_TIMEOUT_SECONDS` | Timeout explícito de cada chamada à API. | `3` |
 
 Caminhos relativos são resolvidos a partir da raiz do projeto. A senha do ERP
 não é uma variável de ambiente deste projeto.
@@ -435,6 +466,23 @@ mkdir -p logs relatorios artefatos
 docker compose build
 WEB_AUTOMATION_ENABLED=true docker compose run --rm conferencia-de-lotes
 ```
+
+Para validar o fluxo integrado com a API ML na rede do Compose:
+
+```bash
+docker compose up --detach --wait api-ml
+ML_ENABLED=true docker compose run --rm conferencia-de-lotes
+docker compose down
+```
+
+O bot acessa `http://api-ml:8000` pelo nome do serviço. O circuit breaker abre
+após cinco falhas consecutivas; enquanto estiver aberto, não há novas chamadas
+de rede. Uma chamada bem-sucedida reinicia o contador, e o reinício do processo
+restaura o estado inicial. O método `reset_circuit_breaker()` permite um reset
+controlado em testes e operação.
+
+Não há dependência obrigatória entre os serviços no Compose: com
+`ML_ENABLED=false`, o bot inicia e conclui mesmo que a API esteja parada.
 
 Em Linux, quando o usuário do host não possui UID/GID `1000`, exporte os IDs
 antes da execução para preservar a propriedade dos arquivos:
@@ -599,12 +647,21 @@ Eventos relevantes:
 | `INICIO_ITEM` / `RESULTADO_ITEM` | Delimitam o processamento do lote. |
 | `EVIDENCIA_ITEM` | Relaciona a captura ao item. |
 | `ERRO_WEB_ITEM` | Registra falha isolada da interação web. |
+| `DECISAO_ML` | Registra lote, classe, probabilidade, confiança, ação e latência. |
+| `FALHA_COMUNICACAO_ML` | Registra uma falha esperada sem traceback e aciona o fallback. |
+| `CIRCUIT_BREAKER_ML` | Registra uma única vez a abertura após cinco falhas consecutivas. |
+| `REVISAO_ML_OFFLINE` | Encaminha o item para revisão humana sem erro técnico. |
 | `PUBLICACAO_RESULTADOS` | Confirma JSON e PDF. |
 | `ENCERRAMENTO` | Confirma sucesso operacional. |
 
 `resumo_execucao.json` inclui total, aprovados, divergências, revisões,
 erros técnicos e a lista de caminhos das evidências. O PDF e o JSON são
 publicados como artefatos da task.
+
+Os campos de ML são propriedades estruturadas dentro de `detalhes`, e não
+texto concatenado na mensagem. O payload enviado à API contém somente
+`lote_id`, `status_raw`, `turno` e o booleano `tem_obs`; o conteúdo da
+observação não é transmitido nem registrado.
 
 O fluxo analítico grava `logs/execucao_relatorio.log` em formato `chave=valor`.
 Além das contagens e da duração, o arquivo registra percentuais, taxas, código,

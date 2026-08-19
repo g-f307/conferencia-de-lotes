@@ -6,6 +6,7 @@ import pytest
 from src.config import Settings
 from src.logging_config import configure_logging
 from src.main import run, save_execution_report
+from src.ml_client import MLPrediction
 from src.models import ExecutionResult
 from src.vault_client import VaultClient
 
@@ -30,6 +31,7 @@ class FakeMaestroClient:
         self.business_errors = []
         self.system_errors = []
         self.human_reviews = []
+        self.ml_offline_reviews = []
         self.artifacts = []
         self.finished_tasks = []
 
@@ -53,6 +55,10 @@ class FakeMaestroClient:
     def mark_human_review(self, item, review, result):
         item.update(result)
         self.human_reviews.append((item, review, result))
+
+    def mark_ml_offline_review(self, item, review, result):
+        item.update(result)
+        self.ml_offline_reviews.append((item, review, result))
 
     def send_start_alert(self):
         self.info_alerts.append("Iniciando auditoria de acessos")
@@ -106,6 +112,16 @@ class FakeVaultProvider:
 class BrokenVaultProvider:
     def get_credential(self, label):
         raise RuntimeError(f"Credencial {label} nao contem username")
+
+
+class FakeMLClient:
+    def __init__(self, responses):
+        self.responses = list(responses)
+        self.calls = []
+
+    def classificar(self, **payload):
+        self.calls.append(payload)
+        return self.responses.pop(0)
 
 
 def install_fake_playwright_session(monkeypatch):
@@ -329,6 +345,65 @@ def test_run_consumindo_datapool_e_publicando_resumo(tmp_path):
         for line in settings.log_file.read_text(encoding="utf-8").splitlines()
     ]
     assert "PUBLICACAO_RESULTADOS" in log_events
+
+
+def test_run_integra_ml_sem_interromper_fluxo_quando_api_falha(tmp_path):
+    settings = replace(
+        settings_for(tmp_path),
+        ml_enabled=True,
+        ml_api_url="http://api-ml:8000",
+        ml_timeout_seconds=1,
+    )
+    settings.input_csv.write_text(
+        "lote_id,produto,linha,turno,status,responsavel,data,observacao\n"
+        "L001,Monitor,Linha A,Manha,APROVADO,Marcelo,2026-08-19,\n"
+        "L002,Monitor,Linha A,Manha,PENDENTE,Marcelo,2026-08-19,Conferir\n"
+        "L003,Monitor,Linha A,Tarde,EM ANALISE,Marcelo,2026-08-19,\n",
+        encoding="utf-8",
+    )
+    client = FakeMaestroClient([])
+    vault = VaultClient(FakeVaultProvider())
+    ml_client = FakeMLClient(
+        [
+            MLPrediction(
+                classe="valido_automatico",
+                probabilidade=0.92,
+                nivel_confianca="alta",
+                acao="valido_automatico",
+                latencia_ms=8.5,
+            ),
+            None,
+        ]
+    )
+
+    result = run(
+        settings=settings,
+        maestro_client=client,
+        vault_client=vault,
+        reference_lotes={"L001", "L002", "L003"},
+        ml_client=ml_client,
+    )
+
+    assert result.status == "PARTIALLY_COMPLETED"
+    assert result.total_items == 3
+    assert result.processed_items == 2
+    assert result.failed_items == 0
+    assert result.ambiguous_items == 1
+    assert result.technical_errors == 0
+    assert [call["lote_id"] for call in ml_client.calls] == ["L002", "L003"]
+    assert [output[1]["resultado_validacao"] for output in client.done] == [
+        "APROVADO",
+        "APROVADO",
+    ]
+    assert client.human_reviews == []
+    assert len(client.ml_offline_reviews) == 1
+    assert (
+        client.ml_offline_reviews[0][2]["resultado_validacao"]
+        == "REVISAO_ML_OFFLINE"
+    )
+    assert client.business_errors == []
+    assert client.system_errors == []
+    assert client.finished_tasks[0][0] == "SUCCESS"
 
 
 def test_run_falha_quando_next_da_fila_quebra(tmp_path):

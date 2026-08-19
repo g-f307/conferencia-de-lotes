@@ -60,6 +60,14 @@ class MaestroGateway(Protocol):
     ) -> None:
         ...
 
+    def mark_ml_offline_review(
+        self,
+        item: Any,
+        review: HumanReviewRequired,
+        result: dict[str, str],
+    ) -> None:
+        ...
+
     def send_info_alert(self, message: str) -> None:
         ...
 
@@ -126,6 +134,15 @@ class InMemoryMaestroGateway:
         self.system_errors.append((item, error))
 
     def mark_human_review(
+        self,
+        item: Any,
+        review: HumanReviewRequired,
+        result: dict[str, str],
+    ) -> None:
+        self._apply_outputs(item, result)
+        self.human_reviews.append((item, review))
+
+    def mark_ml_offline_review(
         self,
         item: Any,
         review: HumanReviewRequired,
@@ -339,6 +356,17 @@ class BotCityMaestroGateway:
             finish_message=review.reason,
         )
 
+    def mark_ml_offline_review(
+        self,
+        item: Any,
+        review: HumanReviewRequired,
+        result: dict[str, str],
+    ) -> None:
+        """Persiste o fallback como revisão, sem classificá-lo como erro."""
+        entry = self._entry_from_item(item)
+        self._apply_outputs(entry, result)
+        entry.report_done(finish_message=review.reason)
+
     def send_info_alert(self, message: str) -> None:
         self.sdk.alert(
             task_id=self._require_task_id(),
@@ -442,6 +470,15 @@ class MaestroClient:
     ) -> None:
         """Finaliza um item separado para revisão humana."""
         self.gateway.mark_human_review(item, review, result)
+
+    def mark_ml_offline_review(
+        self,
+        item: Any,
+        review: HumanReviewRequired,
+        result: dict[str, str],
+    ) -> None:
+        """Finaliza fallback de ML sem reportar erro técnico ou de negócio."""
+        self.gateway.mark_ml_offline_review(item, review, result)
 
     def send_error_alert(self, message: str) -> None:
         """Implementa o contrato AlertGateway definido no núcleo."""

@@ -302,3 +302,94 @@ def test_maestro_ativado_exige_vault(monkeypatch, tmp_path: Path):
     monkeypatch.setenv("VAULT_ENABLED", "false")
     with pytest.raises(ValueError, match="VAULT_ENABLED"):
         Settings.from_env(tmp_path).validate()
+
+
+def test_settings_mantem_ml_desabilitado_por_padrao(monkeypatch, tmp_path: Path):
+    monkeypatch.delenv("ML_ENABLED", raising=False)
+    monkeypatch.delenv("ML_API_URL", raising=False)
+    monkeypatch.delenv("ML_TIMEOUT_SECONDS", raising=False)
+
+    settings = Settings.from_env(tmp_path)
+
+    assert settings.ml_enabled is False
+    assert settings.ml_api_url == ""
+    assert settings.ml_timeout_seconds == 3
+    settings.validate()
+
+
+def test_settings_carrega_e_valida_integracao_ml(monkeypatch, tmp_path: Path):
+    monkeypatch.setenv("ML_ENABLED", "true")
+    monkeypatch.setenv("ML_API_URL", "http://api-ml:8000")
+    monkeypatch.setenv("ML_TIMEOUT_SECONDS", "2.5")
+
+    settings = Settings.from_env(tmp_path)
+
+    assert settings.ml_enabled is True
+    assert settings.ml_api_url == "http://api-ml:8000"
+    assert settings.ml_timeout_seconds == 2.5
+    settings.validate()
+
+
+def test_settings_exige_url_quando_ml_esta_habilitado(monkeypatch, tmp_path: Path):
+    monkeypatch.setenv("ML_ENABLED", "true")
+    monkeypatch.setenv("ML_API_URL", "")
+
+    with pytest.raises(ValueError, match="ML_API_URL deve ser informado"):
+        Settings.from_env(tmp_path).validate()
+
+
+@pytest.mark.parametrize("invalid_url", ["api-ml:8000", "ftp://api-ml/modelo"])
+def test_settings_rejeita_url_ml_invalida(
+    monkeypatch,
+    tmp_path: Path,
+    invalid_url: str,
+):
+    monkeypatch.setenv("ML_ENABLED", "true")
+    monkeypatch.setenv("ML_API_URL", invalid_url)
+
+    with pytest.raises(ValueError, match="URL HTTP ou HTTPS válida"):
+        Settings.from_env(tmp_path).validate()
+
+
+@pytest.mark.parametrize(
+    "sensitive_url",
+    [
+        "http://usuario:senha@api-ml:8000",
+        "http://api-ml:8000?token=ficticio",
+    ],
+)
+def test_settings_rejeita_credencial_ou_parametro_na_url_ml(
+    monkeypatch,
+    tmp_path: Path,
+    sensitive_url: str,
+):
+    monkeypatch.setenv("ML_ENABLED", "true")
+    monkeypatch.setenv("ML_API_URL", sensitive_url)
+
+    with pytest.raises(ValueError, match="não deve conter credenciais"):
+        Settings.from_env(tmp_path).validate()
+
+
+@pytest.mark.parametrize("invalid_timeout", ["0", "-1", "abc", ""])
+def test_settings_rejeita_timeout_ml_invalido_quando_habilitado(
+    monkeypatch,
+    tmp_path: Path,
+    invalid_timeout: str,
+):
+    monkeypatch.setenv("ML_ENABLED", "true")
+    monkeypatch.setenv("ML_API_URL", "http://api-ml:8000")
+    monkeypatch.setenv("ML_TIMEOUT_SECONDS", invalid_timeout)
+
+    with pytest.raises(ValueError, match="ML_TIMEOUT_SECONDS"):
+        Settings.from_env(tmp_path).validate()
+
+
+def test_settings_ignora_configuracao_ml_invalida_quando_desabilitado(
+    monkeypatch,
+    tmp_path: Path,
+):
+    monkeypatch.setenv("ML_ENABLED", "false")
+    monkeypatch.setenv("ML_API_URL", "invalida")
+    monkeypatch.setenv("ML_TIMEOUT_SECONDS", "invalido")
+
+    Settings.from_env(tmp_path).validate()

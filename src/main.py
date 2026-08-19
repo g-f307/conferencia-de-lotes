@@ -11,8 +11,10 @@ from typing import Any, Iterable, Protocol
 from src.bot import LotePerformer, PerformerResult
 from src.config import Settings
 from src.dispatcher import dispatch_csv
+from src.item_processor import ItemProcessor
 from src.logging_config import configure_logging
 from src.maestro_client import MaestroClient
+from src.ml_client import MLClient
 from src.models import ExecutionResult
 from src.vault_client import BotCityVaultProvider, VaultClient
 from src.web_automation import PlaywrightWebSession, describe_playwright_environment
@@ -48,6 +50,13 @@ class SummaryGateway(AlertGateway, Protocol):
     ) -> None: ...
 
     def mark_human_review(
+        self,
+        item: dict[str, object],
+        review: Any,
+        result: dict[str, str],
+    ) -> None: ...
+
+    def mark_ml_offline_review(
         self,
         item: dict[str, object],
         review: Any,
@@ -190,6 +199,7 @@ def run(
     vault_client: VaultClient | None = None,
     reference_lotes: Iterable[str] | None = None,
     logger: logging.Logger | None = None,
+    ml_client: MLClient | None = None,
 ) -> ExecutionResult:
     """Executa o ciclo principal: valida ambiente, consome DataPool e reporta."""
     current_settings = settings or Settings.from_env()
@@ -301,12 +311,28 @@ def run(
                 "usuario": "sistema",
             },
         )
+        current_reference_lotes = tuple(
+            reference_lotes or current_settings.reference_lotes
+        )
+        current_ml_client = ml_client
+        if current_settings.ml_enabled and current_ml_client is None:
+            assert current_settings.ml_timeout_seconds is not None
+            current_ml_client = MLClient(
+                current_settings.ml_api_url,
+                current_settings.ml_timeout_seconds,
+            )
+        item_processor = ItemProcessor(
+            current_reference_lotes,
+            ml_enabled=current_settings.ml_enabled,
+            ml_client=current_ml_client,
+        )
         performer = LotePerformer(
             client,
-            reference_lotes or current_settings.reference_lotes,
+            current_reference_lotes,
             current_vault_client,
             processing_delay_seconds=current_settings.processing_delay_seconds,
             web_processor=web_session,
+            item_processor=item_processor,
         )
         result = execution_result_from_performer(performer.run())
         summary = result.to_dict()

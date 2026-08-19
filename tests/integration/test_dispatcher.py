@@ -32,6 +32,7 @@ class FakeGateway:
         self.business_errors = []
         self.system_errors = []
         self.human_reviews = []
+        self.ml_offline_reviews = []
 
     def create_datapool_entry(self, datapool_label, data):
         self.created.append((datapool_label, data))
@@ -66,6 +67,10 @@ class FakeGateway:
     def mark_human_review(self, item, review, result):
         item.update(result)
         self.human_reviews.append((item, review, result))
+
+    def mark_ml_offline_review(self, item, review, result):
+        item.update(result)
+        self.ml_offline_reviews.append((item, review, result))
 
 
 def settings_for(tmp_path):
@@ -452,6 +457,11 @@ def test_gateway_real_finaliza_itens_com_done_e_erros():
         "evidencia": "artefatos/divergencia-LG-1.png",
         "mensagem_resultado": "revisao humana",
     }
+    offline_review = {
+        "resultado_validacao": "REVISAO_ML_OFFLINE",
+        "evidencia": "artefatos/divergencia-LG-1.png",
+        "mensagem_resultado": "API ML indisponivel",
+    }
 
     gateway.mark_done(item, approved)
     assert item.values == {"lote_id": "LG-1", **approved}
@@ -465,8 +475,21 @@ def test_gateway_real_finaliza_itens_com_done_e_erros():
         review,
     )
     assert item.values == {"lote_id": "LG-1", **review}
+    gateway.mark_ml_offline_review(
+        item,
+        HumanReviewRequired(
+            lote_id="LG-1",
+            status_original="EM ANALISE",
+            reason="API ML indisponivel",
+        ),
+        offline_review,
+    )
+    assert item.values == {"lote_id": "LG-1", **offline_review}
 
-    assert item.done_messages == ["Lote processado com sucesso"]
+    assert item.done_messages == [
+        "Lote processado com sucesso",
+        "API ML indisponivel",
+    ]
     assert item.error_reports == [
         ("BUSINESS", "campo obrigatorio vazio"),
         ("SYSTEM", "Maestro indisponivel"),
