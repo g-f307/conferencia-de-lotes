@@ -3,13 +3,12 @@ from dataclasses import replace
 
 import pytest
 
+from src.classificador_divergencia import ResultadoClassificacaoDivergencia
 from src.config import Settings
 from src.logging_config import configure_logging
 from src.main import run, save_execution_report
-from src.ml_client import MLPrediction
 from src.models import ExecutionResult
 from src.vault_client import VaultClient
-
 
 pytestmark = pytest.mark.integration
 
@@ -114,13 +113,13 @@ class BrokenVaultProvider:
         raise RuntimeError(f"Credencial {label} nao contem username")
 
 
-class FakeMLClient:
+class FakeDivergenceClassifier:
     def __init__(self, responses):
         self.responses = list(responses)
         self.calls = []
 
-    def classificar(self, **payload):
-        self.calls.append(payload)
+    def classificar(self, observacao):
+        self.calls.append(observacao)
         return self.responses.pop(0)
 
 
@@ -363,16 +362,22 @@ def test_run_integra_ml_sem_interromper_fluxo_quando_api_falha(tmp_path):
     )
     client = FakeMaestroClient([])
     vault = VaultClient(FakeVaultProvider())
-    ml_client = FakeMLClient(
+    divergence_classifier = FakeDivergenceClassifier(
         [
-            MLPrediction(
-                classe="valido_automatico",
-                probabilidade=0.92,
-                nivel_confianca="alta",
-                acao="valido_automatico",
+            ResultadoClassificacaoDivergencia(
+                causa_provavel="falha_de_calibracao",
+                confianca_ml=0.92,
+                origem_decisao="ml",
+                motivo_fallback=None,
                 latencia_ms=8.5,
             ),
-            None,
+            ResultadoClassificacaoDivergencia(
+                causa_provavel="nao_classificado",
+                confianca_ml=None,
+                origem_decisao="fallback",
+                motivo_fallback="observacao_ausente",
+                latencia_ms=0.0,
+            ),
         ]
     )
 
@@ -381,34 +386,33 @@ def test_run_integra_ml_sem_interromper_fluxo_quando_api_falha(tmp_path):
         maestro_client=client,
         vault_client=vault,
         reference_lotes={"L001", "L002", "L003"},
-        ml_client=ml_client,
+        divergence_classifier=divergence_classifier,
     )
 
     assert result.status == "PARTIALLY_COMPLETED"
     assert result.total_items == 3
-    assert result.processed_items == 2
+    assert result.processed_items == 1
     assert result.failed_items == 0
-    assert result.ambiguous_items == 1
+    assert result.ambiguous_items == 2
     assert result.technical_errors == 0
-    assert [call["lote_id"] for call in ml_client.calls] == ["L002", "L003"]
+    assert divergence_classifier.calls == ["Conferir", ""]
     assert [output[1]["resultado_validacao"] for output in client.done] == [
-        "APROVADO",
-        "APROVADO",
+        "APROVADO"
     ]
-    assert client.human_reviews == []
-    assert len(client.ml_offline_reviews) == 1
-    assert (
-        client.ml_offline_reviews[0][2]["resultado_validacao"]
-        == "REVISAO_ML_OFFLINE"
+    assert len(client.human_reviews) == 2
+    assert all(
+        review[2]["resultado_validacao"] == "REVISAO"
+        for review in client.human_reviews
     )
+    assert client.ml_offline_reviews == []
     assert client.business_errors == []
     assert client.system_errors == []
     assert client.finished_tasks[0][0] == "SUCCESS"
     assert len(result.ml_decisions) == 2
     assert result.ml_decisions[0]["bot_id"] == settings.bot_id
     assert result.ml_decisions[0]["execution_id"] == settings.execution_id
-    assert result.ml_decisions[0]["resultado_aplicado"] == "APROVADO"
-    assert result.ml_decisions[1]["resultado_aplicado"] == "REVISAO_ML_OFFLINE"
+    assert result.ml_decisions[0]["resultado_aplicado"] == "REVISAO"
+    assert result.ml_decisions[1]["resultado_aplicado"] == "REVISAO"
     assert client.artifacts[0][2]["ml_decisions"] == result.ml_decisions
 
 
