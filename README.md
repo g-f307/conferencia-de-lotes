@@ -106,7 +106,7 @@ flowchart LR
     INDICATORS --> EXCEL[Dashboard Excel com 9 abas]
     INDICATORS --> MARKDOWN[resumo_executivo.md]
     TRAIN[train_ml_model.py] --> MODEL[classificador_lotes.pkl]
-    MODEL --> MLAPI[FastAPI /predict e /health]
+    MODEL --> MLAPI[FastAPI /predict, /predict-divergencia e /health]
     PERFORMER --> PROCESSOR[ItemProcessor]
     PROCESSOR --> RULES[OperationalItemClassifier / RN01–RN07]
     PROCESSOR --> MLCLIENT[MLClient resiliente]
@@ -135,7 +135,7 @@ As responsabilidades principais são:
 | `src/excel_reporting/report_writer.py` | Transformar registros validados, indicadores e decisões de ML no workbook executivo de 9 abas. |
 | `src/markdown_reporting.py` | Transformar o mesmo objeto de indicadores no resumo gerencial em Markdown. |
 | `scripts/train_ml_model.py` | Gerar dados fictícios, treinar o Random Forest e serializar o pipeline. |
-| `api_ml/main.py` | Validar requisições e servir o classificador por `/predict` e `/health`. |
+| `api_ml/main.py` | Servir `/predict`, `/predict-divergencia` e `/health`, com contrato textual substituível por modelo ou mock controlado. |
 | `src/item_processor.py` | Preservar a decisão determinística e complementar somente casos ambíguos com ML. |
 | `src/ml_client.py` | Consumir a API com timeout, validação de contrato, fallback e circuit breaker. |
 | `src/ml_audit.py` | Criar a fonte tipada compartilhada pelo log, resumo JSON e aba `Decisões de ML`. |
@@ -567,7 +567,16 @@ curl --fail http://127.0.0.1:8000/health
 curl --fail --request POST http://127.0.0.1:8000/predict \
   --header 'Content-Type: application/json' \
   --data '{"lote_id":"L001","status_raw":"EM ANALISE","turno":"A","tem_obs":true}'
+
+curl --fail --request POST http://127.0.0.1:8000/predict-divergencia \
+  --header 'Content-Type: application/json' \
+  --data '{"observacao":"digitei errado o codigo do lote"}'
 ```
+
+`/predict-divergencia` recebe texto livre e devolve `causa_provavel` e
+`confianca_ml`. A implementação padrão é um classificador controlável por
+palavras-chave, permitido pelo S10-B, e o contrato pode receber um modelo textual
+sem alterar `ClassificadorDivergencia` nem o restante do pipeline.
 
 `status_raw` aceita apenas `EM ANALISE`, `AJUSTE DE LINHA`, `PENDENTE` ou
 `ESPECIFICACAO EM REVISAO`. `turno` aceita `A`, `B`, `C`, `Manhã`, `Tarde` ou
