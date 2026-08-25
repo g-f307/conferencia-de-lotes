@@ -9,7 +9,16 @@ import httpx
 import pytest
 
 from api_ml import main as api_module
-from api_ml.main import create_app, resolve_confidence, resolve_model_path
+from api_ml.main import (
+    classify_divergence_observation,
+    create_app,
+    resolve_confidence,
+    resolve_model_path,
+)
+from src.classificador_divergencia import (
+    ClassificadorDivergencia,
+    ProvedorHTTPClassificacaoDivergencia,
+)
 
 
 pytestmark = pytest.mark.integration
@@ -122,6 +131,129 @@ def test_predict_rejects_status_outside_training_domain():
     detail = response.json()["detail"][0]
     assert detail["loc"][-1] == "status_raw"
     assert "status_raw deve ser um de" in detail["msg"]
+
+
+@pytest.mark.parametrize(
+    ("observacao", "causa_esperada"),
+    [
+        ("digitei errado o codigo", "erro_digitacao"),
+        ("faltou peça na doca 3", "falta_peca"),
+        ("lançamento duplicado por engano", "duplicidade"),
+        ("produto chegou amassado", "avaria"),
+        ("etiqueta com cadastro incorreto", "erro_cadastro"),
+    ],
+)
+def test_predict_divergencia_classifica_texto_livre(
+    observacao: str,
+    causa_esperada: str,
+):
+    response = run_async(
+        request(
+            create_app(MODEL_PATH),
+            "POST",
+            "/predict-divergencia",
+            json={"observacao": observacao},
+        )
+    )
+
+    assert response.status_code == 200
+    assert response.json()["causa_provavel"] == causa_esperada
+    assert response.json()["confianca_ml"] >= 0.85
+
+
+def test_predict_divergencia_retorna_nao_classificado_sem_indicio():
+    response = run_async(
+        request(
+            create_app(MODEL_PATH),
+            "POST",
+            "/predict-divergencia",
+            json={"observacao": "verificar situação com o supervisor"},
+        )
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "causa_provavel": "nao_classificado",
+        "confianca_ml": 0.0,
+    }
+
+
+def test_predict_divergencia_rejeita_observacao_vazia():
+    response = run_async(
+        request(
+            create_app(MODEL_PATH),
+            "POST",
+            "/predict-divergencia",
+            json={"observacao": "   "},
+        )
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["loc"][-1] == "observacao"
+
+
+def test_predict_divergencia_aceita_classificador_controlado():
+    app = create_app(
+        MODEL_PATH,
+        divergence_classifier=lambda _observacao: ("causa_controlada", 0.97),
+    )
+
+    response = run_async(
+        request(
+            app,
+            "POST",
+            "/predict-divergencia",
+            json={"observacao": "qualquer texto"},
+        )
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "causa_provavel": "causa_controlada",
+        "confianca_ml": 0.97,
+    }
+
+
+def test_classificador_divergencia_consume_api_local_sem_404():
+    app = create_app(MODEL_PATH)
+
+    def transporte(_url: str, payload: bytes, _timeout: float) -> bytes:
+        response = run_async(
+            request(
+                app,
+                "POST",
+                "/predict-divergencia",
+                content=payload,
+                headers={"Content-Type": "application/json"},
+            )
+        )
+        assert response.status_code == 200
+        return response.content
+
+    provedor = ProvedorHTTPClassificacaoDivergencia(
+        "http://api-ml:8000",
+        transport=transporte,
+    )
+    classificador = ClassificadorDivergencia(
+        enabled=True,
+        confianca_minima=0.85,
+        timeout_seconds=0.5,
+        provedor=provedor,
+    )
+
+    resultado = classificador.classificar("digitei errado o código")
+
+    assert resultado.causa_provavel == "erro_digitacao"
+    assert resultado.origem_decisao == "ml"
+    assert resultado.motivo_fallback is None
+
+
+def test_classificador_textual_controlado_cobre_exemplos_do_enunciado():
+    assert classify_divergence_observation("digitei errado o codigo")[0] == (
+        "erro_digitacao"
+    )
+    assert classify_divergence_observation("faltou peça na doca 3")[0] == "falta_peca"
+    assert classify_divergence_observation("duplicado por engano")[0] == "duplicidade"
 
 
 def test_health_reports_loaded_model():

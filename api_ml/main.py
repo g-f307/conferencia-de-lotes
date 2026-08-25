@@ -7,7 +7,7 @@ import logging
 import os
 from pathlib import Path
 import re
-from typing import Any, Literal, cast
+from typing import Any, Callable, Literal, cast
 import unicodedata
 
 from fastapi import FastAPI, HTTPException
@@ -51,6 +51,35 @@ RecommendedAction = Literal[
 PREDICTION_CLASSES = frozenset(
     {"valido_automatico", "revisar", "recusar_automatico"}
 )
+DIVERGENCE_CAUSE_KEYWORDS = (
+    (
+        "erro_digitacao",
+        (
+            "DIGITEI",
+            "DIGITACAO",
+            "CODIGO ERRADO",
+            "LANCEI ERRADO",
+            "INFORMADO ERRADO",
+        ),
+    ),
+    (
+        "falta_peca",
+        ("FALTOU", "FALTA DE PECA", "PECA AUSENTE", "ITEM AUSENTE"),
+    ),
+    (
+        "duplicidade",
+        ("DUPLICADO", "DUPLICIDADE", "DUAS VEZES", "REPETIDO"),
+    ),
+    (
+        "avaria",
+        ("AVARIA", "DANIFICADO", "QUEBRADO", "AMASSADO"),
+    ),
+    (
+        "erro_cadastro",
+        ("CADASTRO", "ETIQUETA", "REFERENCIA INCORRETA"),
+    ),
+)
+DivergenceClassifier = Callable[[str], tuple[str, float]]
 
 
 def normalize_text(value: object) -> str:
@@ -110,6 +139,27 @@ class PredictionOutput(BaseModel):
     acao: RecommendedAction
 
 
+class DivergenceInput(BaseModel):
+    """Texto livre usado exclusivamente para sugerir a causa da divergência."""
+
+    observacao: str = Field(min_length=1, max_length=2000)
+
+    @field_validator("observacao")
+    @classmethod
+    def validate_observacao(cls, value: str) -> str:
+        texto = value.strip()
+        if not texto:
+            raise ValueError("observacao não pode ser vazia")
+        return texto
+
+
+class DivergencePredictionOutput(BaseModel):
+    """Contrato consumido por ClassificadorDivergencia."""
+
+    causa_provavel: str = Field(min_length=1, max_length=100)
+    confianca_ml: float = Field(ge=0.0, le=1.0)
+
+
 class HealthOutput(BaseModel):
     status: Literal["healthy", "unhealthy"]
     model_loaded: bool
@@ -126,6 +176,27 @@ def resolve_confidence(
     if probability >= 0.65:
         return "media", "revisar"
     return "baixa", "revisar_prioritario"
+
+
+def classify_divergence_observation(observacao: str) -> tuple[str, float]:
+    """Mock controlável que sugere causas a partir do conteúdo da observação.
+
+    O contrato permite substituir esta implementação por um modelo textual sem
+    alterar o endpoint nem o consumidor. A decisão de negócio não usa o retorno.
+    """
+    texto = normalize_text(observacao)
+    scores = [
+        (
+            sum(keyword in texto for keyword in keywords),
+            cause,
+        )
+        for cause, keywords in DIVERGENCE_CAUSE_KEYWORDS
+    ]
+    score, cause = max(scores, key=lambda candidate: candidate[0])
+    if score == 0:
+        return "nao_classificado", 0.0
+    confidence = min(0.99, 0.86 + (score - 1) * 0.04)
+    return cause, round(confidence, 6)
 
 
 def resolve_model_path(project_root: Path | None = None) -> Path:
@@ -152,7 +223,11 @@ def load_model(model_path: Path) -> Any:
     return model
 
 
-def create_app(model_path: Path | None = None) -> FastAPI:
+def create_app(
+    model_path: Path | None = None,
+    *,
+    divergence_classifier: DivergenceClassifier = classify_divergence_observation,
+) -> FastAPI:
     """Cria a aplicacao e carrega o modelo uma unica vez no lifespan."""
 
     @asynccontextmanager
@@ -215,6 +290,25 @@ def create_app(model_path: Path | None = None) -> FastAPI:
             raise HTTPException(
                 status_code=500,
                 detail="Falha ao executar a predicao",
+            ) from exc
+
+    @application.post(
+        "/predict-divergencia",
+        response_model=DivergencePredictionOutput,
+    )
+    async def predict_divergencia(
+        payload: DivergenceInput,
+    ) -> DivergencePredictionOutput:
+        try:
+            causa, confianca = divergence_classifier(payload.observacao)
+            return DivergencePredictionOutput(
+                causa_provavel=causa,
+                confianca_ml=confianca,
+            )
+        except Exception as exc:
+            raise HTTPException(
+                status_code=500,
+                detail="Falha ao classificar a observacao",
             ) from exc
 
     return application

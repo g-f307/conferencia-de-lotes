@@ -45,6 +45,7 @@ services:
       ML_ENABLED: "${ML_ENABLED:-false}"
       ML_API_URL: http://api-ml:8000
       ML_TIMEOUT_SECONDS: "${ML_TIMEOUT_SECONDS:-3}"
+      ML_CONFIANCA_MINIMA: "${ML_CONFIANCA_MINIMA:-0.85}"
       PROCESSING_DELAY_SECONDS: "0"
     volumes:
       - ./dados_entrada:/app/dados_entrada:ro

@@ -9,7 +9,6 @@ from src.config import (
     botcity_runner_args,
 )
 
-
 pytestmark = pytest.mark.unit
 
 
@@ -308,12 +307,14 @@ def test_settings_mantem_ml_desabilitado_por_padrao(monkeypatch, tmp_path: Path)
     monkeypatch.delenv("ML_ENABLED", raising=False)
     monkeypatch.delenv("ML_API_URL", raising=False)
     monkeypatch.delenv("ML_TIMEOUT_SECONDS", raising=False)
+    monkeypatch.delenv("ML_CONFIANCA_MINIMA", raising=False)
 
     settings = Settings.from_env(tmp_path)
 
     assert settings.ml_enabled is False
     assert settings.ml_api_url == ""
     assert settings.ml_timeout_seconds == 3
+    assert settings.ml_confianca_minima == 0.85
     settings.validate()
 
 
@@ -321,13 +322,29 @@ def test_settings_carrega_e_valida_integracao_ml(monkeypatch, tmp_path: Path):
     monkeypatch.setenv("ML_ENABLED", "true")
     monkeypatch.setenv("ML_API_URL", "http://api-ml:8000")
     monkeypatch.setenv("ML_TIMEOUT_SECONDS", "2.5")
+    monkeypatch.setenv("ML_CONFIANCA_MINIMA", "0.72")
 
     settings = Settings.from_env(tmp_path)
 
     assert settings.ml_enabled is True
     assert settings.ml_api_url == "http://api-ml:8000"
     assert settings.ml_timeout_seconds == 2.5
+    assert settings.ml_confianca_minima == 0.72
     settings.validate()
+
+
+@pytest.mark.parametrize("invalid_confidence", ["-0.1", "1.1", "abc", ""])
+def test_settings_rejeita_confianca_ml_invalida_quando_habilitado(
+    monkeypatch,
+    tmp_path: Path,
+    invalid_confidence: str,
+):
+    monkeypatch.setenv("ML_ENABLED", "true")
+    monkeypatch.setenv("ML_API_URL", "http://api-ml:8000")
+    monkeypatch.setenv("ML_CONFIANCA_MINIMA", invalid_confidence)
+
+    with pytest.raises(ValueError, match="ML_CONFIANCA_MINIMA"):
+        Settings.from_env(tmp_path).validate()
 
 
 def test_settings_exige_url_quando_ml_esta_habilitado(monkeypatch, tmp_path: Path):

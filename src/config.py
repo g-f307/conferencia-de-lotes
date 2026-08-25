@@ -1,14 +1,13 @@
 """Configuração central do bot carregada por variáveis de ambiente."""
 
-from dataclasses import dataclass
 import math
 import os
-from pathlib import Path
 import sys
+from dataclasses import dataclass
+from pathlib import Path
 from urllib.parse import urlparse
 
 from dotenv import dotenv_values
-
 
 TRUE_VALUES = {"1", "true", "yes", "sim", "on"}
 
@@ -80,6 +79,7 @@ class Settings:
     ml_api_url: str
     ml_timeout_seconds: float | None
     runner_context: bool
+    ml_confianca_minima: float | None = 0.85
 
     @classmethod
     def from_env(cls, base_dir: Path | None = None) -> "Settings":
@@ -150,6 +150,10 @@ class Settings:
                 3.0,
             ),
             runner_context=runner_context,
+            ml_confianca_minima=as_optional_float(
+                env.get("ML_CONFIANCA_MINIMA"),
+                0.85,
+            ),
         )
 
     def validate(self) -> None:
@@ -198,6 +202,13 @@ class Settings:
         if self.ml_timeout_seconds is None or self.ml_timeout_seconds <= 0:
             raise ValueError(
                 "ML_TIMEOUT_SECONDS deve ser um número maior que zero"
+            )
+        if (
+            self.ml_confianca_minima is None
+            or not 0 <= self.ml_confianca_minima <= 1
+        ):
+            raise ValueError(
+                "ML_CONFIANCA_MINIMA deve ser um número entre zero e um"
             )
 
     def _validate_web_test_url(self) -> None:
