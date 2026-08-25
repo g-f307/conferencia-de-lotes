@@ -137,6 +137,9 @@ As responsabilidades principais são:
 | `scripts/train_ml_model.py` | Gerar dados fictícios, treinar o Random Forest e serializar o pipeline. |
 | `api_ml/main.py` | Servir `/predict`, `/predict-divergencia` e `/health`, com contrato textual substituível por modelo ou mock controlado. |
 | `src/item_processor.py` | Preservar a decisão determinística e complementar somente casos ambíguos com ML. |
+| `src/reference_base.py` | Isolar a consulta à Base de Referência e diferenciar infraestrutura de dados. |
+| `src/retry_policy.py` | Aplicar retry com backoff linear, timeout e relógio injetável. |
+| `src/dead_letter.py` | Persistir falhas repetidas de dados em JSON Lines sanitizado e idempotente. |
 | `src/ml_client.py` | Consumir a API com timeout, validação de contrato, fallback e circuit breaker. |
 | `src/ml_audit.py` | Criar a fonte tipada compartilhada pelo log, resumo JSON e aba `Decisões de ML`. |
 
@@ -152,27 +155,29 @@ Detalhes e diagramas de sequência estão em
 5. Quando habilitada, a sessão Playwright inicia em modo headless e
    `LoginPage.fazer_login()` utiliza a credencial recuperada.
 6. O Dispatcher publica o CSV no DataPool.
-7. O Performer obtém um item e o entrega ao `ItemProcessor`, que executa o
-   classificador operacional com RN01–RN07 e preserva o contrato utilizado pelo
-   DataPool.
-8. Quando habilitado, o `ItemProcessor` consulta o `MLClient` somente se a
-   classificação determinística tiver retornado `REVISAO` e o status pertencer
-   ao domínio da API. Itens determinísticos não chamam a API.
-9. Confiança alta pode aprovar ou reprovar automaticamente. Confiança média,
-   baixa ou classe de revisão mantém o item em revisão humana.
-10. Indisponibilidade da API gera `REVISAO_ML_OFFLINE`, finaliza o item com os
+7. O Performer obtém um item e valida RN01/RN02 antes de consultar a Base de
+   Referência pela abstração `ReferenceBaseService`.
+8. Falhas de infraestrutura são repetidas com backoff linear. Se a base
+   continuar indisponível, o item fica como `PENDENTE_REVISAO`, um alerta
+   operacional é solicitado e o lote continua.
+9. Uma falha repetida de dados gera uma única linha sanitizada em
+   `data/output/dead_letter.jsonl`. Indisponibilidade de infraestrutura e ML
+   nunca são enviadas ao dead letter.
+10. A RN03 recebe somente o resultado encontrado/não encontrado. O ML pode
+    complementar causa e confiança, mas nunca altera o status determinístico.
+11. Indisponibilidade da API gera `REVISAO_ML_OFFLINE`, finaliza o item com os
     outputs de revisão sem `report_error` e não interrompe os itens seguintes.
     Cada predição ou fallback produz exatamente um `MLDecisionAudit`, inclusive
     quando o circuit breaker já está aberto.
-11. `FormPage.preencher_lote()` apresenta o resultado do item na aplicação
+12. `FormPage.preencher_lote()` apresenta o resultado do item na aplicação
    controlada e aguarda a confirmação.
-12. Uma captura `aprovado-*`, `reprovado-*`, `divergencia-*` ou `erro-*` é
+13. Uma captura `aprovado-*`, `reprovado-*`, `divergencia-*` ou `erro-*` é
    produzida.
-13. `resultado_validacao`, `evidencia` e `mensagem_resultado` são atualizados no
+14. `resultado_validacao`, `evidencia` e `mensagem_resultado` são atualizados no
     DataPool antes de `report_done` ou `report_error`.
-14. O loop continua até o fim da fila.
-15. O resumo e o PDF são publicados, e a task é finalizada.
-16. Página, navegador e runtime Playwright são encerrados em `finally`.
+15. O loop continua até o fim da fila.
+16. O resumo e o PDF são publicados, e a task é finalizada.
+17. Página, navegador e runtime Playwright são encerrados em `finally`.
 
 Não existem `sleep()` para sincronização da interface. A camada web aguarda
 condições explícitas de visibilidade, disponibilidade e confirmação.
@@ -279,6 +284,7 @@ o que evita referências específicas de uma máquina ou Runner.
 │   ├── diagrama_pdd.bpmn
 │   └── diagrama_pdd.svg
 ├── logs/                          # JSON Lines gerado em runtime
+├── data/output/                   # dead_letter.jsonl gerado em runtime
 ├── models/
 │   └── classificador_lotes.pkl    # pipeline Random Forest serializado
 ├── relatorios/                    # JSON, PDF e XLSX gerados em runtime
@@ -298,6 +304,7 @@ o que evita referências específicas de uma máquina ou Runner.
 │   │   └── form_page.py
 │   ├── bot.py
 │   ├── config.py
+│   ├── dead_letter.py
 │   ├── dispatcher.py
 │   ├── logging_config.py
 │   ├── maestro_client.py
@@ -307,6 +314,8 @@ o que evita referências específicas de uma máquina ou Runner.
 │   ├── markdown_reporting.py
 │   ├── models.py
 │   ├── operational_indicators.py
+│   ├── reference_base.py
+│   ├── retry_policy.py
 │   ├── reporting.py
 │   ├── validation.py
 │   ├── vault_client.py
@@ -387,6 +396,10 @@ compatível já instalado.
 | `DATAPOOL_LABEL` | Nome da fila. | `FilaAuditoriaLotes2` |
 | `VAULT_LABEL` | Nome da credencial. | `credencial_erp2` |
 | `REFERENCE_LOTES` | IDs de referência separados por vírgula. | `L001,L002` |
+| `REFERENCE_MAX_ATTEMPTS` | Máximo de tentativas da Base de Referência. | `3` |
+| `REFERENCE_RETRY_BASE_INTERVAL_SECONDS` | Base do backoff linear entre tentativas. | `1` |
+| `REFERENCE_TIMEOUT_SECONDS` | Timeout repassado para cada consulta. | `5` |
+| `DEAD_LETTER_PATH` | Falhas repetidas de dados para reprocessamento. | `data/output/dead_letter.jsonl` |
 | `INPUT_DIR` | Diretório validado no fail-fast. | `dados_entrada` |
 | `INPUT_CSV` | Massa publicada pelo Dispatcher. | `dados_entrada/lotes_auditoria.csv` |
 | `LOG_FILE` | Log JSON Lines. | `logs/execucao.log` |
@@ -942,6 +955,8 @@ camada e as perguntas da banca estão em
 | Vault ou login inicial | Falha antes da publicação dos itens. |
 | Divergência RN01–RN07 | Item finalizado como erro de negócio; fila continua. |
 | Revisão humana | Item separado com motivo; fila continua. |
+| Base indisponível após retry | Item `PENDENTE_REVISAO`, alerta operacional e fila continua. |
+| Falha repetida de dados da base | Item sanitizado gravado uma vez no dead letter; fila continua. |
 | Timeout ou falha web de um item | Captura de erro, saída `ERRO` e fila continua. |
 | Falha ao obter o próximo item | Falha fatal, pois não há item seguro para atualizar. |
 
@@ -953,6 +968,7 @@ finalizada no Maestro como sucesso operacional.
 - `.env` real nunca é versionado ou empacotado;
 - a senha existe somente no Vault ou na credencial efêmera local;
 - logs sanitizam senha, token, chave e API key;
+- dead letter omite a observação e campos de credencial, token ou senha;
 - capturas usam somente a aplicação e a massa controladas;
 - imagens e pacotes não recebem credenciais durante o build;
 - logs, relatórios, PNG e `dist/` permanecem fora do Git.

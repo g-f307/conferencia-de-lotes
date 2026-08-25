@@ -12,12 +12,18 @@ from typing import Any, Protocol
 from src.bot import LotePerformer, PerformerResult
 from src.classificador_divergencia import ClassificadorDivergencia
 from src.config import Settings
+from src.dead_letter import DeadLetterWriter
 from src.dispatcher import dispatch_csv
 from src.item_processor import DivergenceClassifier, ItemProcessor
 from src.logging_config import configure_logging
 from src.maestro_client import MaestroClient
 from src.ml_audit import MLDecisionRecorder
 from src.models import ExecutionResult
+from src.reference_base import (
+    ReferenceBaseService,
+    StaticReferenceBaseGateway,
+)
+from src.retry_policy import LinearRetryPolicy
 from src.vault_client import BotCityVaultProvider, VaultClient
 from src.web_automation import PlaywrightWebSession, describe_playwright_environment
 
@@ -206,6 +212,7 @@ def run(
     dispatch_items: bool = True,
     publish_results: bool = True,
     finalize_task: bool = True,
+    reference_base_service: ReferenceBaseService | None = None,
 ) -> ExecutionResult:
     """Executa o ciclo principal: valida ambiente, consome DataPool e reporta."""
     current_settings = settings or Settings.from_env()
@@ -325,6 +332,34 @@ def run(
         current_reference_lotes = tuple(
             reference_lotes or current_settings.reference_lotes
         )
+        current_reference_base = reference_base_service
+        if current_reference_base is None:
+            assert current_settings.reference_max_attempts is not None
+            assert current_settings.reference_retry_base_interval_seconds is not None
+            assert current_settings.reference_timeout_seconds is not None
+            assert current_settings.dead_letter_path is not None
+            retry_policy = LinearRetryPolicy(
+                max_attempts=current_settings.reference_max_attempts,
+                base_interval_seconds=(
+                    current_settings.reference_retry_base_interval_seconds
+                ),
+                timeout_seconds=current_settings.reference_timeout_seconds,
+            )
+            dead_letter = DeadLetterWriter(
+                current_settings.dead_letter_path,
+                execution_id=current_settings.execution_id,
+                task_id=(
+                    current_settings.maestro_task_id
+                    or current_settings.execution_id
+                ),
+            )
+            current_reference_base = ReferenceBaseService(
+                StaticReferenceBaseGateway(current_reference_lotes),
+                retry_policy,
+                dead_letter,
+                alert_gateway=client,
+                logger=current_logger,
+            )
         current_divergence_classifier = (
             divergence_classifier
             or ClassificadorDivergencia.from_settings(current_settings)
@@ -336,6 +371,7 @@ def run(
                 current_settings.bot_id,
                 current_settings.execution_id,
             ),
+            reference_base=current_reference_base,
         )
         performer = LotePerformer(
             client,

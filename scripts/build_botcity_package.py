@@ -10,13 +10,12 @@ import argparse
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
 
-
 DEFAULT_VERSION = "2"
 DEFAULT_PACKAGE_NAME = "bot-conferencia-de-lotes"
 PACKAGE_ROOT_FILES = ("bot.py", "requirements.txt")
-PACKAGE_DIRS = ("src", "dados_entrada", "web/index-lotes")
+PACKAGE_DIRS = ("src", "dados_entrada", "web/index-lotes", "data/output")
 IGNORED_DIRS = {"__pycache__"}
-IGNORED_SUFFIXES = {".pyc", ".pyo"}
+IGNORED_SUFFIXES = {".jsonl", ".pyc", ".pyo"}
 
 
 def iter_package_files(base_dir: Path) -> list[Path]:

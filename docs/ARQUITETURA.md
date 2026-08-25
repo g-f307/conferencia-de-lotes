@@ -143,6 +143,9 @@ flowchart TB
 | `src/logging_config.py` | Produzir JSON Lines e sanitizar dados sensíveis. |
 | `src/models.py` | Padronizar o resumo serializável. |
 | `src/item_processor.py` | Consultar o ML somente após uma revisão determinística elegível e aplicar fallback seguro. |
+| `src/reference_base.py` | Consultar a referência com política explícita para infraestrutura e dados. |
+| `src/retry_policy.py` | Executar tentativas com backoff linear, timeout e tempo injetável. |
+| `src/dead_letter.py` | Registrar falhas irrecuperáveis de dados sem observações ou segredos. |
 | `src/ml_client.py` | Isolar HTTP, timeout, contrato da resposta e circuit breaker. |
 | `src/ml_audit.py` | Registrar uma decisão tipada por consulta ou fallback e alimentar log e relatórios. |
 

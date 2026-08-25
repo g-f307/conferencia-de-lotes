@@ -11,11 +11,18 @@ from src.classificador_divergencia import (
     ResultadoClassificacaoDivergencia,
 )
 from src.ml_audit import MLDecisionAudit, MLDecisionRecorder
+from src.reference_base import (
+    ReferenceBaseService,
+    ReferenceLookupStatus,
+)
 from src.validation import (
     HumanReviewRequired,
     HumanReviewStatus,
     ValidationError,
+    normalize_text,
+    validate_columns,
     validate_lote,
+    validate_required_fields,
 )
 
 ML_ENRICHMENT_RESULTS = frozenset({"DIVERGENCIA", "REPROVADO", "REVISAO"})
@@ -49,12 +56,50 @@ class DeterministicClassifier(Protocol):
 class OperationalItemClassifier:
     """Preserva a classificação RN01-RN07 usada pelo Performer."""
 
-    def __init__(self, reference_lotes: Iterable[str]) -> None:
+    def __init__(
+        self,
+        reference_lotes: Iterable[str],
+        reference_base: ReferenceBaseService | None = None,
+    ) -> None:
         self.reference_lotes = tuple(reference_lotes)
+        self.reference_base = reference_base
 
     def classify(self, item: Mapping[str, object]) -> ItemClassification:
+        reference_lotes = self.reference_lotes
+        if self.reference_base is not None:
+            initial_error = self._validate_before_reference_lookup(item)
+            if initial_error is not None:
+                return initial_error
+
+            lookup = self.reference_base.lookup(item)
+            if lookup.status is ReferenceLookupStatus.PENDING_REVIEW:
+                review = HumanReviewRequired(
+                    lote_id=normalize_text(item.get("lote_id")),
+                    status_original=normalize_text(item.get("status")),
+                    reason=lookup.reason,
+                )
+                return ItemClassification(
+                    resultado="PENDENTE_REVISAO",
+                    mensagem=lookup.reason,
+                    review=review,
+                )
+            if lookup.status is ReferenceLookupStatus.DATA_FAILURE:
+                return ItemClassification(
+                    resultado="DIVERGENCIA",
+                    mensagem=(
+                        "Falha repetida de dados na Base de Referência; "
+                        "item enviado ao dead letter: "
+                        f"{lookup.reason}"
+                    ),
+                )
+            reference_lotes = (
+                (normalize_text(item.get("lote_id")),)
+                if lookup.exists
+                else ()
+            )
+
         try:
-            validated = validate_lote(item, self.reference_lotes)
+            validated = validate_lote(item, reference_lotes)
         except HumanReviewStatus as exc:
             review = HumanReviewRequired(
                 lote_id=str(item.get("lote_id") or "").strip(),
@@ -85,6 +130,20 @@ class OperationalItemClassifier:
             validated=validated,
         )
 
+    @staticmethod
+    def _validate_before_reference_lookup(
+        item: Mapping[str, object],
+    ) -> ItemClassification | None:
+        try:
+            validate_columns(item)
+            validate_required_fields(item)
+        except ValidationError as exc:
+            return ItemClassification(
+                resultado="DIVERGENCIA",
+                mensagem=str(exc),
+            )
+        return None
+
 
 class ItemProcessor:
     """Executa as regras antes do ML e preserva integralmente sua decisão."""
@@ -96,13 +155,17 @@ class ItemProcessor:
         divergence_classifier: DivergenceClassifier | None = None,
         deterministic_classifier: DeterministicClassifier | None = None,
         decision_recorder: MLDecisionRecorder | None = None,
+        reference_base: ReferenceBaseService | None = None,
     ) -> None:
         if deterministic_classifier is None:
             if reference_lotes is None:
                 raise ValueError(
                     "Lotes de referência ou classificador determinístico devem ser informados"
                 )
-            deterministic_classifier = OperationalItemClassifier(reference_lotes)
+            deterministic_classifier = OperationalItemClassifier(
+                reference_lotes,
+                reference_base,
+            )
 
         self.deterministic_classifier = deterministic_classifier
         self.divergence_classifier = divergence_classifier or ClassificadorDivergencia(

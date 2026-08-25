@@ -16,6 +16,8 @@ dados_ml
 logs
 relatorios
 artefatos
+data/output/*
+!data/output/.gitkeep
 docs/*
 web/*
 !web/index-lotes

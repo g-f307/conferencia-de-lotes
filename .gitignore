@@ -18,3 +18,5 @@ ci-output/
 test-results/
 e2e-artifacts/
 artefatos/*.pdf
+data/output/*.jsonl
+!data/output/.gitkeep
