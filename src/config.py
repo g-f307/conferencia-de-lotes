@@ -80,6 +80,9 @@ class Settings:
     ml_timeout_seconds: float | None
     runner_context: bool
     ml_confianca_minima: float | None = 0.85
+    orchestration_enabled: bool = False
+    orchestration_timeout_seconds: float | None = 300.0
+    orchestration_poll_interval_seconds: float | None = 2.0
 
     @classmethod
     def from_env(cls, base_dir: Path | None = None) -> "Settings":
@@ -154,6 +157,18 @@ class Settings:
                 env.get("ML_CONFIANCA_MINIMA"),
                 0.85,
             ),
+            orchestration_enabled=as_bool(
+                env.get("ORCHESTRATION_ENABLED"),
+                False,
+            ),
+            orchestration_timeout_seconds=as_optional_float(
+                env.get("ORCHESTRATION_TIMEOUT_SECONDS"),
+                300.0,
+            ),
+            orchestration_poll_interval_seconds=as_optional_float(
+                env.get("ORCHESTRATION_POLL_INTERVAL_SECONDS"),
+                2.0,
+            ),
         )
 
     def validate(self) -> None:
@@ -182,6 +197,26 @@ class Settings:
 
         if self.ml_enabled:
             self._validate_ml_configuration()
+
+        if self.orchestration_enabled:
+            if not self.maestro_enabled:
+                raise ValueError(
+                    "MAESTRO_ENABLED deve ser true quando ORCHESTRATION_ENABLED=true"
+                )
+            if (
+                self.orchestration_timeout_seconds is None
+                or self.orchestration_timeout_seconds <= 0
+            ):
+                raise ValueError(
+                    "ORCHESTRATION_TIMEOUT_SECONDS deve ser maior que zero"
+                )
+            if (
+                self.orchestration_poll_interval_seconds is None
+                or self.orchestration_poll_interval_seconds <= 0
+            ):
+                raise ValueError(
+                    "ORCHESTRATION_POLL_INTERVAL_SECONDS deve ser maior que zero"
+                )
 
     def _validate_ml_configuration(self) -> None:
         """Valida somente os parâmetros necessários quando ML está ativo."""

@@ -346,6 +346,31 @@ def test_run_consumindo_datapool_e_publicando_resumo(tmp_path):
     assert "PUBLICACAO_RESULTADOS" in log_events
 
 
+def test_run_permite_etapa_de_conferencia_sem_despacho_relatorio_ou_finish(
+    tmp_path,
+):
+    settings = settings_for(tmp_path)
+    item = lote_item()
+    client = FakeMaestroClient([item])
+
+    result = run(
+        settings=settings,
+        maestro_client=client,
+        vault_client=VaultClient(FakeVaultProvider()),
+        reference_lotes={"L001"},
+        dispatch_items=False,
+        publish_results=False,
+        finalize_task=False,
+    )
+
+    assert result.status == "SUCCESS"
+    assert result.total_items == 1
+    assert result.processed_items == 1
+    assert len(client.done) == 1
+    assert client.artifacts == []
+    assert client.finished_tasks == []
+
+
 def test_run_integra_ml_sem_interromper_fluxo_quando_api_falha(tmp_path):
     settings = replace(
         settings_for(tmp_path),

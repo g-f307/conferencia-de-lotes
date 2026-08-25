@@ -3,7 +3,6 @@ from zipfile import ZipFile
 
 import pytest
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 pytestmark = pytest.mark.integration
 
@@ -155,7 +154,7 @@ def test_ci_valida_e_publica_artefatos_docker():
     assert "VAULT_ENABLED=false" in content
 
 
-def test_pacote_botcity_inclui_pagina_web_local():
+def test_pacote_botcity_inclui_recursos_de_runtime():
     from scripts.build_botcity_package import iter_package_files
 
     package_files = {
@@ -166,6 +165,8 @@ def test_pacote_botcity_inclui_pagina_web_local():
     assert "web/index-lotes/index.html" in package_files
     assert "web/index-lotes/login.html" in package_files
     assert "web/index-lotes/login.js" in package_files
+    assert "src/orchestrator.py" in package_files
+    assert "src/wait_for_predecessor.py" in package_files
 
 
 def test_requirements_do_pacote_usa_playwright_sem_selenium():

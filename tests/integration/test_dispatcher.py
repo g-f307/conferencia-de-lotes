@@ -369,6 +369,8 @@ class FakeSdk:
         self.alerts = []
         self.artifacts = []
         self.finished_tasks = []
+        self.tasks = {}
+        self.created_tasks = []
 
     def get_datapool(self, label):
         self.datapool_labels.append(label)
@@ -392,6 +394,22 @@ class FakeSdk:
         self.finished_tasks.append(
             (task_id, status, message, total_items, processed_items, failed_items)
         )
+
+    def create_task(self, activity_label, parameters):
+        task = SimpleNamespace(
+            id=456,
+            state=SimpleNamespace(value="START"),
+            parameters=dict(parameters),
+            finish_status=None,
+            finish_message="",
+            activity_label=activity_label,
+        )
+        self.tasks[str(task.id)] = task
+        self.created_tasks.append((activity_label, parameters))
+        return task
+
+    def get_task(self, task_id):
+        return self.tasks[str(task_id)]
 
 
 def gateway_for(sdk):
@@ -535,6 +553,31 @@ def test_gateway_real_finaliza_task_no_maestro():
     gateway.finish_task("SUCCESS", "Processamento concluido", 3, 1, 2)
 
     assert sdk.finished_tasks == [(123, "SUCCESS", "Processamento concluido", 3, 1, 2)]
+
+
+def test_gateway_real_cria_e_consulta_task_orquestrada():
+    sdk = FakeSdk()
+    gateway = gateway_for(sdk)
+    parameters = {
+        "correlation_id": "corr-001",
+        "root_task_id": "123",
+        "parent_task_id": "123",
+        "trigger_bot": "rebecca-dispatcher-v1",
+        "previous_result": {"status": "SUCCESS"},
+    }
+
+    created = gateway.create_task("gabriel-conferencia-v1", parameters)
+    sdk.tasks["456"].state = SimpleNamespace(value="FINISHED")
+    sdk.tasks["456"].finish_status = SimpleNamespace(value="SUCCESS")
+    fetched = gateway.get_task("456")
+
+    assert gateway.current_task_id == "123"
+    assert created.task_id == "456"
+    assert created.state == "START"
+    assert created.parameters == parameters
+    assert fetched.state == "FINISHED"
+    assert fetched.finish_status == "SUCCESS"
+    assert fetched.activity_label == "gabriel-conferencia-v1"
 
 
 def test_gateway_real_falha_quando_task_id_esta_ausente_ou_zero():
