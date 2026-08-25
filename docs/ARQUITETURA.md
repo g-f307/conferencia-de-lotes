@@ -146,6 +146,7 @@ flowchart TB
 | `src/reference_base.py` | Consultar a referência com política explícita para infraestrutura e dados. |
 | `src/retry_policy.py` | Executar tentativas com backoff linear, timeout e tempo injetável. |
 | `src/dead_letter.py` | Registrar falhas irrecuperáveis de dados sem observações ou segredos, usando lock multiplataforma. |
+| `src/alerts.py` | Coordenar Telegram, Email SMTP e fallback local por severidade. |
 | `src/ml_client.py` | Isolar HTTP, timeout, contrato da resposta e circuit breaker. |
 | `src/ml_audit.py` | Registrar uma decisão tipada por consulta ou fallback e alimentar log e relatórios. |
 
@@ -219,6 +220,7 @@ sequenceDiagram
             P->>Q: atualizar saídas e report_error SYSTEM
         end
     end
+    M->>M: avaliar aviso agregado de fallback do ML
     M->>M: gerar JSON e PDF
     M->>M: publicar artefatos e finish_task
     M->>W: close()

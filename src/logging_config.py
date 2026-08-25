@@ -74,6 +74,8 @@ class StructuredJsonFormatter(logging.Formatter):
             value
             for value in (
                 settings.maestro_key,
+                settings.telegram_bot_token,
+                settings.smtp_password,
                 os.getenv("BOTCITY_TOKEN", ""),
             )
             if value

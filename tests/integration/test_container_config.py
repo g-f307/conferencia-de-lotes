@@ -46,6 +46,9 @@ def test_compose_mapeia_volumes_operacionais():
     assert "./artefatos:/app/artefatos" in content
     assert "./data/output:/app/data/output" in content
     assert "DEAD_LETTER_PATH: data/output/dead_letter.jsonl" in content
+    assert 'ALERTS_ENABLED: "${ALERTS_ENABLED:-false}"' in content
+    assert 'TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN:-}"' in content
+    assert 'SMTP_PASSWORD: "${SMTP_PASSWORD:-}"' in content
     assert "WEB_AUTOMATION_ENABLED" in content
     assert "WEB_TIMEOUT_SECONDS" in content
     assert "ENVIRONMENT: container" in content
@@ -187,6 +190,7 @@ def test_pacote_botcity_inclui_recursos_de_runtime():
     assert "src/retry_policy.py" in package_files
     assert "src/reference_base.py" in package_files
     assert "src/dead_letter.py" in package_files
+    assert "src/alerts.py" in package_files
     assert "data/output/.gitkeep" in package_files
     assert not any(path.endswith(".jsonl") for path in package_files)
 

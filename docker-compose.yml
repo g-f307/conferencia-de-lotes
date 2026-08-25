@@ -50,6 +50,18 @@ services:
       REFERENCE_RETRY_BASE_INTERVAL_SECONDS: "${REFERENCE_RETRY_BASE_INTERVAL_SECONDS:-1}"
       REFERENCE_TIMEOUT_SECONDS: "${REFERENCE_TIMEOUT_SECONDS:-5}"
       DEAD_LETTER_PATH: data/output/dead_letter.jsonl
+      ALERTS_ENABLED: "${ALERTS_ENABLED:-false}"
+      TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN:-}"
+      TELEGRAM_CHAT_ID: "${TELEGRAM_CHAT_ID:-}"
+      TELEGRAM_API_BASE_URL: "${TELEGRAM_API_BASE_URL:-https://api.telegram.org}"
+      SMTP_HOST: "${SMTP_HOST:-}"
+      SMTP_PORT: "${SMTP_PORT:-587}"
+      SMTP_USERNAME: "${SMTP_USERNAME:-}"
+      SMTP_PASSWORD: "${SMTP_PASSWORD:-}"
+      SMTP_FROM: "${SMTP_FROM:-}"
+      SMTP_TO: "${SMTP_TO:-}"
+      SMTP_USE_TLS: "${SMTP_USE_TLS:-true}"
+      ALERTS_TIMEOUT_SECONDS: "${ALERTS_TIMEOUT_SECONDS:-5}"
       PROCESSING_DELAY_SECONDS: "0"
     volumes:
       - ./dados_entrada:/app/dados_entrada:ro

@@ -2,11 +2,11 @@ import json
 
 import pytest
 
-from src.bot import DATAPOOL_LOG_LABEL, LOGGER as BOT_LOGGER
+from src.bot import DATAPOOL_LOG_LABEL
+from src.bot import LOGGER as BOT_LOGGER
 from src.config import Settings
 from src.logging_config import LOGGER_NAME, configure_logging
 from src.vault_client import LOGGER as VAULT_LOGGER
-
 
 pytestmark = pytest.mark.integration
 
@@ -111,7 +111,11 @@ def test_log_nao_expoe_dados_sensiveis(tmp_path, monkeypatch):
     senha = "SenhaSuperSecreta123"
     token = "TokenSuperSecreto456"
     maestro_key = "ChaveMaestro789"
+    telegram_token = "TelegramSuperSecreto987"
+    smtp_password = "SmtpSuperSecreta654"
     monkeypatch.setenv("MAESTRO_KEY", maestro_key)
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", telegram_token)
+    monkeypatch.setenv("SMTP_PASSWORD", smtp_password)
     logger = configure_logging(log_file)
 
     logger.info(
@@ -120,13 +124,16 @@ def test_log_nao_expoe_dados_sensiveis(tmp_path, monkeypatch):
         token,
         maestro_key,
     )
+    logger.error("Falha remota %s %s", telegram_token, smtp_password)
 
     texto = log_file.read_text()
 
     assert senha not in texto
     assert token not in texto
     assert maestro_key not in texto
-    assert texto.count("[REDACTED]") == 3
+    assert telegram_token not in texto
+    assert smtp_password not in texto
+    assert texto.count("[REDACTED]") == 5
 
 def test_log_preserva_excecao(tmp_path):
     log_file = tmp_path / "execucao.log"
