@@ -293,7 +293,7 @@ class LotePerformer:
                 result.evidences.append(evidence)
             return
 
-        if classification.resultado == "REVISAO":
+        if classification.resultado in {"REVISAO", "PENDENTE_REVISAO"}:
             assert classification.review is not None
             self.queue.mark_human_review(
                 item,

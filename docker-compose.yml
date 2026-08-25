@@ -46,9 +46,14 @@ services:
       ML_API_URL: http://api-ml:8000
       ML_TIMEOUT_SECONDS: "${ML_TIMEOUT_SECONDS:-3}"
       ML_CONFIANCA_MINIMA: "${ML_CONFIANCA_MINIMA:-0.85}"
+      REFERENCE_MAX_ATTEMPTS: "${REFERENCE_MAX_ATTEMPTS:-3}"
+      REFERENCE_RETRY_BASE_INTERVAL_SECONDS: "${REFERENCE_RETRY_BASE_INTERVAL_SECONDS:-1}"
+      REFERENCE_TIMEOUT_SECONDS: "${REFERENCE_TIMEOUT_SECONDS:-5}"
+      DEAD_LETTER_PATH: data/output/dead_letter.jsonl
       PROCESSING_DELAY_SECONDS: "0"
     volumes:
       - ./dados_entrada:/app/dados_entrada:ro
       - ./logs:/app/logs
       - ./relatorios:/app/relatorios
       - ./artefatos:/app/artefatos
+      - ./data/output:/app/data/output

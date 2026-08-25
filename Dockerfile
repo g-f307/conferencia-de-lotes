@@ -24,9 +24,10 @@ COPY --chown=botcity:botcity bot.py ./
 COPY --chown=botcity:botcity src/ ./src/
 COPY --chown=botcity:botcity dados_entrada/ ./dados_entrada/
 COPY --chown=botcity:botcity web/index-lotes/ ./web/index-lotes/
+COPY --chown=botcity:botcity data/output/ ./data/output/
 
-RUN mkdir -p logs relatorios artefatos \
-    && chown -R botcity:botcity logs relatorios artefatos
+RUN mkdir -p logs relatorios artefatos data/output \
+    && chown -R botcity:botcity logs relatorios artefatos data/output
 
 USER botcity
 

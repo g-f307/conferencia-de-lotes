@@ -24,6 +24,7 @@ def test_dockerfile_instala_playwright_e_chromium_headless():
     assert "chromedriver" not in content.lower()
     assert "web/index-lotes/" in content
     assert "artefatos" in content
+    assert "data/output/" in content
 
 
 def test_dockerignore_mantem_pagina_web_no_contexto():
@@ -33,6 +34,8 @@ def test_dockerignore_mantem_pagina_web_no_contexto():
     assert "web/*" in content
     assert "!web/index-lotes" in content
     assert "!web/index-lotes/**" in content
+    assert "data/output/*" in content
+    assert "!data/output/.gitkeep" in content
 
 
 def test_compose_mapeia_volumes_operacionais():
@@ -41,6 +44,8 @@ def test_compose_mapeia_volumes_operacionais():
     assert "./logs:/app/logs" in content
     assert "./relatorios:/app/relatorios" in content
     assert "./artefatos:/app/artefatos" in content
+    assert "./data/output:/app/data/output" in content
+    assert "DEAD_LETTER_PATH: data/output/dead_letter.jsonl" in content
     assert "WEB_AUTOMATION_ENABLED" in content
     assert "WEB_TIMEOUT_SECONDS" in content
     assert "ENVIRONMENT: container" in content
@@ -97,6 +102,18 @@ def test_ci_encadeia_qualidade_testes_e_docker():
         "    name: Validar imagem Docker e artefatos\n"
         "    needs: test-e2e"
     ) in content
+
+
+def test_ci_valida_importacao_e_lock_da_dead_letter_no_windows():
+    content = (
+        PROJECT_ROOT / ".github" / "workflows" / "ci.yml"
+    ).read_text(encoding="utf-8")
+
+    assert "  windows-compatibility:" in content
+    assert "    name: Compatibilidade Windows" in content
+    assert "    runs-on: windows-latest" in content
+    assert 'python -c "from src.dead_letter import DeadLetterWriter"' in content
+    assert "python -m pytest tests/integration/test_dead_letter.py -q" in content
 
 
 def test_ci_executa_markers_e_publica_cobertura():
@@ -167,6 +184,11 @@ def test_pacote_botcity_inclui_recursos_de_runtime():
     assert "web/index-lotes/login.js" in package_files
     assert "src/orchestrator.py" in package_files
     assert "src/wait_for_predecessor.py" in package_files
+    assert "src/retry_policy.py" in package_files
+    assert "src/reference_base.py" in package_files
+    assert "src/dead_letter.py" in package_files
+    assert "data/output/.gitkeep" in package_files
+    assert not any(path.endswith(".jsonl") for path in package_files)
 
 
 def test_requirements_do_pacote_usa_playwright_sem_selenium():
@@ -176,6 +198,7 @@ def test_requirements_do_pacote_usa_playwright_sem_selenium():
     assert "selenium" not in requirements
     assert "webdriver-manager" not in requirements
     assert "reportlab" in requirements
+    assert "portalocker" in requirements
 
 
 def test_pacote_botcity_exclui_arquivos_locais_e_caches():
@@ -205,7 +228,7 @@ def test_pacote_botcity_exclui_arquivos_locais_e_caches():
 def test_build_botcity_package_usa_versao_no_nome_do_artefato(tmp_path):
     from scripts.build_botcity_package import build_package
 
-    for directory in ("src", "dados_entrada", "web/index-lotes"):
+    for directory in ("src", "dados_entrada", "web/index-lotes", "data/output"):
         (tmp_path / directory).mkdir(parents=True)
         (tmp_path / directory / ".gitkeep").write_text("", encoding="utf-8")
     (tmp_path / "bot.py").write_text("print('bot')\n", encoding="utf-8")

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
@@ -26,11 +26,12 @@ class FormPage:
     NOME_BOTAO_PROCESSAR = "Processar lote"
     NOME_REGIAO_RESULTADO = "Resultado do processamento"
 
-    RESULTADOS_VISUAIS = {
+    RESULTADOS_VISUAIS: ClassVar[dict[str, str]] = {
         "APROVADO": "Aprovado",
         "REPROVADO": "Reprovado",
         "DIVERGENCIA": "Divergência",
         "REVISAO": "Revisão humana",
+        "PENDENTE_REVISAO": "Revisão humana",
         "ERRO": "Erro técnico",
     }
 

@@ -9,7 +9,6 @@ from src.pages.form_page import (
     FormPageTimeoutError,
 )
 
-
 pytestmark = pytest.mark.unit
 
 
@@ -106,6 +105,7 @@ def test_form_page_centraliza_locators_semanticos():
     assert FormPage.NOME_BOTAO_PROCESSAR == "Processar lote"
     assert FormPage.RESULTADOS_VISUAIS["REPROVADO"] == "Reprovado"
     assert FormPage.RESULTADOS_VISUAIS["DIVERGENCIA"] == "Divergência"
+    assert FormPage.RESULTADOS_VISUAIS["PENDENTE_REVISAO"] == "Revisão humana"
 
 
 def test_preencher_lote_usa_dados_do_item_e_resultado_recebido():

@@ -33,6 +33,16 @@ def as_optional_float(
     return converted if math.isfinite(converted) else None
 
 
+def as_optional_int(value: str | None, default: int) -> int | None:
+    """Converte um inteiro textual sem mascarar configuração inválida."""
+    if value is None:
+        return default
+    try:
+        return int(value.strip())
+    except ValueError:
+        return None
+
+
 def botcity_runner_args(argv: list[str] | None = None) -> tuple[str, str]:
     """Extrai server e task_id quando o BotCity Runner chama bot.py."""
     current_argv = argv if argv is not None else sys.argv
@@ -83,6 +93,10 @@ class Settings:
     orchestration_enabled: bool = False
     orchestration_timeout_seconds: float | None = 300.0
     orchestration_poll_interval_seconds: float | None = 2.0
+    reference_max_attempts: int | None = 3
+    reference_retry_base_interval_seconds: float | None = 1.0
+    reference_timeout_seconds: float | None = 5.0
+    dead_letter_path: Path | None = None
 
     @classmethod
     def from_env(cls, base_dir: Path | None = None) -> "Settings":
@@ -169,6 +183,22 @@ class Settings:
                 env.get("ORCHESTRATION_POLL_INTERVAL_SECONDS"),
                 2.0,
             ),
+            reference_max_attempts=as_optional_int(
+                env.get("REFERENCE_MAX_ATTEMPTS"),
+                3,
+            ),
+            reference_retry_base_interval_seconds=as_optional_float(
+                env.get("REFERENCE_RETRY_BASE_INTERVAL_SECONDS"),
+                1.0,
+            ),
+            reference_timeout_seconds=as_optional_float(
+                env.get("REFERENCE_TIMEOUT_SECONDS"),
+                5.0,
+            ),
+            dead_letter_path=project_path(
+                "DEAD_LETTER_PATH",
+                "data/output/dead_letter.jsonl",
+            ),
         )
 
     def validate(self) -> None:
@@ -217,6 +247,23 @@ class Settings:
                 raise ValueError(
                     "ORCHESTRATION_POLL_INTERVAL_SECONDS deve ser maior que zero"
                 )
+
+        if self.reference_max_attempts is None or self.reference_max_attempts < 1:
+            raise ValueError("REFERENCE_MAX_ATTEMPTS deve ser maior que zero")
+        if (
+            self.reference_retry_base_interval_seconds is None
+            or self.reference_retry_base_interval_seconds <= 0
+        ):
+            raise ValueError(
+                "REFERENCE_RETRY_BASE_INTERVAL_SECONDS deve ser maior que zero"
+            )
+        if (
+            self.reference_timeout_seconds is None
+            or self.reference_timeout_seconds <= 0
+        ):
+            raise ValueError("REFERENCE_TIMEOUT_SECONDS deve ser maior que zero")
+        if self.dead_letter_path is None:
+            raise ValueError("DEAD_LETTER_PATH deve ser informado")
 
     def _validate_ml_configuration(self) -> None:
         """Valida somente os parâmetros necessários quando ML está ativo."""

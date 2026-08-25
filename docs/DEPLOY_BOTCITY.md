@@ -56,6 +56,10 @@ ORCHESTRATION_POLL_INTERVAL_SECONDS=2
 DATAPOOL_LABEL=FilaAuditoriaLotes2
 VAULT_LABEL=credencial_erp2
 REFERENCE_LOTES=L001,L002
+REFERENCE_MAX_ATTEMPTS=3
+REFERENCE_RETRY_BASE_INTERVAL_SECONDS=1
+REFERENCE_TIMEOUT_SECONDS=5
+DEAD_LETTER_PATH=data/output/dead_letter.jsonl
 INPUT_DIR=dados_entrada
 INPUT_CSV=dados_entrada/lotes_auditoria.csv
 LOG_FILE=logs/execucao.log
@@ -75,6 +79,19 @@ bot.py <maestro-server> <task-id> <token>
 ```
 
 Não configure o token como variável e não o registre.
+
+## Retry e dead letter
+
+Cada falha de infraestrutura da Base de Referência usa backoff linear. Com os
+valores padrão, as esperas são de 1 e 2 segundos antes da segunda e terceira
+tentativas. Se a base permanecer indisponível, o item recebe
+`PENDENTE_REVISAO`, solicita alerta operacional e não interrompe a fila.
+
+Somente falhas repetidas de dados são gravadas em
+`data/output/dead_letter.jsonl`. O arquivo contém item sanitizado, motivo,
+tentativas, timestamp, `execution_id` e `task_id`; observações e segredos não
+são persistidos. A escrita concorrente usa `portalocker`, compatível com Linux
+e Windows. Garanta permissão de escrita em `data/output/` no Runner.
 
 ## Orquestração com três bots
 
