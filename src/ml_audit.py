@@ -2,15 +2,18 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
 import logging
 import math
-from typing import Any, Callable, Mapping
+from collections.abc import Callable, Mapping
+from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
+from typing import TYPE_CHECKING, Any
 
 from src.logging_config import LOGGER_NAME
 from src.ml_client import MLPrediction
 
+if TYPE_CHECKING:
+    from src.classificador_divergencia import ResultadoClassificacaoDivergencia
 
 LOGGER = logging.getLogger(LOGGER_NAME)
 Clock = Callable[[], datetime]
@@ -63,7 +66,7 @@ class MLDecisionAudit:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, payload: Mapping[str, Any]) -> "MLDecisionAudit":
+    def from_dict(cls, payload: Mapping[str, Any]) -> MLDecisionAudit:
         return cls(
             timestamp=payload.get("timestamp"),
             execution_id=payload.get("execution_id"),
@@ -132,6 +135,35 @@ class MLDecisionRecorder:
         self._record(decision, evento="REVISAO_ML_OFFLINE", status="FALLBACK")
         return decision
 
+    def record_enrichment(
+        self,
+        lote_id: str,
+        enrichment: ResultadoClassificacaoDivergencia,
+        resultado_deterministico: str,
+    ) -> MLDecisionAudit:
+        """Registra metadados do ML sem atribuir a ele a decisão operacional."""
+
+        decision = self._new_decision(
+            lote_id=lote_id,
+            classe=enrichment.causa_provavel,
+            probabilidade=enrichment.confianca_ml,
+            nivel_confianca=None,
+            acao=None,
+            resultado_aplicado=resultado_deterministico,
+            latencia_ms=enrichment.latencia_ms,
+        )
+        is_ml = enrichment.origem_decisao == "ml"
+        self._record(
+            decision,
+            evento=(
+                "ENRIQUECIMENTO_ML"
+                if is_ml
+                else "FALLBACK_CLASSIFICADOR_DIVERGENCIA"
+            ),
+            status="SUCCESS" if is_ml else "FALLBACK",
+        )
+        return decision
+
     def _new_decision(self, **values: Any) -> MLDecisionAudit:
         timestamp = self._clock()
         if timestamp.tzinfo is None:
@@ -184,7 +216,9 @@ def _optional_number(value: Any, field_name: str) -> float | None:
     if value is None:
         return None
     if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise ValueError(f"{field_name} deve ser numérico ou nulo")
+        raise ValueError(  # noqa: TRY004 - preserva o contrato público existente
+            f"{field_name} deve ser numérico ou nulo"
+        )
     converted = float(value)
     if not math.isfinite(converted):
         raise ValueError(f"{field_name} deve ser finito")

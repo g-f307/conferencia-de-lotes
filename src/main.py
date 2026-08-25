@@ -5,17 +5,18 @@ from __future__ import annotations
 import json
 import logging
 import secrets
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Iterable, Protocol
+from typing import Any, Protocol
 
 from src.bot import LotePerformer, PerformerResult
+from src.classificador_divergencia import ClassificadorDivergencia
 from src.config import Settings
 from src.dispatcher import dispatch_csv
-from src.item_processor import ItemProcessor
+from src.item_processor import DivergenceClassifier, ItemProcessor
 from src.logging_config import configure_logging
 from src.maestro_client import MaestroClient
 from src.ml_audit import MLDecisionRecorder
-from src.ml_client import MLClient
 from src.models import ExecutionResult
 from src.vault_client import BotCityVaultProvider, VaultClient
 from src.web_automation import PlaywrightWebSession, describe_playwright_environment
@@ -201,7 +202,7 @@ def run(
     vault_client: VaultClient | None = None,
     reference_lotes: Iterable[str] | None = None,
     logger: logging.Logger | None = None,
-    ml_client: MLClient | None = None,
+    divergence_classifier: DivergenceClassifier | None = None,
 ) -> ExecutionResult:
     """Executa o ciclo principal: valida ambiente, consome DataPool e reporta."""
     current_settings = settings or Settings.from_env()
@@ -316,17 +317,13 @@ def run(
         current_reference_lotes = tuple(
             reference_lotes or current_settings.reference_lotes
         )
-        current_ml_client = ml_client
-        if current_settings.ml_enabled and current_ml_client is None:
-            assert current_settings.ml_timeout_seconds is not None
-            current_ml_client = MLClient(
-                current_settings.ml_api_url,
-                current_settings.ml_timeout_seconds,
-            )
+        current_divergence_classifier = (
+            divergence_classifier
+            or ClassificadorDivergencia.from_settings(current_settings)
+        )
         item_processor = ItemProcessor(
             current_reference_lotes,
-            ml_enabled=current_settings.ml_enabled,
-            ml_client=current_ml_client,
+            divergence_classifier=current_divergence_classifier,
             decision_recorder=MLDecisionRecorder(
                 current_settings.bot_id,
                 current_settings.execution_id,

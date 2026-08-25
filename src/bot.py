@@ -2,20 +2,16 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Iterable, Mapping, Protocol
+from typing import Any, Protocol
 
-from src.item_processor import (
-    ML_OFFLINE_RESULT,
-    ItemClassification,
-    ItemProcessor,
-)
+from src.item_processor import ItemClassification, ItemProcessor
 from src.logging_config import LOGGER_NAME
 from src.ml_audit import MLDecisionAudit
 from src.validation import HumanReviewRequired
 from src.vault_client import ErpCredential, VaultClient
-
 
 LOGGER = logging.getLogger(LOGGER_NAME)
 DATAPOOL_LOG_LABEL = "FilaAuditoriaLotes2"
@@ -55,14 +51,6 @@ class QueueAdapter(Protocol):
         review: HumanReviewRequired,
         result: dict[str, str],
     ) -> None: ...
-
-    def mark_ml_offline_review(
-        self,
-        item: Mapping[str, object],
-        review: HumanReviewRequired,
-        result: dict[str, str],
-    ) -> None: ...
-
 
 class WebItemProcessor(Protocol):
     base_dir: Path
@@ -166,7 +154,7 @@ class LotePerformer:
                     outputs,
                     result,
                 )
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - isola falha por item da fila
                 self._handle_item_failure(
                     item,
                     exc,
@@ -222,14 +210,9 @@ class LotePerformer:
         if self.web_processor is None:
             return "", classification.mensagem
 
-        web_resultado = (
-            "REVISAO"
-            if classification.resultado == ML_OFFLINE_RESULT
-            else classification.resultado
-        )
         web_result = self.web_processor.process_item(
             item,
-            web_resultado,
+            classification.resultado,
             classification.mensagem,
         )
         relative_path = self._relative_path(web_result.evidence_path)
@@ -301,18 +284,6 @@ class LotePerformer:
                 result.approved_items += 1
             else:
                 result.rejected_items += 1
-            if evidence:
-                result.evidences.append(evidence)
-            return
-
-        if classification.resultado == ML_OFFLINE_RESULT:
-            assert classification.review is not None
-            self.queue.mark_ml_offline_review(
-                item,
-                classification.review,
-                outputs,
-            )
-            result.human_reviews.append(classification.review)
             if evidence:
                 result.evidences.append(evidence)
             return

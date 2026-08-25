@@ -1,41 +1,33 @@
-"""Decisão determinística e complemento de ML para cada item do DataPool."""
+"""Decisão determinística e enriquecimento de ML para itens do DataPool."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Iterable, Mapping, Protocol
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass, field, replace
+from typing import Protocol
 
+from src.classificador_divergencia import (
+    ClassificadorDivergencia,
+    ResultadoClassificacaoDivergencia,
+)
 from src.ml_audit import MLDecisionAudit, MLDecisionRecorder
-from src.ml_client import MLPrediction
 from src.validation import (
     HumanReviewRequired,
     HumanReviewStatus,
     ValidationError,
-    normalize_status,
     validate_lote,
 )
 
-
-ML_OFFLINE_RESULT = "REVISAO_ML_OFFLINE"
-API_MODEL_STATUSES = frozenset(
-    {
-        "EM ANALISE",
-        "AJUSTE DE LINHA",
-        "ESPECIFICACAO EM REVISAO",
-        "PENDENTE",
-    }
-)
+ML_ENRICHMENT_RESULTS = frozenset({"DIVERGENCIA", "REPROVADO", "REVISAO"})
 
 
-class PredictionClient(Protocol):
+class DivergenceClassifier(Protocol):
+    """Fronteira que impede o provedor de ML de decidir o status do item."""
+
     def classificar(
         self,
-        *,
-        lote_id: str,
-        status_raw: str,
-        turno: str,
-        tem_obs: bool,
-    ) -> MLPrediction | None: ...
+        observacao: str | None,
+    ) -> ResultadoClassificacaoDivergencia: ...
 
 
 @dataclass(frozen=True)
@@ -44,12 +36,12 @@ class ItemClassification:
     mensagem: str
     validated: dict[str, str] = field(default_factory=dict)
     review: HumanReviewRequired | None = None
-    ml_prediction: MLPrediction | None = None
+    enriquecimento_ml: ResultadoClassificacaoDivergencia | None = None
     ml_decision: MLDecisionAudit | None = None
 
 
 class DeterministicClassifier(Protocol):
-    """Contrato da primeira camada, sem acoplar o ML a uma família de regras."""
+    """Contrato da primeira camada, sem acoplar o ML às regras de negócio."""
 
     def classify(self, item: Mapping[str, object]) -> ItemClassification: ...
 
@@ -95,135 +87,61 @@ class OperationalItemClassifier:
 
 
 class ItemProcessor:
-    """Complementa somente decisões ambíguas produzidas pela primeira camada."""
+    """Executa as regras antes do ML e preserva integralmente sua decisão."""
 
     def __init__(
         self,
         reference_lotes: Iterable[str] | None = None,
         *,
-        ml_enabled: bool = False,
-        ml_client: PredictionClient | None = None,
+        divergence_classifier: DivergenceClassifier | None = None,
         deterministic_classifier: DeterministicClassifier | None = None,
         decision_recorder: MLDecisionRecorder | None = None,
     ) -> None:
-        if ml_enabled and ml_client is None:
-            raise ValueError("MLClient deve ser informado quando ML está habilitado")
-        if ml_enabled and decision_recorder is None:
-            raise ValueError(
-                "MLDecisionRecorder com bot_id e execution_id deve ser informado "
-                "quando ML está habilitado"
-            )
         if deterministic_classifier is None:
             if reference_lotes is None:
                 raise ValueError(
                     "Lotes de referência ou classificador determinístico devem ser informados"
                 )
             deterministic_classifier = OperationalItemClassifier(reference_lotes)
+
         self.deterministic_classifier = deterministic_classifier
-        self.ml_enabled = ml_enabled
-        self.ml_client = ml_client
+        self.divergence_classifier = divergence_classifier or ClassificadorDivergencia(
+            enabled=False,
+            confianca_minima=0.85,
+            timeout_seconds=3.0,
+        )
         self.decision_recorder = decision_recorder
 
     def process(self, item: Mapping[str, object]) -> ItemClassification:
         deterministic = self.deterministic_classifier.classify(item)
-        if deterministic.resultado != "REVISAO" or deterministic.review is None:
+        if deterministic.resultado not in ML_ENRICHMENT_RESULTS:
             return deterministic
 
-        status = normalize_status(deterministic.review.status_original)
-        if not self.ml_enabled or status not in API_MODEL_STATUSES:
-            return deterministic
-        return self._apply_ml(item, deterministic)
+        return self._enrich_without_changing_status(item, deterministic)
 
-    def _apply_ml(
+    def _enrich_without_changing_status(
         self,
         item: Mapping[str, object],
-        deterministic_review: ItemClassification,
+        deterministic: ItemClassification,
     ) -> ItemClassification:
-        assert self.ml_client is not None
-        assert self.decision_recorder is not None
-        lote_id = str(item.get("lote_id") or "").strip()
-        prediction = self.ml_client.classificar(
-            lote_id=lote_id,
-            status_raw=str(item.get("status") or "").strip(),
-            turno=str(item.get("turno") or "").strip(),
-            tem_obs=bool(str(item.get("observacao") or "").strip()),
-        )
-        if prediction is None:
-            review = HumanReviewRequired(
-                lote_id=lote_id,
-                status_original=str(item.get("status") or "").strip(),
-                reason="API ML indisponível; lote encaminhado para revisão humana",
+        try:
+            enrichment = self.divergence_classifier.classificar(
+                str(item.get("observacao") or "").strip()
             )
-            decision = self.decision_recorder.record_fallback(
-                lote_id,
-                ML_OFFLINE_RESULT,
-            )
-            return ItemClassification(
-                resultado=ML_OFFLINE_RESULT,
-                mensagem=review.reason,
-                review=review,
-                ml_decision=decision,
+        except Exception:  # noqa: BLE001 - fronteira externa deve falhar com segurança
+            # Até uma implementação externa fora do contrato deve falhar de modo seguro.
+            return deterministic
+
+        decision = None
+        if self.decision_recorder is not None:
+            decision = self.decision_recorder.record_enrichment(
+                str(item.get("lote_id") or "").strip(),
+                enrichment,
+                deterministic.resultado,
             )
 
-        if self._is_high_confidence_action(
-            prediction,
-            "valido_automatico",
-        ):
-            return self._classification_with_prediction(
-                lote_id,
-                prediction,
-                resultado="APROVADO",
-                mensagem="Lote aprovado por decisão complementar de ML",
-            )
-        if self._is_high_confidence_action(
-            prediction,
-            "recusar_automatico",
-        ):
-            return self._classification_with_prediction(
-                lote_id,
-                prediction,
-                resultado="REPROVADO",
-                mensagem="Lote reprovado por decisão complementar de ML",
-            )
-
-        return self._classification_with_prediction(
-            lote_id,
-            prediction,
-            resultado=deterministic_review.resultado,
-            mensagem="Decisão de ML mantida em revisão humana",
-            review=deterministic_review.review,
-        )
-
-    def _classification_with_prediction(
-        self,
-        lote_id: str,
-        prediction: MLPrediction,
-        *,
-        resultado: str,
-        mensagem: str,
-        review: HumanReviewRequired | None = None,
-    ) -> ItemClassification:
-        decision = self.decision_recorder.record_prediction(
-            lote_id,
-            prediction,
-            resultado,
-        )
-        return ItemClassification(
-            resultado=resultado,
-            mensagem=mensagem,
-            review=review,
-            ml_prediction=prediction,
+        return replace(
+            deterministic,
+            enriquecimento_ml=enrichment,
             ml_decision=decision,
-        )
-
-    @staticmethod
-    def _is_high_confidence_action(
-        prediction: MLPrediction,
-        automatic_action: str,
-    ) -> bool:
-        return (
-            prediction.nivel_confianca == "alta"
-            and prediction.probabilidade >= 0.85
-            and prediction.classe == automatic_action
-            and prediction.acao == automatic_action
         )
