@@ -1014,6 +1014,7 @@ finalizada no Maestro como sucesso operacional.
 | [`docs/DEPLOY_BOTCITY.md`](docs/DEPLOY_BOTCITY.md) | Implantação, smoke test e rollback. |
 | [`docs/ORQUESTRACAO_MAESTRO.md`](docs/ORQUESTRACAO_MAESTRO.md) | Registro, encadeamento, timeout e evidências dos três bots. |
 | [`docs/ALERTAS_MULTICANAL.md`](docs/ALERTAS_MULTICANAL.md) | Configuração, fallback de canal e evidências de Telegram e Email. |
+| [`docs/evidencias/s10b/resumo-simulacao.md`](docs/evidencias/s10b/resumo-simulacao.md) | Cinco sabotagens reproduzíveis, massa sintética de 30 casos e evidências sanitizadas. |
 | [`docs/ROTEIRO_DEMONSTRACAO.md`](docs/ROTEIRO_DEMONSTRACAO.md) | Roteiro objetivo da demonstração. |
 | [`docs/EVOLUCAO_AUTOMACAO_WEB.md`](docs/EVOLUCAO_AUTOMACAO_WEB.md) | Histórico e comparação entre Selenium e Playwright. |
 | [`docs/RELATORIO_EXCEL_AULA22.md`](docs/RELATORIO_EXCEL_AULA22.md) | Documentação completa do relatório Excel e perguntas da banca. |
