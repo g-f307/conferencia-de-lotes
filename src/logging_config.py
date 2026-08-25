@@ -36,6 +36,7 @@ STRUCTURED_DETAIL_FIELDS = (
     "trigger_bot",
     "orchestration_stage",
     "next_task_id",
+    "reference_attempts",
 )
 
 

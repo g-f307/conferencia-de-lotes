@@ -465,3 +465,42 @@ def test_settings_rejeita_tempos_invalidos_da_orquestracao(
 
     with pytest.raises(ValueError, match=message):
         replace(settings, **{field_name: field_value}).validate()
+
+
+def test_settings_carrega_configuracao_de_resiliencia(monkeypatch, tmp_path):
+    monkeypatch.setenv("REFERENCE_MAX_ATTEMPTS", "4")
+    monkeypatch.setenv("REFERENCE_RETRY_BASE_INTERVAL_SECONDS", "1.5")
+    monkeypatch.setenv("REFERENCE_TIMEOUT_SECONDS", "8")
+    monkeypatch.setenv("DEAD_LETTER_PATH", "saida/dead-letter.jsonl")
+
+    settings = Settings.from_env(tmp_path)
+
+    assert settings.reference_max_attempts == 4
+    assert settings.reference_retry_base_interval_seconds == 1.5
+    assert settings.reference_timeout_seconds == 8
+    assert settings.dead_letter_path == (tmp_path / "saida/dead-letter.jsonl").resolve()
+
+
+@pytest.mark.parametrize(
+    ("field_name", "field_value", "message"),
+    [
+        ("reference_max_attempts", 0, "REFERENCE_MAX_ATTEMPTS"),
+        (
+            "reference_retry_base_interval_seconds",
+            None,
+            "REFERENCE_RETRY_BASE_INTERVAL_SECONDS",
+        ),
+        ("reference_timeout_seconds", -1, "REFERENCE_TIMEOUT_SECONDS"),
+        ("dead_letter_path", None, "DEAD_LETTER_PATH"),
+    ],
+)
+def test_settings_rejeita_configuracao_de_resiliencia_invalida(
+    tmp_path,
+    field_name,
+    field_value,
+    message,
+):
+    settings = Settings.from_env(tmp_path)
+
+    with pytest.raises(ValueError, match=message):
+        replace(settings, **{field_name: field_value}).validate()
