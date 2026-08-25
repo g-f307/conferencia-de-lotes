@@ -163,12 +163,16 @@ def test_ml_sheet_uses_audit_records_and_preserves_numeric_fields(
             execution_id="exec-123",
             bot_id="bot-ml",
             lote_id="L001",
-            classe="valido_automatico",
+            classe="falha_de_calibracao",
             probabilidade=0.91,
             nivel_confianca="alta",
             acao="valido_automatico",
             resultado_aplicado="APROVADO",
             latencia_ms=22.75,
+            causa_provavel="falha_de_calibracao",
+            origem_decisao="ml",
+            confianca_ml=0.91,
+            motivo_fallback=None,
         ),
         MLDecisionAudit(
             timestamp="2026-08-19T12:31:00+00:00",
@@ -179,8 +183,12 @@ def test_ml_sheet_uses_audit_records_and_preserves_numeric_fields(
             probabilidade=None,
             nivel_confianca=None,
             acao=None,
-            resultado_aplicado="REVISAO_ML_OFFLINE",
+            resultado_aplicado="DIVERGENCIA",
             latencia_ms=None,
+            causa_provavel="nao_classificado",
+            origem_decisao="fallback",
+            confianca_ml=None,
+            motivo_fallback="timeout",
         ),
     ]
 
@@ -192,8 +200,13 @@ def test_ml_sheet_uses_audit_records_and_preserves_numeric_fields(
     assert sheet["D2"].value == "L001"
     assert sheet["F2"].value == pytest.approx(0.91)
     assert sheet["J2"].value == pytest.approx(22.75)
-    assert sheet["I3"].value == "REVISAO_ML_OFFLINE"
-    assert all(sheet.cell(3, column).value is None for column in (5, 6, 7, 8, 10))
+    assert sheet["I3"].value == "DIVERGENCIA"
+    assert sheet["K2"].value == "falha_de_calibracao"
+    assert sheet["L2"].value == "ml"
+    assert sheet["M2"].value == pytest.approx(0.91)
+    assert sheet["N3"].value == "timeout"
+    assert sheet["K3"].value == "nao_classificado"
+    assert sheet["L3"].value == "fallback"
 
 
 def test_all_and_classification_sheets_have_expected_records(

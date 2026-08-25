@@ -1,19 +1,29 @@
 from __future__ import annotations
 
-from collections import Counter
 import json
+from collections import Counter
 from pathlib import Path
 
 import pytest
 from openpyxl import load_workbook
 from openpyxl.chart import DoughnutChart, LineChart
 
-from gerar_relatorio import main
+from gerar_relatorio import load_ml_decisions, main
 from src.excel_reporting import REPORT_SHEET_NAMES
 from src.excel_reporting.service import gerar_relatorio_excel
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+AUDIT_SAMPLE_PATH = PROJECT_ROOT / "docs" / "amostras" / "decisoes_ml_s10b.json"
+
+
+def test_versioned_ml_audit_sample_exposes_controlled_origins():
+    decisions = load_ml_decisions(AUDIT_SAMPLE_PATH)
+
+    assert [decision.origem_decisao for decision in decisions] == ["ml", "fallback"]
+    assert decisions[1].causa_provavel == "nao_classificado"
+    assert decisions[1].motivo_fallback == "timeout"
+
+
 REAL_WORKBOOK_PATH = PROJECT_ROOT / "dados_entrada" / "inspecao_lotes_10dias.xlsx"
 pytestmark = pytest.mark.e2e
 
@@ -117,12 +127,16 @@ def test_cli_reads_ml_decisions_from_execution_summary(tmp_path, capsys):
                         "execution_id": "exec-cli",
                         "bot_id": "bot-ml",
                         "lote_id": "L001",
-                        "classe": "revisar",
+                        "classe": "falha_de_calibracao",
                         "probabilidade": 0.72,
                         "nivel_confianca": "media",
                         "acao": "revisar",
                         "resultado_aplicado": "REVISAO",
                         "latencia_ms": 18.4,
+                        "causa_provavel": "falha_de_calibracao",
+                        "origem_decisao": "ml",
+                        "confianca_ml": 0.72,
+                        "motivo_fallback": None,
                     }
                 ]
             }
@@ -148,6 +162,9 @@ def test_cli_reads_ml_decisions_from_execution_summary(tmp_path, capsys):
     assert exit_code == 0
     assert workbook["Decisões de ML"].max_row == 2
     assert workbook["Decisões de ML"]["D2"].value == "L001"
+    assert workbook["Decisões de ML"]["K2"].value == "falha_de_calibracao"
+    assert workbook["Decisões de ML"]["L2"].value == "ml"
+    assert workbook["Decisões de ML"]["M2"].value == pytest.approx(0.72)
     assert "Decisões de ML: 1" in captured.out
     workbook.close()
 

@@ -10,11 +10,12 @@ from unittest.mock import MagicMock
 import pytest
 from openpyxl import load_workbook
 
+from src.classificador_divergencia import ClassificadorDivergencia
 from src.excel_reporting import REPORT_SHEET_NAMES, gerar_relatorio_excel
 from src.excel_reporting import service as service_module
 from src.excel_reporting import workbook_reader as workbook_reader_module
-from src.vault_client import BotCityVaultProvider
 from src.ml_audit import MLDecisionAudit
+from src.vault_client import BotCityVaultProvider
 
 pytestmark = pytest.mark.integration
 
@@ -133,13 +134,19 @@ def test_orquestracao_repassa_decisoes_ml_e_informa_contagem(
         execution_id="exec-123",
         bot_id="bot-ml",
         lote_id="L001",
-        classe="revisar",
+        classe="falha_de_calibracao",
         probabilidade=0.75,
         nivel_confianca="media",
         acao="revisar",
         resultado_aplicado="REVISAO",
         latencia_ms=15.2,
+        causa_provavel="falha_de_calibracao",
+        origem_decisao="ml",
+        confianca_ml=0.75,
+        motivo_fallback=None,
     )
+    classifier_call = MagicMock(side_effect=AssertionError("inferência duplicada"))
+    monkeypatch.setattr(ClassificadorDivergencia, "classificar", classifier_call)
 
     result = gerar_relatorio_excel(
         workbook_sintetico,
@@ -150,8 +157,18 @@ def test_orquestracao_repassa_decisoes_ml_e_informa_contagem(
 
     workbook = load_workbook(output_path)
     assert result.decisoes_ml == 1
+    classifier_call.assert_not_called()
+    assert result.auditoria_ml == (decision,)
     assert workbook["Decisões de ML"].max_row == 2
-    assert "decisoes_ml=1" in log_path.read_text(encoding="utf-8")
+    sheet = workbook["Decisões de ML"]
+    assert sheet["K2"].value == decision.causa_provavel
+    assert sheet["L2"].value == decision.origem_decisao
+    assert sheet["M2"].value == pytest.approx(decision.confianca_ml)
+    log_content = log_path.read_text(encoding="utf-8")
+    assert "decisoes_ml=1" in log_content
+    assert '"causa_provavel": "falha_de_calibracao"' in log_content
+    assert '"origem_decisao": "ml"' in log_content
+    assert '"confianca_ml": 0.75' in log_content
     workbook.close()
 
 

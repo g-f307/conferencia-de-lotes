@@ -405,14 +405,29 @@ def test_run_integra_ml_sem_interromper_fluxo_quando_api_falha(tmp_path):
         for review in client.human_reviews
     )
     assert client.ml_offline_reviews == []
+    ml_output = client.human_reviews[0][2]
+    assert ml_output["causa_provavel"] == "falha_de_calibracao"
+    assert ml_output["origem_decisao"] == "ml"
+    assert ml_output["confianca_ml"] == "0.92"
+    assert ml_output["motivo_fallback"] == ""
+    fallback_output = client.human_reviews[1][2]
+    assert fallback_output["causa_provavel"] == "nao_classificado"
+    assert fallback_output["origem_decisao"] == "fallback"
+    assert fallback_output["confianca_ml"] == ""
+    assert fallback_output["motivo_fallback"] == "observacao_ausente"
     assert client.business_errors == []
     assert client.system_errors == []
     assert client.finished_tasks[0][0] == "SUCCESS"
     assert len(result.ml_decisions) == 2
+    assert len(result.ml_decisions) == result.ambiguous_items
     assert result.ml_decisions[0]["bot_id"] == settings.bot_id
     assert result.ml_decisions[0]["execution_id"] == settings.execution_id
     assert result.ml_decisions[0]["resultado_aplicado"] == "REVISAO"
     assert result.ml_decisions[1]["resultado_aplicado"] == "REVISAO"
+    assert result.ml_decisions[0]["origem_decisao"] == "ml"
+    assert result.ml_decisions[0]["confianca_ml"] == pytest.approx(0.92)
+    assert result.ml_decisions[1]["origem_decisao"] == "fallback"
+    assert result.ml_decisions[1]["motivo_fallback"] == "observacao_ausente"
     assert client.artifacts[0][2]["ml_decisions"] == result.ml_decisions
 
 
