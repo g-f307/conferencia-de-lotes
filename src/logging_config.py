@@ -5,7 +5,6 @@ import logging
 import os
 import re
 import sys
-
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -17,7 +16,11 @@ SENSITIVE_ASSIGNMENT_PATTERN = re.compile(
 )
 STRUCTURED_DETAIL_FIELDS = (
     "lote_id",
+    "causa_provavel",
     "classe",
+    "confianca_ml",
+    "origem_decisao",
+    "motivo_fallback",
     "probabilidade",
     "nivel_confianca",
     "acao",

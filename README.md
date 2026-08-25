@@ -397,6 +397,7 @@ compatível já instalado.
 | `ML_ENABLED` | Ativa a consulta de ML para casos ambíguos elegíveis. | `false` |
 | `ML_API_URL` | URL base da API consumida pelo bot. | `http://127.0.0.1:8000` local |
 | `ML_TIMEOUT_SECONDS` | Timeout explícito de cada chamada à API. | `3` |
+| `ML_CONFIANCA_MINIMA` | Limiar mínimo para aceitar a causa sugerida a partir da observação. | `0.85` |
 
 Caminhos relativos são resolvidos a partir da raiz do projeto. A senha do ERP
 não é uma variável de ambiente deste projeto.
