@@ -139,7 +139,7 @@ As responsabilidades principais são:
 | `src/item_processor.py` | Preservar a decisão determinística e complementar somente casos ambíguos com ML. |
 | `src/reference_base.py` | Isolar a consulta à Base de Referência e diferenciar infraestrutura de dados. |
 | `src/retry_policy.py` | Aplicar retry com backoff linear, timeout e relógio injetável. |
-| `src/dead_letter.py` | Persistir falhas repetidas de dados em JSON Lines sanitizado e idempotente. |
+| `src/dead_letter.py` | Persistir falhas repetidas de dados em JSON Lines sanitizado, idempotente e protegido por lock multiplataforma. |
 | `src/ml_client.py` | Consumir a API com timeout, validação de contrato, fallback e circuit breaker. |
 | `src/ml_audit.py` | Criar a fonte tipada compartilhada pelo log, resumo JSON e aba `Decisões de ML`. |
 

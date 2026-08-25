@@ -104,6 +104,18 @@ def test_ci_encadeia_qualidade_testes_e_docker():
     ) in content
 
 
+def test_ci_valida_importacao_e_lock_da_dead_letter_no_windows():
+    content = (
+        PROJECT_ROOT / ".github" / "workflows" / "ci.yml"
+    ).read_text(encoding="utf-8")
+
+    assert "  windows-compatibility:" in content
+    assert "    name: Compatibilidade Windows" in content
+    assert "    runs-on: windows-latest" in content
+    assert 'python -c "from src.dead_letter import DeadLetterWriter"' in content
+    assert "python -m pytest tests/integration/test_dead_letter.py -q" in content
+
+
 def test_ci_executa_markers_e_publica_cobertura():
     content = (
         PROJECT_ROOT / ".github" / "workflows" / "ci.yml"
@@ -186,6 +198,7 @@ def test_requirements_do_pacote_usa_playwright_sem_selenium():
     assert "selenium" not in requirements
     assert "webdriver-manager" not in requirements
     assert "reportlab" in requirements
+    assert "portalocker" in requirements
 
 
 def test_pacote_botcity_exclui_arquivos_locais_e_caches():

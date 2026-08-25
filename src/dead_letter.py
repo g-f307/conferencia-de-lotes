@@ -6,9 +6,10 @@ import hashlib
 import json
 from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
-from fcntl import LOCK_EX, LOCK_UN, flock
 from pathlib import Path
 from typing import TextIO
+
+import portalocker
 
 from src.logging_config import sanitize_text
 
@@ -72,7 +73,7 @@ class DeadLetterWriter:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         serialized = json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n"
         with self.path.open("a+", encoding="utf-8") as stream:
-            flock(stream.fileno(), LOCK_EX)
+            portalocker.lock(stream, portalocker.LOCK_EX)
             try:
                 if deduplication_key in self._load_known_keys(stream):
                     return False
@@ -81,7 +82,7 @@ class DeadLetterWriter:
                 stream.flush()
                 return True
             finally:
-                flock(stream.fileno(), LOCK_UN)
+                portalocker.unlock(stream)
 
     def _deduplication_key(
         self,

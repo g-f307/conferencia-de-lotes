@@ -90,7 +90,8 @@ tentativas. Se a base permanecer indisponível, o item recebe
 Somente falhas repetidas de dados são gravadas em
 `data/output/dead_letter.jsonl`. O arquivo contém item sanitizado, motivo,
 tentativas, timestamp, `execution_id` e `task_id`; observações e segredos não
-são persistidos. Garanta permissão de escrita em `data/output/` no Runner.
+são persistidos. A escrita concorrente usa `portalocker`, compatível com Linux
+e Windows. Garanta permissão de escrita em `data/output/` no Runner.
 
 ## Orquestração com três bots
 
