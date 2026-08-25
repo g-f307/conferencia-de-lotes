@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import Callable, Iterator, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -22,6 +22,18 @@ DATAPOOL_OUTPUT_FIELDS = (
     "confianca_ml",
     "motivo_fallback",
 )
+
+
+@dataclass(frozen=True)
+class MaestroTask:
+    """Representação estável de uma task, independente do modelo do SDK."""
+
+    task_id: str
+    state: str
+    parameters: dict[str, object]
+    finish_status: str | None = None
+    finish_message: str = ""
+    activity_label: str = ""
 
 
 class MaestroGateway(Protocol):
@@ -90,11 +102,35 @@ class MaestroGateway(Protocol):
     ) -> None:
         ...
 
+    @property
+    def current_task_id(self) -> str:
+        ...
+
+    def create_task(
+        self,
+        activity_label: str,
+        parameters: dict[str, object],
+    ) -> MaestroTask:
+        ...
+
+    def get_task(self, task_id: str) -> MaestroTask:
+        ...
+
 
 class InMemoryMaestroGateway:
     """Gateway local usado quando o Maestro real não está habilitado."""
 
-    def __init__(self) -> None:
+    def __init__(self, task_id: str = "local-task") -> None:
+        self._current_task_id = str(task_id).strip() or "local-task"
+        self._task_sequence = 0
+        self.tasks: dict[str, MaestroTask] = {
+            self._current_task_id: MaestroTask(
+                task_id=self._current_task_id,
+                state="RUNNING",
+                parameters={},
+            )
+        }
+        self.orchestration_events: list[tuple[str, str]] = []
         self.entries: dict[str, list[dict[str, str]]] = {}
         self.alerts: list[str] = []
         self.info_alerts: list[str] = []
@@ -184,6 +220,47 @@ class InMemoryMaestroGateway:
         self.finished_tasks.append(
             (status, message, total_items, processed_items, failed_items)
         )
+        self.orchestration_events.append(("finish_task", self._current_task_id))
+        current = self.tasks[self._current_task_id]
+        self.tasks[self._current_task_id] = replace(
+            current,
+            state="FINISHED",
+            finish_status=status,
+            finish_message=message,
+        )
+
+    @property
+    def current_task_id(self) -> str:
+        return self._current_task_id
+
+    def create_task(
+        self,
+        activity_label: str,
+        parameters: dict[str, object],
+    ) -> MaestroTask:
+        self._task_sequence += 1
+        task_id = f"local-child-{self._task_sequence}"
+        task = MaestroTask(
+            task_id=task_id,
+            state="START",
+            parameters=dict(parameters),
+            activity_label=activity_label,
+        )
+        self.tasks[task_id] = task
+        self.orchestration_events.append(("create_task", task_id))
+        return task
+
+    def get_task(self, task_id: str) -> MaestroTask:
+        try:
+            return self.tasks[str(task_id)]
+        except KeyError as exc:
+            raise ValueError(f"Task inexistente: {task_id}") from exc
+
+    def activate_task(self, task_id: str) -> None:
+        """Seleciona uma task criada para simular outro Runner em testes."""
+        task = self.get_task(task_id)
+        self._current_task_id = task.task_id
+        self.tasks[task.task_id] = replace(task, state="RUNNING")
 
 
 @dataclass(frozen=True)
@@ -283,6 +360,10 @@ class BotCityMaestroGateway:
                 "MAESTRO_TASK_ID ausente ou inválido para operação dependente de task"
             )
         return self.task_id
+
+    @property
+    def current_task_id(self) -> str:
+        return str(self._require_task_id())
 
     def _datapool(self, datapool_label: str) -> Any:
         return self.sdk.get_datapool(datapool_label)
@@ -407,6 +488,33 @@ class BotCityMaestroGateway:
             failed_items=failed_items,
         )
 
+    def create_task(
+        self,
+        activity_label: str,
+        parameters: dict[str, object],
+    ) -> MaestroTask:
+        task = self.sdk.create_task(activity_label, parameters)
+        return self._to_task(task)
+
+    def get_task(self, task_id: str) -> MaestroTask:
+        return self._to_task(self.sdk.get_task(str(task_id)))
+
+    @staticmethod
+    def _to_task(task: Any) -> MaestroTask:
+        def enum_value(value: Any) -> str | None:
+            if value is None:
+                return None
+            return str(getattr(value, "value", value))
+
+        return MaestroTask(
+            task_id=str(getattr(task, "id", "")),
+            state=enum_value(getattr(task, "state", "")) or "",
+            parameters=dict(getattr(task, "parameters", None) or {}),
+            finish_status=enum_value(getattr(task, "finish_status", None)),
+            finish_message=str(getattr(task, "finish_message", "") or ""),
+            activity_label=str(getattr(task, "activity_label", "") or ""),
+        )
+
 
 class MaestroClient:
     """Facade usada pelo Dispatcher e pelo núcleo para falar com o Maestro."""
@@ -429,7 +537,26 @@ class MaestroClient:
         if settings.maestro_enabled:
             factory = real_gateway_factory or BotCityMaestroGateway.from_settings
             return factory(settings)
-        return InMemoryMaestroGateway()
+        return InMemoryMaestroGateway(
+            settings.maestro_task_id or settings.execution_id
+        )
+
+    @property
+    def current_task_id(self) -> str:
+        """Identificador da task que está executando o bot atual."""
+        return self.gateway.current_task_id
+
+    def create_task(
+        self,
+        activity_label: str,
+        parameters: dict[str, object],
+    ) -> MaestroTask:
+        """Agenda a próxima atividade preservando os parâmetros de correlação."""
+        return self.gateway.create_task(activity_label, parameters)
+
+    def get_task(self, task_id: str) -> MaestroTask:
+        """Consulta uma task sem expor o modelo específico do SDK."""
+        return self.gateway.get_task(task_id)
 
     def create_entry(self, data: dict[str, str]) -> None:
         """Publica um item no DataPool configurado."""
@@ -486,6 +613,10 @@ class MaestroClient:
     def send_error_alert(self, message: str) -> None:
         """Implementa o contrato AlertGateway definido no núcleo."""
         self.gateway.send_error_alert(message)
+
+    def send_info_alert(self, message: str) -> None:
+        """Publica uma notificação informativa vinculada à task atual."""
+        self.gateway.send_info_alert(message)
 
     def send_start_alert(self) -> None:
         """Emite o alerta informativo inicial exigido pela integração Maestro."""

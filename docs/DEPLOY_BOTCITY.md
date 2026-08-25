@@ -7,11 +7,11 @@
 - credencial `credencial_erp2`;
 - Python disponível no Runner;
 - Chrome ou Chromium compatível;
-- permissão para alertas, artefatos e `finish_task`.
+- permissão para alertas, artefatos, `create_task`, `get_task` e `finish_task`.
 
 ## DataPool
 
-Crie onze campos de texto:
+Crie quinze campos de texto:
 
 ```text
 lote_id
@@ -25,9 +25,13 @@ observacao
 resultado_validacao
 evidencia
 mensagem_resultado
+causa_provavel
+origem_decisao
+confianca_ml
+motivo_fallback
 ```
 
-Os três últimos são preenchidos antes da finalização de cada item.
+Os sete últimos são preenchidos antes da finalização de cada item.
 
 ## Credentials Vault
 
@@ -46,6 +50,9 @@ log, imagem, relatório ou pacote.
 ```text
 MAESTRO_ENABLED=true
 VAULT_ENABLED=true
+ORCHESTRATION_ENABLED=false
+ORCHESTRATION_TIMEOUT_SECONDS=300
+ORCHESTRATION_POLL_INTERVAL_SECONDS=2
 DATAPOOL_LABEL=FilaAuditoriaLotes2
 VAULT_LABEL=credencial_erp2
 REFERENCE_LOTES=L001,L002
@@ -68,6 +75,24 @@ bot.py <maestro-server> <task-id> <token>
 ```
 
 Não configure o token como variável e não o registre.
+
+## Orquestração com três bots
+
+Para a cadeia S10-B, registre o mesmo pacote em três automações e atividades:
+
+```text
+rebecca-dispatcher-v1
+gabriel-conferencia-v1
+marcelo-relatorio-v1
+```
+
+Defina `ORCHESTRATION_ENABLED=true`. O estágio é identificado automaticamente
+pelo `activity_label` da task, portanto o mesmo pacote e o mesmo ambiente podem
+atender os três registros. Inicie manualmente somente
+`rebecca-dispatcher-v1`; as outras tasks são criadas em sequência por
+`create_task()`. Consulte
+[`ORQUESTRACAO_MAESTRO.md`](ORQUESTRACAO_MAESTRO.md) para parâmetros, timeout,
+logs e coleta da evidência no painel.
 
 ## Playwright no Runner
 

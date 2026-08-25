@@ -29,6 +29,13 @@ STRUCTURED_DETAIL_FIELDS = (
     "timestamp_decisao",
     "falhas_consecutivas",
     "ml_error_type",
+    "correlation_id",
+    "root_task_id",
+    "parent_task_id",
+    "current_task_id",
+    "trigger_bot",
+    "orchestration_stage",
+    "next_task_id",
 )
 
 

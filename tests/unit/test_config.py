@@ -1,3 +1,4 @@
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -410,3 +411,57 @@ def test_settings_ignora_configuracao_ml_invalida_quando_desabilitado(
     monkeypatch.setenv("ML_TIMEOUT_SECONDS", "invalido")
 
     Settings.from_env(tmp_path).validate()
+
+
+def test_settings_carrega_configuracao_de_orquestracao(monkeypatch, tmp_path):
+    monkeypatch.setenv("ORCHESTRATION_ENABLED", "true")
+    monkeypatch.setenv("ORCHESTRATION_TIMEOUT_SECONDS", "120")
+    monkeypatch.setenv("ORCHESTRATION_POLL_INTERVAL_SECONDS", "0.5")
+
+    settings = Settings.from_env(tmp_path)
+
+    assert settings.orchestration_enabled is True
+    assert settings.orchestration_timeout_seconds == 120
+    assert settings.orchestration_poll_interval_seconds == 0.5
+
+
+def test_orquestracao_habilitada_exige_maestro(tmp_path):
+    settings = Settings.from_env(tmp_path)
+
+    with pytest.raises(ValueError, match="MAESTRO_ENABLED.*ORCHESTRATION_ENABLED"):
+        replace(settings, orchestration_enabled=True).validate()
+
+
+@pytest.mark.parametrize(
+    ("field_name", "field_value", "message"),
+    [
+        (
+            "orchestration_timeout_seconds",
+            0,
+            "ORCHESTRATION_TIMEOUT_SECONDS",
+        ),
+        (
+            "orchestration_poll_interval_seconds",
+            None,
+            "ORCHESTRATION_POLL_INTERVAL_SECONDS",
+        ),
+    ],
+)
+def test_settings_rejeita_tempos_invalidos_da_orquestracao(
+    tmp_path,
+    field_name,
+    field_value,
+    message,
+):
+    settings = replace(
+        Settings.from_env(tmp_path),
+        orchestration_enabled=True,
+        maestro_enabled=True,
+        vault_enabled=True,
+        maestro_server="https://maestro.example",
+        maestro_login="login",
+        maestro_key="key",
+    )
+
+    with pytest.raises(ValueError, match=message):
+        replace(settings, **{field_name: field_value}).validate()

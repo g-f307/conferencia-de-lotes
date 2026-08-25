@@ -203,6 +203,9 @@ def run(
     reference_lotes: Iterable[str] | None = None,
     logger: logging.Logger | None = None,
     divergence_classifier: DivergenceClassifier | None = None,
+    dispatch_items: bool = True,
+    publish_results: bool = True,
+    finalize_task: bool = True,
 ) -> ExecutionResult:
     """Executa o ciclo principal: valida ambiente, consome DataPool e reporta."""
     current_settings = settings or Settings.from_env()
@@ -294,17 +297,22 @@ def run(
                     "usuario": "sistema",
                 },
             )
-        published = dispatch_csv(current_settings.input_csv, client, logger=current_logger)
-        current_logger.info(
-            "Dispatcher publicou %s itens do CSV configurado",
-            published,
-            extra={
-                "evento": "PUBLICACAO_CSV",
-                "formulario": "Dispatcher",
-                "status": "SUCCESS",
-                "usuario": "sistema",
-            },
-        )
+        if dispatch_items:
+            published = dispatch_csv(
+                current_settings.input_csv,
+                client,
+                logger=current_logger,
+            )
+            current_logger.info(
+                "Dispatcher publicou %s itens do CSV configurado",
+                published,
+                extra={
+                    "evento": "PUBLICACAO_CSV",
+                    "formulario": "Dispatcher",
+                    "status": "SUCCESS",
+                    "usuario": "sistema",
+                },
+            )
         current_logger.info(
             "Estrutura inicial validada; iniciando consumo do DataPool",
             extra={
@@ -338,40 +346,42 @@ def run(
             item_processor=item_processor,
         )
         result = execution_result_from_performer(performer.run())
-        summary = result.to_dict()
-        summary_path = client.post_summary_artifact(
-            summary,
-            report_dir=current_settings.report_dir,
-        )
-        report_evidence = (
-            current_settings.base_dir / result.evidences[0]
-            if result.evidences
-            else None
-        )
-        evidence_report_path = client.post_evidence_report(
-            summary,
-            {
-                "bot_id": current_settings.bot_id,
-                "execution_id": current_settings.execution_id,
-                "datapool_label": current_settings.datapool_label,
-                "vault_label": current_settings.vault_label,
-                "web_enabled": current_settings.web_automation_enabled,
-            },
-            report_dir=current_settings.report_dir,
-            evidence_path=report_evidence,
-        )
-        current_logger.info(
-            "Resultados gerados: %s e %s",
-            summary_path,
-            evidence_report_path,
-            extra={
-                "evento": "PUBLICACAO_RESULTADOS",
-                "formulario": "Resumo",
-                "status": "SUCCESS",
-                "usuario": "sistema",
-            },
-        )
-        finish_maestro_task(client, result, current_logger)
+        if publish_results:
+            summary = result.to_dict()
+            summary_path = client.post_summary_artifact(
+                summary,
+                report_dir=current_settings.report_dir,
+            )
+            report_evidence = (
+                current_settings.base_dir / result.evidences[0]
+                if result.evidences
+                else None
+            )
+            evidence_report_path = client.post_evidence_report(
+                summary,
+                {
+                    "bot_id": current_settings.bot_id,
+                    "execution_id": current_settings.execution_id,
+                    "datapool_label": current_settings.datapool_label,
+                    "vault_label": current_settings.vault_label,
+                    "web_enabled": current_settings.web_automation_enabled,
+                },
+                report_dir=current_settings.report_dir,
+                evidence_path=report_evidence,
+            )
+            current_logger.info(
+                "Resultados gerados: %s e %s",
+                summary_path,
+                evidence_report_path,
+                extra={
+                    "evento": "PUBLICACAO_RESULTADOS",
+                    "formulario": "Resumo",
+                    "status": "SUCCESS",
+                    "usuario": "sistema",
+                },
+            )
+        if finalize_task:
+            finish_maestro_task(client, result, current_logger)
         current_logger.info(
             "Execucao finalizada com status %s: %s itens, %s sucesso, %s falhas, %s revisoes",
             result.status,
@@ -407,7 +417,8 @@ def run(
             },
         )
         failed_result = result.fail(str(exc))
-        finish_maestro_task(client, failed_result, current_logger)
+        if finalize_task:
+            finish_maestro_task(client, failed_result, current_logger)
         return failed_result
     finally:
         if web_session is not None:
@@ -423,7 +434,7 @@ def run(
             )
 
 
-def main() -> int:
+def main(settings: Settings | None = None) -> int:
     """Converte o resultado padronizado em codigo de saida do processo."""
-    result = run()
+    result = run(settings=settings)
     return 0 if result.status in {"SUCCESS", "PARTIALLY_COMPLETED"} else 1

@@ -17,6 +17,28 @@ visão registra componentes, responsabilidades e integração técnica.
 - evidência visual e resultado correlacionados ao lote;
 - integrações externas acessadas por adaptadores.
 
+## Cadeia no Maestro
+
+O modo legado mantém uma única execução. No modo orquestrado, o mesmo pacote é
+registrado em três atividades e `src/orchestrator.py` seleciona a etapa pelo
+`BOT_ID`:
+
+```mermaid
+flowchart LR
+    A[rebecca-dispatcher-v1] -->|create_task + correlação| B[gabriel-conferencia-v1]
+    B -->|create_task + resultado| C[marcelo-relatorio-v1]
+    A --> DP[FilaAuditoriaLotes2]
+    DP --> B
+    B --> RESULT[ExecutionResult]
+    RESULT --> C
+    C --> ART[JSON, PDF e notificação]
+```
+
+`src/wait_for_predecessor.py` impede que B ou C execute antes do predecessor
+terminar. Falha, cancelamento e timeout produzem estado terminal sem criar a
+etapa seguinte. A cadeia é reconstruída por `correlation_id`, `root_task_id`,
+`parent_task_id`, `current_task_id` e `trigger_bot`.
+
 ## Componentes
 
 ```mermaid
@@ -108,6 +130,8 @@ flowchart TB
 | `bot.py` | Entry point local e do Runner. |
 | `src/config.py` | Carregar ambiente, reconhecer o Runner, resolver caminhos e validar configurações. |
 | `src/main.py` | Coordenar fail-fast, Vault, sessão Playwright, Dispatcher, Performer, relatórios e task. |
+| `src/orchestrator.py` | Selecionar o estágio, propagar correlação, criar a próxima task e finalizar a atual. |
+| `src/wait_for_predecessor.py` | Aguardar a task pai com polling, timeout e estados terminais explícitos. |
 | `src/dispatcher.py` | Validar o CSV, publicar entradas e reservar os campos de saída. |
 | `src/bot.py` | Aplicar o ciclo individual de classificação, interação web e finalização. |
 | `src/validation.py` | Aplicar RN01–RN07 sem dependência da infraestrutura ou da interface. |

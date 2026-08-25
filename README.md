@@ -302,6 +302,8 @@ o que evita referências específicas de uma máquina ou Runner.
 │   ├── logging_config.py
 │   ├── maestro_client.py
 │   ├── main.py
+│   ├── orchestrator.py
+│   ├── wait_for_predecessor.py
 │   ├── markdown_reporting.py
 │   ├── models.py
 │   ├── operational_indicators.py
@@ -379,6 +381,9 @@ compatível já instalado.
 | `MAESTRO_TASK_ID` | Task controlada fora do Runner. | vazio |
 | `BOT_ID` | Identificador da automação. | `bot-conferencia-de-lotes-v2` |
 | `EXECUTION_ID` | Correlação dos logs. | `execucao-local` |
+| `ORCHESTRATION_ENABLED` | Ativa a cadeia de três bots no Maestro. | `false` |
+| `ORCHESTRATION_TIMEOUT_SECONDS` | Limite para aguardar o predecessor. | `300` |
+| `ORCHESTRATION_POLL_INTERVAL_SECONDS` | Intervalo entre consultas de task. | `2` |
 | `DATAPOOL_LABEL` | Nome da fila. | `FilaAuditoriaLotes2` |
 | `VAULT_LABEL` | Nome da credencial. | `credencial_erp2` |
 | `REFERENCE_LOTES` | IDs de referência separados por vírgula. | `L001,L002` |
@@ -417,7 +422,7 @@ no log.
 
 ## DataPool
 
-Crie `FilaAuditoriaLotes2` com os onze campos de texto:
+Crie `FilaAuditoriaLotes2` com os quinze campos de texto:
 
 ```text
 lote_id
@@ -431,9 +436,13 @@ observacao
 resultado_validacao
 evidencia
 mensagem_resultado
+causa_provavel
+origem_decisao
+confianca_ml
+motivo_fallback
 ```
 
-Os oito primeiros são entradas. Os três últimos são inicializados vazios pelo
+Os oito primeiros são entradas. Os sete últimos são inicializados vazios pelo
 Dispatcher e preenchidos pelo Performer antes da finalização individual.
 
 ## Execução local
@@ -649,6 +658,25 @@ web/index-lotes/
 O procedimento completo está em
 [`docs/DEPLOY_BOTCITY.md`](docs/DEPLOY_BOTCITY.md).
 
+### Cadeia de três bots
+
+Quando a orquestração está habilitada, o mesmo pacote é registrado como:
+
+```text
+rebecca-dispatcher-v1
+gabriel-conferencia-v1
+marcelo-relatorio-v1
+```
+
+O Dispatcher cria a task de conferência, que cria a task de relatório. As três
+etapas compartilham `correlation_id`, `root_task_id`, `parent_task_id`,
+`trigger_bot` e o resultado anterior. Bots dependentes aguardam o predecessor
+com timeout e terminam com falha compreensível quando a dependência falha ou é
+cancelada. Cada estágio é identificado pelo `activity_label` da task atual, sem
+depender de um `BOT_ID` diferente por máquina. O guia completo de registro,
+validação e evidências está em
+[`docs/ORQUESTRACAO_MAESTRO.md`](docs/ORQUESTRACAO_MAESTRO.md).
+
 ## Logs, resumo e evidências
 
 Cada linha de `logs/execucao.log` é um objeto JSON independente, com
@@ -670,6 +698,9 @@ Eventos relevantes:
 | `CIRCUIT_BREAKER_ML` | Registra uma única vez a abertura após cinco falhas consecutivas. |
 | `REVISAO_ML_OFFLINE` | Encaminha o item para revisão humana sem erro técnico. |
 | `PUBLICACAO_RESULTADOS` | Confirma JSON e PDF. |
+| `INICIO_BOT` / `FIM_BOT` | Delimitam cada estágio da cadeia no Maestro. |
+| `AGUARDANDO_PREDECESSOR` | Registra a dependência sequencial com timeout. |
+| `PROXIMA_TASK_CRIADA` | Relaciona a task atual à próxima task. |
 | `ENCERRAMENTO` | Confirma sucesso operacional. |
 
 `resumo_execucao.json` inclui total, aprovados, divergências, revisões,
@@ -938,6 +969,7 @@ finalizada no Maestro como sucesso operacional.
 | [`docs/REVISAO_BPMN_PDD.md`](docs/REVISAO_BPMN_PDD.md) | Aderência do processo e das regras. |
 | [`docs/ADERENCIA_PAGE_OBJECTS.md`](docs/ADERENCIA_PAGE_OBJECTS.md) | Matriz técnica da entrega. |
 | [`docs/DEPLOY_BOTCITY.md`](docs/DEPLOY_BOTCITY.md) | Implantação, smoke test e rollback. |
+| [`docs/ORQUESTRACAO_MAESTRO.md`](docs/ORQUESTRACAO_MAESTRO.md) | Registro, encadeamento, timeout e evidências dos três bots. |
 | [`docs/ROTEIRO_DEMONSTRACAO.md`](docs/ROTEIRO_DEMONSTRACAO.md) | Roteiro objetivo da demonstração. |
 | [`docs/EVOLUCAO_AUTOMACAO_WEB.md`](docs/EVOLUCAO_AUTOMACAO_WEB.md) | Histórico e comparação entre Selenium e Playwright. |
 | [`docs/RELATORIO_EXCEL_AULA22.md`](docs/RELATORIO_EXCEL_AULA22.md) | Documentação completa do relatório Excel e perguntas da banca. |
