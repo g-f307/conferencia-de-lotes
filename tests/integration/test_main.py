@@ -3,6 +3,7 @@ from dataclasses import replace
 
 import pytest
 
+from src.alerts import SistemaAlertas
 from src.classificador_divergencia import ResultadoClassificacaoDivergencia
 from src.config import Settings
 from src.logging_config import configure_logging
@@ -19,6 +20,15 @@ class FakeAlertGateway:
 
     def send_error_alert(self, message: str) -> None:
         self.messages.append(message)
+
+
+class FakeNotificationChannel:
+    def __init__(self, name):
+        self.nome = name
+        self.alerts = []
+
+    def enviar(self, alert):
+        self.alerts.append(alert)
 
 
 class FakeMaestroClient:
@@ -454,6 +464,53 @@ def test_run_integra_ml_sem_interromper_fluxo_quando_api_falha(tmp_path):
     assert result.ml_decisions[1]["origem_decisao"] == "fallback"
     assert result.ml_decisions[1]["motivo_fallback"] == "observacao_ausente"
     assert client.artifacts[0][2]["ml_decisions"] == result.ml_decisions
+
+
+def test_run_avisa_quando_todas_as_divergencias_usam_fallback(tmp_path):
+    settings = replace(
+        settings_for(tmp_path),
+        ml_enabled=True,
+        ml_api_url="http://api-ml:8000",
+        ml_timeout_seconds=1,
+    )
+    settings.input_csv.write_text(
+        "lote_id,produto,linha,turno,status,responsavel,data,observacao\n"
+        "L001,Monitor,Linha A,Manha,PENDENTE,Marcelo,2026-08-25,Conferir\n",
+        encoding="utf-8",
+    )
+    telegram = FakeNotificationChannel("telegram")
+    alerts = SistemaAlertas(
+        telegram,
+        FakeNotificationChannel("email"),
+        FakeNotificationChannel("log_local"),
+        logger=configure_logging(settings.log_file, settings),
+    )
+
+    result = run(
+        settings=settings,
+        maestro_client=FakeMaestroClient([]),
+        vault_client=VaultClient(FakeVaultProvider()),
+        reference_lotes={"L001"},
+        divergence_classifier=FakeDivergenceClassifier(
+            [
+                ResultadoClassificacaoDivergencia(
+                    causa_provavel="nao_classificado",
+                    confianca_ml=None,
+                    origem_decisao="fallback",
+                    motivo_fallback="timeout",
+                    latencia_ms=1000,
+                )
+            ]
+        ),
+        sistema_alertas=alerts,
+    )
+
+    assert result.ambiguous_items == 1
+    assert len(telegram.alerts) == 1
+    assert telegram.alerts[0].severidade == "AVISO"
+    assert telegram.alerts[0].quantidade_afetada == 1
+    assert telegram.alerts[0].motivo_predominante == "timeout"
+    assert telegram.alerts[0].evento == "pipeline_operando_sem_ml"
 
 
 def test_run_falha_quando_next_da_fila_quebra(tmp_path):

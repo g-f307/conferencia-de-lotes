@@ -3,7 +3,7 @@
 import math
 import os
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -97,6 +97,18 @@ class Settings:
     reference_retry_base_interval_seconds: float | None = 1.0
     reference_timeout_seconds: float | None = 5.0
     dead_letter_path: Path | None = None
+    alerts_enabled: bool = False
+    telegram_bot_token: str = field(default="", repr=False)
+    telegram_chat_id: str = ""
+    telegram_api_base_url: str = "https://api.telegram.org"
+    smtp_host: str = ""
+    smtp_port: int | None = 587
+    smtp_username: str = ""
+    smtp_password: str = field(default="", repr=False)
+    smtp_from: str = ""
+    smtp_to: tuple[str, ...] = ()
+    smtp_use_tls: bool = True
+    alerts_timeout_seconds: float | None = 5.0
 
     @classmethod
     def from_env(cls, base_dir: Path | None = None) -> "Settings":
@@ -199,6 +211,28 @@ class Settings:
                 "DEAD_LETTER_PATH",
                 "data/output/dead_letter.jsonl",
             ),
+            alerts_enabled=as_bool(env.get("ALERTS_ENABLED"), False),
+            telegram_bot_token=env_or_default("TELEGRAM_BOT_TOKEN"),
+            telegram_chat_id=env_or_default("TELEGRAM_CHAT_ID"),
+            telegram_api_base_url=env_or_default(
+                "TELEGRAM_API_BASE_URL",
+                "https://api.telegram.org",
+            ),
+            smtp_host=env_or_default("SMTP_HOST"),
+            smtp_port=as_optional_int(env.get("SMTP_PORT"), 587),
+            smtp_username=env_or_default("SMTP_USERNAME"),
+            smtp_password=env_or_default("SMTP_PASSWORD"),
+            smtp_from=env_or_default("SMTP_FROM"),
+            smtp_to=tuple(
+                address.strip()
+                for address in env.get("SMTP_TO", "").split(",")
+                if address.strip()
+            ),
+            smtp_use_tls=as_bool(env.get("SMTP_USE_TLS"), True),
+            alerts_timeout_seconds=as_optional_float(
+                env.get("ALERTS_TIMEOUT_SECONDS"),
+                5.0,
+            ),
         )
 
     def validate(self) -> None:
@@ -264,6 +298,51 @@ class Settings:
             raise ValueError("REFERENCE_TIMEOUT_SECONDS deve ser maior que zero")
         if self.dead_letter_path is None:
             raise ValueError("DEAD_LETTER_PATH deve ser informado")
+
+        if self.alerts_enabled:
+            self._validate_alerts_configuration()
+
+    def _validate_alerts_configuration(self) -> None:
+        required = {
+            "TELEGRAM_BOT_TOKEN": self.telegram_bot_token,
+            "TELEGRAM_CHAT_ID": self.telegram_chat_id,
+            "SMTP_HOST": self.smtp_host,
+            "SMTP_FROM": self.smtp_from,
+            "SMTP_TO": self.smtp_to,
+        }
+        missing = [name for name, value in required.items() if not value]
+        if missing:
+            raise ValueError(
+                "Configuração obrigatória de alertas ausente: "
+                + ", ".join(missing)
+            )
+        if bool(self.smtp_username) != bool(self.smtp_password):
+            raise ValueError(
+                "SMTP_USERNAME e SMTP_PASSWORD devem ser informados em conjunto"
+            )
+        if self.smtp_port is None or not 1 <= self.smtp_port <= 65535:
+            raise ValueError("SMTP_PORT deve estar entre 1 e 65535")
+        if self.alerts_timeout_seconds is None or self.alerts_timeout_seconds <= 0:
+            raise ValueError("ALERTS_TIMEOUT_SECONDS deve ser maior que zero")
+
+        parsed_url = urlparse(self.telegram_api_base_url)
+        if (
+            parsed_url.scheme not in {"http", "https"}
+            or not parsed_url.netloc
+            or parsed_url.username
+            or parsed_url.password
+            or parsed_url.query
+            or parsed_url.fragment
+        ):
+            raise ValueError("TELEGRAM_API_BASE_URL deve ser uma URL HTTP válida")
+        if parsed_url.scheme == "http" and parsed_url.hostname not in {
+            "127.0.0.1",
+            "::1",
+            "localhost",
+        }:
+            raise ValueError(
+                "TELEGRAM_API_BASE_URL exige HTTPS fora do ambiente local"
+            )
 
     def _validate_ml_configuration(self) -> None:
         """Valida somente os parâmetros necessários quando ML está ativo."""

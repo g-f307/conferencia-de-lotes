@@ -9,6 +9,12 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any, Protocol
 
+from src.alerts import (
+    Alerta,
+    Severidade,
+    SistemaAlertas,
+    construir_sistema_alertas,
+)
 from src.bot import LotePerformer, PerformerResult
 from src.classificador_divergencia import ClassificadorDivergencia
 from src.config import Settings
@@ -201,6 +207,28 @@ def finish_maestro_task(
         logger.exception("Nao foi possivel finalizar a task no Maestro")
 
 
+def send_multichannel_alert(
+    alerts: SistemaAlertas | None,
+    alert: Alerta,
+    logger: logging.Logger,
+) -> None:
+    """Isola inclusive falhas inesperadas da implementacao de notificacao."""
+    if alerts is None:
+        return
+    try:
+        alerts.notificar(alert)
+    except Exception:
+        logger.exception(
+            "Falha inesperada ao coordenar os canais de alerta",
+            extra={
+                "evento": "FALHA_SISTEMA_ALERTAS",
+                "formulario": "SistemaAlertas",
+                "status": "FAILED",
+                "usuario": "sistema",
+            },
+        )
+
+
 def run(
     settings: Settings | None = None,
     alert_gateway: AlertGateway | None = None,
@@ -213,6 +241,7 @@ def run(
     publish_results: bool = True,
     finalize_task: bool = True,
     reference_base_service: ReferenceBaseService | None = None,
+    sistema_alertas: SistemaAlertas | None = None,
 ) -> ExecutionResult:
     """Executa o ciclo principal: valida ambiente, consome DataPool e reporta."""
     current_settings = settings or Settings.from_env()
@@ -237,6 +266,11 @@ def run(
         )
         return result.fail(str(exc))
 
+    current_alerts = sistema_alertas or construir_sistema_alertas(
+        current_settings,
+        current_logger,
+    )
+
     if not current_settings.input_dir.is_dir():
         message = f"Pasta de entrada inexistente: {current_settings.input_dir}"
         current_logger.error(
@@ -254,6 +288,18 @@ def run(
                 gateway.send_error_alert(message)
             except Exception:
                 current_logger.exception("Nao foi possivel emitir o alerta no Maestro")
+        send_multichannel_alert(
+            current_alerts,
+            Alerta(
+                severidade=Severidade.ERRO,
+                execution_id=current_settings.execution_id,
+                bot_id=current_settings.bot_id,
+                quantidade_afetada=0,
+                motivo_predominante="entrada_ausente",
+                estado_pipeline="FAILED_VALIDATION",
+            ),
+            current_logger,
+        )
         return result.fail(message)
 
     client = maestro_client or MaestroClient(current_settings)
@@ -382,6 +428,24 @@ def run(
             item_processor=item_processor,
         )
         result = execution_result_from_performer(performer.run())
+        if current_alerts is not None:
+            try:
+                current_alerts.avisar_pipeline_sem_ml(
+                    result.ml_decisions,
+                    execution_id=current_settings.execution_id,
+                    bot_id=current_settings.bot_id,
+                    estado_pipeline=result.status,
+                )
+            except Exception:
+                current_logger.exception(
+                    "Falha inesperada ao avaliar o alerta de fallback do ML",
+                    extra={
+                        "evento": "FALHA_SISTEMA_ALERTAS",
+                        "formulario": "SistemaAlertas",
+                        "status": "FAILED",
+                        "usuario": "sistema",
+                    },
+                )
         if publish_results:
             summary = result.to_dict()
             summary_path = client.post_summary_artifact(
@@ -453,6 +517,18 @@ def run(
             },
         )
         failed_result = result.fail(str(exc))
+        send_multichannel_alert(
+            current_alerts,
+            Alerta(
+                severidade=Severidade.CRITICO,
+                execution_id=current_settings.execution_id,
+                bot_id=current_settings.bot_id,
+                quantidade_afetada=result.total_items,
+                motivo_predominante=type(exc).__name__,
+                estado_pipeline=failed_result.status,
+            ),
+            current_logger,
+        )
         if finalize_task:
             finish_maestro_task(client, failed_result, current_logger)
         return failed_result

@@ -140,6 +140,7 @@ As responsabilidades principais são:
 | `src/reference_base.py` | Isolar a consulta à Base de Referência e diferenciar infraestrutura de dados. |
 | `src/retry_policy.py` | Aplicar retry com backoff linear, timeout e relógio injetável. |
 | `src/dead_letter.py` | Persistir falhas repetidas de dados em JSON Lines sanitizado, idempotente e protegido por lock multiplataforma. |
+| `src/alerts.py` | Entregar alertas por Telegram, Email e log local sem bloquear o pipeline. |
 | `src/ml_client.py` | Consumir a API com timeout, validação de contrato, fallback e circuit breaker. |
 | `src/ml_audit.py` | Criar a fonte tipada compartilhada pelo log, resumo JSON e aba `Decisões de ML`. |
 
@@ -400,6 +401,18 @@ compatível já instalado.
 | `REFERENCE_RETRY_BASE_INTERVAL_SECONDS` | Base do backoff linear entre tentativas. | `1` |
 | `REFERENCE_TIMEOUT_SECONDS` | Timeout repassado para cada consulta. | `5` |
 | `DEAD_LETTER_PATH` | Falhas repetidas de dados para reprocessamento. | `data/output/dead_letter.jsonl` |
+| `ALERTS_ENABLED` | Ativa Telegram, Email e fallback local. | `false` |
+| `TELEGRAM_BOT_TOKEN` | Token sigiloso do bot Telegram. | vazio |
+| `TELEGRAM_CHAT_ID` | Destino sigiloso do Telegram. | vazio |
+| `TELEGRAM_API_BASE_URL` | Endpoint base do Telegram. | `https://api.telegram.org` |
+| `SMTP_HOST` | Servidor do canal de Email. | vazio |
+| `SMTP_PORT` | Porta SMTP. | `587` |
+| `SMTP_USERNAME` | Usuário técnico sigiloso, quando exigido. | vazio |
+| `SMTP_PASSWORD` | Senha SMTP sigilosa. | vazio |
+| `SMTP_FROM` | Remetente autorizado. | vazio |
+| `SMTP_TO` | Destinatários sigilosos separados por vírgula. | vazio |
+| `SMTP_USE_TLS` | Ativa STARTTLS no SMTP. | `true` |
+| `ALERTS_TIMEOUT_SECONDS` | Timeout individual dos canais. | `5` |
 | `INPUT_DIR` | Diretório validado no fail-fast. | `dados_entrada` |
 | `INPUT_CSV` | Massa publicada pelo Dispatcher. | `dados_entrada/lotes_auditoria.csv` |
 | `LOG_FILE` | Log JSON Lines. | `logs/execucao.log` |
@@ -418,7 +431,20 @@ compatível já instalado.
 | `ML_CONFIANCA_MINIMA` | Limiar mínimo para aceitar a causa sugerida a partir da observação. | `0.85` |
 
 Caminhos relativos são resolvidos a partir da raiz do projeto. A senha do ERP
-não é uma variável de ambiente deste projeto.
+não é uma variável de ambiente deste projeto. Tokens e senhas dos canais de
+alerta são carregados apenas do ambiente e nunca devem ser versionados.
+
+## Alertas multicanal
+
+Telegram é o canal principal. Eventos `ERRO` e `CRITICO` também seguem por
+Email; se Telegram falhar, o Email assume automaticamente, e a indisponibilidade
+dos dois canais produz um registro local destacado sem interromper o pipeline.
+
+Quando existe ao menos uma decisão de divergência e 100% delas usam
+`origem_decisao=fallback`, o bot envia um `AVISO` de pipeline operando sem ML.
+Execuções sem divergências não geram esse aviso. Configuração, matriz de canais
+e smoke test real estão em
+[`docs/ALERTAS_MULTICANAL.md`](docs/ALERTAS_MULTICANAL.md).
 
 ## Credentials Vault
 
@@ -968,6 +994,7 @@ finalizada no Maestro como sucesso operacional.
 - `.env` real nunca é versionado ou empacotado;
 - a senha existe somente no Vault ou na credencial efêmera local;
 - logs sanitizam senha, token, chave e API key;
+- falhas de Telegram e SMTP registram somente canal e tipo da exceção;
 - dead letter omite a observação e campos de credencial, token ou senha;
 - capturas usam somente a aplicação e a massa controladas;
 - imagens e pacotes não recebem credenciais durante o build;
@@ -986,6 +1013,7 @@ finalizada no Maestro como sucesso operacional.
 | [`docs/ADERENCIA_PAGE_OBJECTS.md`](docs/ADERENCIA_PAGE_OBJECTS.md) | Matriz técnica da entrega. |
 | [`docs/DEPLOY_BOTCITY.md`](docs/DEPLOY_BOTCITY.md) | Implantação, smoke test e rollback. |
 | [`docs/ORQUESTRACAO_MAESTRO.md`](docs/ORQUESTRACAO_MAESTRO.md) | Registro, encadeamento, timeout e evidências dos três bots. |
+| [`docs/ALERTAS_MULTICANAL.md`](docs/ALERTAS_MULTICANAL.md) | Configuração, fallback de canal e evidências de Telegram e Email. |
 | [`docs/ROTEIRO_DEMONSTRACAO.md`](docs/ROTEIRO_DEMONSTRACAO.md) | Roteiro objetivo da demonstração. |
 | [`docs/EVOLUCAO_AUTOMACAO_WEB.md`](docs/EVOLUCAO_AUTOMACAO_WEB.md) | Histórico e comparação entre Selenium e Playwright. |
 | [`docs/RELATORIO_EXCEL_AULA22.md`](docs/RELATORIO_EXCEL_AULA22.md) | Documentação completa do relatório Excel e perguntas da banca. |

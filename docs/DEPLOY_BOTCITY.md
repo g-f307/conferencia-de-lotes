@@ -229,3 +229,20 @@ Valide:
 4. use `WEB_AUTOMATION_ENABLED=false` somente como contingência documentada;
 5. corrija navegador, permissão ou configuração;
 6. publique uma nova versão e repita o smoke test.
+
+## Alertas externos
+
+Telegram e Email ficam desabilitados por padrão. Para ativá-los no host do
+Runner, forneça `ALERTS_ENABLED=true` e as variáveis descritas em
+[`ALERTAS_MULTICANAL.md`](ALERTAS_MULTICANAL.md) pelo ambiente seguro do
+processo. Não inclua token, senha SMTP ou destinatários no ZIP do bot.
+
+Antes do deploy definitivo, execute o smoke test controlado no mesmo ambiente:
+
+```bash
+python -m scripts.smoke_test_alerts
+```
+
+O resultado deve listar `telegram` e `email` em `entregues`. Em seguida, confira
+as duas mensagens recebidas e valide no JSON Lines que nenhuma credencial foi
+persistida.

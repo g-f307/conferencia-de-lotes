@@ -504,3 +504,74 @@ def test_settings_rejeita_configuracao_de_resiliencia_invalida(
 
     with pytest.raises(ValueError, match=message):
         replace(settings, **{field_name: field_value}).validate()
+
+
+def test_settings_carrega_alertas_multicanal_sem_expor_segredos(
+    monkeypatch,
+    tmp_path,
+):
+    monkeypatch.setenv("ALERTS_ENABLED", "true")
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "telegram-secret")
+    monkeypatch.setenv("TELEGRAM_CHAT_ID", "chat-123")
+    monkeypatch.setenv("SMTP_HOST", "smtp.example")
+    monkeypatch.setenv("SMTP_PORT", "2525")
+    monkeypatch.setenv("SMTP_USERNAME", "bot@example.com")
+    monkeypatch.setenv("SMTP_PASSWORD", "smtp-secret")
+    monkeypatch.setenv("SMTP_FROM", "bot@example.com")
+    monkeypatch.setenv("SMTP_TO", "ops@example.com,gestao@example.com")
+    monkeypatch.setenv("SMTP_USE_TLS", "false")
+    monkeypatch.setenv("ALERTS_TIMEOUT_SECONDS", "7")
+
+    settings = Settings.from_env(tmp_path)
+    settings.validate()
+
+    assert settings.alerts_enabled is True
+    assert settings.telegram_chat_id == "chat-123"
+    assert settings.smtp_port == 2525
+    assert settings.smtp_to == ("ops@example.com", "gestao@example.com")
+    assert settings.smtp_use_tls is False
+    assert settings.alerts_timeout_seconds == 7
+    assert "telegram-secret" not in repr(settings)
+    assert "smtp-secret" not in repr(settings)
+
+
+def test_alertas_habilitados_exigem_os_dois_canais(tmp_path):
+    settings = replace(Settings.from_env(tmp_path), alerts_enabled=True)
+
+    with pytest.raises(ValueError, match="TELEGRAM_BOT_TOKEN.*SMTP_HOST"):
+        settings.validate()
+
+
+@pytest.mark.parametrize(
+    ("changes", "message"),
+    [
+        ({"smtp_port": 0}, "SMTP_PORT"),
+        ({"alerts_timeout_seconds": 0}, "ALERTS_TIMEOUT_SECONDS"),
+        (
+            {"smtp_username": "bot", "smtp_password": ""},
+            "SMTP_USERNAME e SMTP_PASSWORD",
+        ),
+        ({"telegram_api_base_url": "url-invalida"}, "TELEGRAM_API_BASE_URL"),
+        (
+            {"telegram_api_base_url": "http://telegram.example"},
+            "exige HTTPS",
+        ),
+    ],
+)
+def test_settings_rejeita_configuracao_invalida_de_alertas(
+    tmp_path,
+    changes,
+    message,
+):
+    settings = replace(
+        Settings.from_env(tmp_path),
+        alerts_enabled=True,
+        telegram_bot_token="token",
+        telegram_chat_id="chat",
+        smtp_host="smtp.example",
+        smtp_from="bot@example.com",
+        smtp_to=("ops@example.com",),
+    )
+
+    with pytest.raises(ValueError, match=message):
+        replace(settings, **changes).validate()
