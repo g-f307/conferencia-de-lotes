@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 import unicodedata
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from typing import Iterable, Mapping
-
 
 EXPECTED_COLUMNS = (
     "lote_id",
@@ -19,6 +18,10 @@ OUTPUT_COLUMNS = (
     "resultado_validacao",
     "evidencia",
     "mensagem_resultado",
+    "causa_provavel",
+    "origem_decisao",
+    "confianca_ml",
+    "motivo_fallback",
 )
 
 REQUIRED_COLUMNS = (

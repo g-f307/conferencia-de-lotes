@@ -4,13 +4,12 @@ from __future__ import annotations
 
 import csv
 import logging
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
 
 from src.config import Settings
 from src.logging_config import LOGGER_NAME
 from src.maestro_client import MaestroClient
-
 
 DATAPOOL_FIELDS = (
     "lote_id",
@@ -26,6 +25,10 @@ DATAPOOL_OUTPUT_FIELDS = (
     "resultado_validacao",
     "evidencia",
     "mensagem_resultado",
+    "causa_provavel",
+    "origem_decisao",
+    "confianca_ml",
+    "motivo_fallback",
 )
 
 

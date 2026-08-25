@@ -7,7 +7,7 @@ import math
 from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from src.logging_config import LOGGER_NAME
 from src.ml_client import MLPrediction
@@ -17,6 +17,17 @@ if TYPE_CHECKING:
 
 LOGGER = logging.getLogger(LOGGER_NAME)
 Clock = Callable[[], datetime]
+DecisionOrigin = Literal["ml", "fallback"]
+FALLBACK_REASONS = frozenset(
+    {
+        "ml_desabilitado",
+        "observacao_ausente",
+        "indisponibilidade",
+        "timeout",
+        "baixa_confianca",
+        "resposta_invalida",
+    }
+)
 
 
 def utc_now() -> datetime:
@@ -35,6 +46,10 @@ class MLDecisionAudit:
     acao: str | None
     resultado_aplicado: str
     latencia_ms: float | None
+    causa_provavel: str
+    origem_decisao: DecisionOrigin
+    confianca_ml: float | None
+    motivo_fallback: str | None
 
     def __post_init__(self) -> None:
         for field_name in (
@@ -62,11 +77,40 @@ class MLDecisionAudit:
             raise ValueError("latencia_ms não pode ser negativa")
         object.__setattr__(self, "latencia_ms", latency)
 
+        causa = _required_text(self.causa_provavel, "causa_provavel")
+        object.__setattr__(self, "causa_provavel", causa)
+        if self.origem_decisao not in {"ml", "fallback"}:
+            raise ValueError("origem_decisao deve ser 'ml' ou 'fallback'")
+
+        confidence = _optional_number(self.confianca_ml, "confianca_ml")
+        if confidence is not None and not 0 <= confidence <= 1:
+            raise ValueError("confianca_ml deve estar entre 0 e 1")
+        object.__setattr__(self, "confianca_ml", confidence)
+        if self.classe is not None and self.classe != causa:
+            raise ValueError("classe e causa_provavel devem representar a mesma decisão")
+        if self.probabilidade != confidence:
+            raise ValueError(
+                "probabilidade e confianca_ml devem representar a mesma decisão"
+            )
+
+        fallback_reason = _optional_text(self.motivo_fallback, "motivo_fallback")
+        if self.origem_decisao == "fallback":
+            if causa != "nao_classificado":
+                raise ValueError("fallback deve usar causa_provavel 'nao_classificado'")
+            if fallback_reason not in FALLBACK_REASONS:
+                raise ValueError("motivo_fallback deve identificar a causa específica")
+        elif fallback_reason is not None:
+            raise ValueError("motivo_fallback deve ser nulo quando origem_decisao é 'ml'")
+        object.__setattr__(self, "motivo_fallback", fallback_reason)
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
     @classmethod
     def from_dict(cls, payload: Mapping[str, Any]) -> MLDecisionAudit:
+        origin = payload.get("origem_decisao")
+        if origin is None:
+            origin = "ml" if payload.get("classe") else "fallback"
         return cls(
             timestamp=payload.get("timestamp"),
             execution_id=payload.get("execution_id"),
@@ -78,6 +122,17 @@ class MLDecisionAudit:
             acao=payload.get("acao"),
             resultado_aplicado=payload.get("resultado_aplicado"),
             latencia_ms=payload.get("latencia_ms"),
+            causa_provavel=(
+                payload.get("causa_provavel")
+                or payload.get("classe")
+                or "nao_classificado"
+            ),
+            origem_decisao=origin,
+            confianca_ml=payload.get("confianca_ml", payload.get("probabilidade")),
+            motivo_fallback=payload.get(
+                "motivo_fallback",
+                "indisponibilidade" if origin == "fallback" else None,
+            ),
         )
 
 
@@ -114,6 +169,10 @@ class MLDecisionRecorder:
             acao=prediction.acao,
             resultado_aplicado=resultado_aplicado,
             latencia_ms=prediction.latencia_ms,
+            causa_provavel=prediction.classe,
+            origem_decisao="ml",
+            confianca_ml=prediction.probabilidade,
+            motivo_fallback=None,
         )
         self._record(decision, evento="DECISAO_ML", status="SUCCESS")
         return decision
@@ -131,6 +190,10 @@ class MLDecisionRecorder:
             acao=None,
             resultado_aplicado=resultado_aplicado,
             latencia_ms=None,
+            causa_provavel="nao_classificado",
+            origem_decisao="fallback",
+            confianca_ml=None,
+            motivo_fallback="indisponibilidade",
         )
         self._record(decision, evento="REVISAO_ML_OFFLINE", status="FALLBACK")
         return decision
@@ -151,6 +214,10 @@ class MLDecisionRecorder:
             acao=None,
             resultado_aplicado=resultado_deterministico,
             latencia_ms=enrichment.latencia_ms,
+            causa_provavel=enrichment.causa_provavel,
+            origem_decisao=enrichment.origem_decisao,
+            confianca_ml=enrichment.confianca_ml,
+            motivo_fallback=enrichment.motivo_fallback,
         )
         is_ml = enrichment.origem_decisao == "ml"
         self._record(
@@ -194,6 +261,10 @@ class MLDecisionRecorder:
                 "resultado_aplicado": decision.resultado_aplicado,
                 "latencia_ms": decision.latencia_ms,
                 "timestamp_decisao": decision.timestamp,
+                "causa_provavel": decision.causa_provavel,
+                "origem_decisao": decision.origem_decisao,
+                "confianca_ml": decision.confianca_ml,
+                "motivo_fallback": decision.motivo_fallback,
             },
         )
 
