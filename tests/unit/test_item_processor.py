@@ -5,17 +5,11 @@ from collections.abc import Mapping
 import pytest
 
 from src.bot import LotePerformer
-from src.item_processor import (
-    API_MODEL_STATUSES,
-    ML_OFFLINE_RESULT,
-    ItemClassification,
-    ItemProcessor,
-)
+from src.classificador_divergencia import ResultadoClassificacaoDivergencia
+from src.item_processor import ItemClassification, ItemProcessor
 from src.ml_audit import MLDecisionRecorder
-from src.ml_client import MLPrediction
 from src.validation import HumanReviewRequired
 from src.vault_client import VaultClient
-
 
 pytestmark = pytest.mark.unit
 
@@ -35,262 +29,187 @@ def item(**overrides: object) -> dict[str, object]:
     return record
 
 
-def prediction(
+def enrichment(
     *,
-    classe: str = "valido_automatico",
-    probabilidade: float = 0.90,
-    nivel_confianca: str = "alta",
-    acao: str = "valido_automatico",
-) -> MLPrediction:
-    return MLPrediction(  # type: ignore[arg-type]
-        classe=classe,
-        probabilidade=probabilidade,
-        nivel_confianca=nivel_confianca,
-        acao=acao,
+    causa: str = "falha_de_calibracao",
+    confianca: float | None = 0.99,
+    origem: str = "ml",
+    motivo: str | None = None,
+) -> ResultadoClassificacaoDivergencia:
+    return ResultadoClassificacaoDivergencia(  # type: ignore[arg-type]
+        causa_provavel=causa,
+        confianca_ml=confianca,
+        origem_decisao=origem,
+        motivo_fallback=motivo,
         latencia_ms=12.5,
     )
 
 
-class FakeMLClient:
-    def __init__(self, responses):
-        self.responses = list(responses)
-        self.calls: list[dict[str, object]] = []
+class FakeDivergenceClassifier:
+    def __init__(self, response: ResultadoClassificacaoDivergencia):
+        self.response = response
+        self.calls: list[str | None] = []
 
-    def classificar(self, **payload):
-        self.calls.append(payload)
-        return self.responses.pop(0)
+    def classificar(self, observacao: str | None):
+        self.calls.append(observacao)
+        return self.response
+
+
+class FailingClassifier:
+    def classificar(self, observacao: str | None):
+        raise RuntimeError("segredo-do-provedor")
+
+
+class FakeDeterministicClassifier:
+    def __init__(self, classification: ItemClassification):
+        self.classification = classification
+        self.calls: list[Mapping[str, object]] = []
+
+    def classify(self, current_item: Mapping[str, object]):
+        self.calls.append(current_item)
+        return self.classification
 
 
 def decision_recorder() -> MLDecisionRecorder:
     return MLDecisionRecorder("bot-test", "exec-test")
 
 
-def test_integracao_desabilitada_preserva_revisao_sem_chamar_api():
-    client = FakeMLClient([prediction()])
+def test_item_valido_nao_consulta_ml():
+    classifier = FakeDivergenceClassifier(enrichment())
     processor = ItemProcessor(
         {"L001"},
-        ml_enabled=False,
-        ml_client=client,
-    )
-
-    result = processor.process(item())
-
-    assert result.resultado == "REVISAO"
-    assert client.calls == []
-
-
-def test_integracao_habilitada_exige_recorder_com_contexto():
-    with pytest.raises(ValueError, match="MLDecisionRecorder.*bot_id.*execution_id"):
-        ItemProcessor(
-            {"L001"},
-            ml_enabled=True,
-            ml_client=FakeMLClient([prediction()]),
-        )
-
-
-def test_item_nao_ambiguo_nao_consulta_api():
-    client = FakeMLClient([prediction()])
-    processor = ItemProcessor(
-        {"L001"},
-        ml_enabled=True,
-        ml_client=client,
-        decision_recorder=decision_recorder(),
+        divergence_classifier=classifier,
     )
 
     result = processor.process(item(status="APROVADO"))
 
     assert result.resultado == "APROVADO"
-    assert client.calls == []
+    assert result.enriquecimento_ml is None
+    assert classifier.calls == []
 
 
-def test_status_fora_do_dominio_do_modelo_mantem_revisao_sem_chamada():
-    client = FakeMLClient([prediction()])
+@pytest.mark.parametrize("resultado", ["DIVERGENCIA", "REPROVADO", "REVISAO"])
+def test_ml_apenas_enriquece_e_preserva_decisao_das_regras(resultado: str):
+    review = (
+        HumanReviewRequired("L001", "EM ANALISE")
+        if resultado == "REVISAO"
+        else None
+    )
+    deterministic_result = ItemClassification(
+        resultado=resultado,
+        mensagem=f"resultado deterministico {resultado}",
+        validated={"status": resultado},
+        review=review,
+    )
+    deterministic = FakeDeterministicClassifier(deterministic_result)
+    classifier = FakeDivergenceClassifier(enrichment(confianca=1.0))
     processor = ItemProcessor(
-        {"L001"},
-        ml_enabled=True,
-        ml_client=client,
+        deterministic_classifier=deterministic,
+        divergence_classifier=classifier,
         decision_recorder=decision_recorder(),
     )
 
-    result = processor.process(item(status="A REVISAR"))
+    result = processor.process(item())
 
-    assert result.resultado == "REVISAO"
-    assert client.calls == []
-
-
-def test_dominio_do_cliente_reflete_status_aceitos_pela_api():
-    assert API_MODEL_STATUSES == {
-        "EM ANALISE",
-        "AJUSTE DE LINHA",
-        "ESPECIFICACAO EM REVISAO",
-        "PENDENTE",
-    }
+    assert result.resultado == deterministic_result.resultado
+    assert result.mensagem == deterministic_result.mensagem
+    assert result.validated == deterministic_result.validated
+    assert result.review == deterministic_result.review
+    assert result.enriquecimento_ml == classifier.response
+    assert result.ml_decision is not None
+    assert result.ml_decision.resultado_aplicado == resultado
+    assert classifier.calls == ["Conferencia solicitada"]
+    assert len(deterministic.calls) == 1
 
 
-@pytest.mark.parametrize("status", ["AJUSTE DE LINHA", "ESPECIFICACAO EM REVISAO"])
-def test_status_do_modelo_nao_sobrepoe_resultado_deterministico(status: str):
-    client = FakeMLClient([prediction()])
-    processor = ItemProcessor(
-        {"L001"},
-        ml_enabled=True,
-        ml_client=client,
-        decision_recorder=decision_recorder(),
+@pytest.mark.parametrize(
+    ("origem", "motivo"),
+    [
+        ("fallback", "timeout"),
+        ("fallback", "baixa_confianca"),
+        ("fallback", "indisponibilidade"),
+        ("fallback", "observacao_ausente"),
+    ],
+)
+def test_fallback_do_ml_nao_altera_revisao(origem: str, motivo: str):
+    review = HumanReviewRequired("L001", "EM ANALISE")
+    deterministic = ItemClassification(
+        resultado="REVISAO",
+        mensagem=review.reason,
+        review=review,
     )
-
-    result = processor.process(item(status=status))
-
-    assert result.resultado == "DIVERGENCIA"
-    assert client.calls == []
-
-
-class FakeDeterministicClassifier:
-    def __init__(self, classification: ItemClassification):
-        self.classification = classification
-        self.calls = []
-
-    def classify(self, current_item):
-        self.calls.append(current_item)
-        return self.classification
-
-
-def test_decisao_ambiguo_de_classificador_injetado_pode_consultar_modelo():
-    review = HumanReviewRequired(
-        lote_id="L001",
-        status_original="AJUSTE DE LINHA",
-    )
-    deterministic = FakeDeterministicClassifier(
-        ItemClassification(
-            resultado="REVISAO",
-            mensagem=review.reason,
-            review=review,
+    classifier = FakeDivergenceClassifier(
+        enrichment(
+            causa="nao_classificado",
+            confianca=None,
+            origem=origem,
+            motivo=motivo,
         )
     )
-    client = FakeMLClient([prediction()])
     processor = ItemProcessor(
-        ml_enabled=True,
-        ml_client=client,
-        deterministic_classifier=deterministic,
-        decision_recorder=decision_recorder(),
-    )
-
-    result = processor.process(item(status="AJUSTE DE LINHA"))
-
-    assert result.resultado == "APROVADO"
-    assert len(deterministic.calls) == 1
-    assert client.calls[0]["status_raw"] == "AJUSTE DE LINHA"
-
-
-def test_classificador_injetado_nao_ambiguo_impede_chamada_ao_modelo():
-    deterministic = FakeDeterministicClassifier(
-        ItemClassification(resultado="DIVERGENCIA", mensagem="RN05")
-    )
-    client = FakeMLClient([prediction()])
-    processor = ItemProcessor(
-        ml_enabled=True,
-        ml_client=client,
-        deterministic_classifier=deterministic,
-        decision_recorder=decision_recorder(),
-    )
-
-    result = processor.process(item())
-
-    assert result.resultado == "DIVERGENCIA"
-    assert client.calls == []
-
-
-@pytest.mark.parametrize(
-    ("ml_prediction", "expected_result"),
-    [
-        (prediction(), "APROVADO"),
-        (
-            prediction(
-                classe="recusar_automatico",
-                probabilidade=0.94,
-                acao="recusar_automatico",
-            ),
-            "REPROVADO",
-        ),
-    ],
-)
-def test_confianca_alta_aplica_decisao_automatica(
-    ml_prediction: MLPrediction,
-    expected_result: str,
-):
-    client = FakeMLClient([ml_prediction])
-    processor = ItemProcessor(
-        {"L001"},
-        ml_enabled=True,
-        ml_client=client,
-        decision_recorder=decision_recorder(),
-    )
-
-    result = processor.process(item())
-
-    assert result.resultado == expected_result
-    assert result.ml_prediction == ml_prediction
-    assert result.ml_decision is not None
-    assert result.ml_decision.resultado_aplicado == expected_result
-    assert client.calls[0] == {
-        "lote_id": "L001",
-        "status_raw": "EM ANALISE",
-        "turno": "Manha",
-        "tem_obs": True,
-    }
-
-
-@pytest.mark.parametrize(
-    "ml_prediction",
-    [
-        prediction(classe="revisar", acao="revisar"),
-        prediction(
-            probabilidade=0.70,
-            nivel_confianca="media",
-            acao="revisar",
-        ),
-        prediction(
-            probabilidade=0.50,
-            nivel_confianca="baixa",
-            acao="revisar_prioritario",
-        ),
-        prediction(acao="revisar"),
-    ],
-)
-def test_decisao_nao_automatica_permanece_em_revisao(
-    ml_prediction: MLPrediction,
-):
-    processor = ItemProcessor(
-        {"L001"},
-        ml_enabled=True,
-        ml_client=FakeMLClient([ml_prediction]),
-        decision_recorder=decision_recorder(),
+        deterministic_classifier=FakeDeterministicClassifier(deterministic),
+        divergence_classifier=classifier,
     )
 
     result = processor.process(item())
 
     assert result.resultado == "REVISAO"
-    assert result.review is not None
-    assert result.ml_prediction == ml_prediction
-    assert result.ml_decision is not None
-    assert result.ml_decision.resultado_aplicado == "REVISAO"
+    assert result.review == review
+    assert result.mensagem == deterministic.mensagem
+    assert result.enriquecimento_ml == classifier.response
 
 
-def test_api_indisponivel_gera_revisao_ml_offline():
+def test_excecao_de_classificador_injetado_nao_interrompe_nem_altera_regras():
+    deterministic = ItemClassification(
+        resultado="DIVERGENCIA",
+        mensagem="RN05: lote inexistente",
+    )
     processor = ItemProcessor(
-        {"L001"},
-        ml_enabled=True,
-        ml_client=FakeMLClient([None]),
-        decision_recorder=decision_recorder(),
+        deterministic_classifier=FakeDeterministicClassifier(deterministic),
+        divergence_classifier=FailingClassifier(),
     )
 
     result = processor.process(item())
 
-    assert result.resultado == ML_OFFLINE_RESULT
-    assert result.review is not None
-    assert "revisão humana" in result.review.reason
-    assert result.ml_decision is not None
-    assert result.ml_decision.classe is None
-    assert result.ml_decision.probabilidade is None
-    assert result.ml_decision.latencia_ms is None
+    assert result == deterministic
+
+
+def test_regras_sao_executadas_antes_do_enriquecimento_ml():
+    events: list[str] = []
+
+    class OrderedDeterministicClassifier:
+        def classify(self, current_item):
+            events.append("regras")
+            return ItemClassification(
+                resultado="DIVERGENCIA",
+                mensagem="RN05: lote inexistente",
+            )
+
+    class OrderedDivergenceClassifier:
+        def classificar(self, observacao):
+            events.append("ml")
+            return enrichment()
+
+    processor = ItemProcessor(
+        deterministic_classifier=OrderedDeterministicClassifier(),
+        divergence_classifier=OrderedDivergenceClassifier(),
+    )
+
+    result = processor.process(item())
+
+    assert events == ["regras", "ml"]
+    assert result.resultado == "DIVERGENCIA"
+
+
+def test_classificador_padrao_desabilitado_mantem_status_deterministico():
+    processor = ItemProcessor({"L001"})
+
+    result = processor.process(item())
+
+    assert result.resultado == "REVISAO"
+    assert result.enriquecimento_ml is not None
+    assert result.enriquecimento_ml.origem_decisao == "fallback"
+    assert result.enriquecimento_ml.motivo_fallback == "ml_desabilitado"
 
 
 class FakeQueue:
@@ -298,7 +217,6 @@ class FakeQueue:
         self.items = items
         self.done: list[tuple[Mapping[str, object], dict[str, str]]] = []
         self.human_reviews = []
-        self.ml_offline_reviews = []
         self.business_errors = []
         self.system_errors = []
 
@@ -314,9 +232,6 @@ class FakeQueue:
     def mark_human_review(self, current_item, review, result):
         self.human_reviews.append((current_item, review, result))
 
-    def mark_ml_offline_review(self, current_item, review, result):
-        self.ml_offline_reviews.append((current_item, review, result))
-
     def mark_business_error(self, current_item, error, result):
         self.business_errors.append((current_item, error, result))
 
@@ -329,13 +244,21 @@ class FakeVaultProvider:
         return {"username": "teste.erp", "password": "senha-ficticia"}
 
 
-def test_performer_continua_apos_fallback_e_processa_item_seguinte():
+def test_performer_mantem_revisao_apos_fallback_e_processa_item_seguinte():
     queue = FakeQueue([item(), item(lote_id="L002", status="APROVADO")])
+    classifier = FakeDivergenceClassifier(
+        enrichment(
+            causa="nao_classificado",
+            confianca=None,
+            origem="fallback",
+            motivo="timeout",
+        )
+    )
+    recorder = decision_recorder()
     processor = ItemProcessor(
         {"L001", "L002"},
-        ml_enabled=True,
-        ml_client=FakeMLClient([None]),
-        decision_recorder=decision_recorder(),
+        divergence_classifier=classifier,
+        decision_recorder=recorder,
     )
     performer = LotePerformer(
         queue,
@@ -349,14 +272,10 @@ def test_performer_continua_apos_fallback_e_processa_item_seguinte():
     assert result.total == 2
     assert result.system_errors == 0
     assert len(result.human_reviews) == 1
-    assert queue.human_reviews == []
-    assert (
-        queue.ml_offline_reviews[0][2]["resultado_validacao"]
-        == ML_OFFLINE_RESULT
-    )
+    assert queue.human_reviews[0][2]["resultado_validacao"] == "REVISAO"
     assert queue.business_errors == []
     assert queue.system_errors == []
     assert len(queue.done) == 1
     assert queue.done[0][0]["lote_id"] == "L002"
     assert len(result.ml_decisions) == 1
-    assert result.ml_decisions[0].resultado_aplicado == ML_OFFLINE_RESULT
+    assert result.ml_decisions[0].resultado_aplicado == "REVISAO"
