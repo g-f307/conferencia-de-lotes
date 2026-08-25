@@ -18,6 +18,10 @@ DATAPOOL_LOG_LABEL = "FilaAuditoriaLotes2"
 OUTPUT_RESULTADO = "resultado_validacao"
 OUTPUT_EVIDENCIA = "evidencia"
 OUTPUT_MENSAGEM = "mensagem_resultado"
+OUTPUT_CAUSA_PROVAVEL = "causa_provavel"
+OUTPUT_ORIGEM_DECISAO = "origem_decisao"
+OUTPUT_CONFIANCA_ML = "confianca_ml"
+OUTPUT_MOTIVO_FALLBACK = "motivo_fallback"
 
 
 class QueueAdapter(Protocol):
@@ -147,6 +151,7 @@ class LotePerformer:
                     classification.resultado,
                     message,
                     evidence,
+                    classification.ml_decision,
                 )
                 self._finish_classified_item(
                     item,
@@ -310,12 +315,32 @@ class LotePerformer:
         resultado: str,
         mensagem: str,
         evidence: str,
+        ml_decision: MLDecisionAudit | None = None,
     ) -> dict[str, str]:
-        return {
+        outputs = {
             OUTPUT_RESULTADO: resultado,
             OUTPUT_EVIDENCIA: evidence,
             OUTPUT_MENSAGEM: mensagem,
+            OUTPUT_CAUSA_PROVAVEL: "",
+            OUTPUT_ORIGEM_DECISAO: "",
+            OUTPUT_CONFIANCA_ML: "",
+            OUTPUT_MOTIVO_FALLBACK: "",
         }
+        if ml_decision is None:
+            return outputs
+        outputs.update(
+            {
+                OUTPUT_CAUSA_PROVAVEL: ml_decision.causa_provavel,
+                OUTPUT_ORIGEM_DECISAO: ml_decision.origem_decisao,
+                OUTPUT_CONFIANCA_ML: (
+                    ""
+                    if ml_decision.confianca_ml is None
+                    else str(ml_decision.confianca_ml)
+                ),
+                OUTPUT_MOTIVO_FALLBACK: ml_decision.motivo_fallback or "",
+            }
+        )
+        return outputs
 
     def _relative_path(self, path: Path) -> str:
         try:

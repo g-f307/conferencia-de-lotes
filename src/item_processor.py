@@ -130,7 +130,13 @@ class ItemProcessor:
             )
         except Exception:  # noqa: BLE001 - fronteira externa deve falhar com segurança
             # Até uma implementação externa fora do contrato deve falhar de modo seguro.
-            return deterministic
+            enrichment = ResultadoClassificacaoDivergencia(
+                causa_provavel="nao_classificado",
+                confianca_ml=None,
+                origem_decisao="fallback",
+                motivo_fallback="indisponibilidade",
+                latencia_ms=0.0,
+            )
 
         decision = None
         if self.decision_recorder is not None:

@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from unittest.mock import MagicMock
 
 import pytest
 
+from src.classificador_divergencia import ResultadoClassificacaoDivergencia
 from src.ml_audit import MLDecisionAudit, MLDecisionRecorder
 from src.ml_client import MLPrediction
-
 
 pytestmark = pytest.mark.unit
 
@@ -17,12 +18,16 @@ def valid_payload() -> dict[str, object]:
         "execution_id": "exec-123",
         "bot_id": "bot-ml",
         "lote_id": "L001",
-        "classe": "revisar",
+        "classe": "falha_de_calibracao",
         "probabilidade": 0.72,
         "nivel_confianca": "media",
         "acao": "revisar",
         "resultado_aplicado": "REVISAO",
         "latencia_ms": 18.4,
+        "causa_provavel": "falha_de_calibracao",
+        "origem_decisao": "ml",
+        "confianca_ml": 0.72,
+        "motivo_fallback": None,
     }
 
 
@@ -54,6 +59,10 @@ def test_registro_tipado_serializa_contexto_e_resultado_aplicado():
         "acao": "revisar",
         "resultado_aplicado": "REVISAO",
         "latencia_ms": 18.4,
+        "causa_provavel": "revisar",
+        "origem_decisao": "ml",
+        "confianca_ml": 0.72,
+        "motivo_fallback": None,
     }
 
 
@@ -67,6 +76,70 @@ def test_fallback_nao_inventa_campos_indisponiveis():
     assert decision.nivel_confianca is None
     assert decision.acao is None
     assert decision.latencia_ms is None
+    assert decision.causa_provavel == "nao_classificado"
+    assert decision.origem_decisao == "fallback"
+    assert decision.confianca_ml is None
+    assert decision.motivo_fallback == "indisponibilidade"
+
+
+@pytest.mark.parametrize(
+    ("reason", "confidence"),
+    [
+        ("ml_desabilitado", None),
+        ("indisponibilidade", None),
+        ("timeout", None),
+        ("baixa_confianca", 0.42),
+        ("resposta_invalida", None),
+    ],
+)
+def test_enriquecimento_fallback_preserva_motivo_especifico(
+    reason,
+    confidence,
+    monkeypatch,
+):
+    recorder = MLDecisionRecorder("bot-ml", "exec-fallback")
+    log_mock = MagicMock()
+    monkeypatch.setattr("src.ml_audit.LOGGER.log", log_mock)
+    enrichment = ResultadoClassificacaoDivergencia(
+        causa_provavel="nao_classificado",
+        confianca_ml=confidence,
+        origem_decisao="fallback",
+        motivo_fallback=reason,
+        latencia_ms=10.0,
+    )
+
+    decision = recorder.record_enrichment("L002", enrichment, "DIVERGENCIA")
+
+    assert decision.causa_provavel == "nao_classificado"
+    assert decision.origem_decisao == "fallback"
+    assert decision.confianca_ml == confidence
+    assert decision.motivo_fallback == reason
+    log_context = log_mock.call_args.kwargs["extra"]
+    assert log_context["origem_decisao"] == "fallback"
+    assert log_context["motivo_fallback"] == reason
+
+
+def test_auditoria_rejeita_origem_fora_do_dominio_controlado():
+    payload = valid_payload()
+    payload["origem_decisao"] = "regra"
+
+    with pytest.raises(ValueError, match="origem_decisao"):
+        MLDecisionAudit.from_dict(payload)
+
+
+def test_auditoria_rejeita_fallback_sem_motivo_especifico():
+    payload = valid_payload()
+    payload.update(
+        classe=None,
+        probabilidade=None,
+        causa_provavel="nao_classificado",
+        origem_decisao="fallback",
+        confianca_ml=None,
+        motivo_fallback=None,
+    )
+
+    with pytest.raises(ValueError, match="motivo_fallback"):
+        MLDecisionAudit.from_dict(payload)
 
 
 def test_decisao_pode_ser_reconstruida_do_resumo_json():

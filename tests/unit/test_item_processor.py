@@ -171,7 +171,12 @@ def test_excecao_de_classificador_injetado_nao_interrompe_nem_altera_regras():
 
     result = processor.process(item())
 
-    assert result == deterministic
+    assert result.resultado == deterministic.resultado
+    assert result.mensagem == deterministic.mensagem
+    assert result.enriquecimento_ml is not None
+    assert result.enriquecimento_ml.causa_provavel == "nao_classificado"
+    assert result.enriquecimento_ml.origem_decisao == "fallback"
+    assert result.enriquecimento_ml.motivo_fallback == "indisponibilidade"
 
 
 def test_regras_sao_executadas_antes_do_enriquecimento_ml():
@@ -279,3 +284,32 @@ def test_performer_mantem_revisao_apos_fallback_e_processa_item_seguinte():
     assert queue.done[0][0]["lote_id"] == "L002"
     assert len(result.ml_decisions) == 1
     assert result.ml_decisions[0].resultado_aplicado == "REVISAO"
+
+
+def test_item_divergente_publica_a_mesma_auditoria_no_datapool():
+    queue = FakeQueue([item(produto="")])
+    classifier = FakeDivergenceClassifier(enrichment(confianca=0.97))
+    recorder = decision_recorder()
+    processor = ItemProcessor(
+        {"L001"},
+        divergence_classifier=classifier,
+        decision_recorder=recorder,
+    )
+    performer = LotePerformer(
+        queue,
+        {"L001"},
+        VaultClient(FakeVaultProvider()),
+        item_processor=processor,
+    )
+
+    result = performer.run()
+
+    assert result.business_errors == 1
+    assert len(result.ml_decisions) == 1
+    output = queue.business_errors[0][2]
+    decision = result.ml_decisions[0]
+    assert output["resultado_validacao"] == "DIVERGENCIA"
+    assert output["causa_provavel"] == decision.causa_provavel
+    assert output["origem_decisao"] == decision.origem_decisao == "ml"
+    assert output["confianca_ml"] == str(decision.confianca_ml)
+    assert output["motivo_fallback"] == ""

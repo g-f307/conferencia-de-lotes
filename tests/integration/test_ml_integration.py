@@ -79,6 +79,10 @@ def test_enriquecimento_ml_preserva_status_e_possui_contexto_no_json_lines(
     assert audit["detalhes"]["probabilidade"] == 0.91
     assert audit["detalhes"]["latencia_ms"] == 25.0
     assert audit["detalhes"]["resultado_aplicado"] == "REVISAO"
+    assert audit["detalhes"]["causa_provavel"] == "falha_de_calibracao"
+    assert audit["detalhes"]["origem_decisao"] == "ml"
+    assert audit["detalhes"]["confianca_ml"] == 0.91
+    assert audit["detalhes"]["motivo_fallback"] is None
 
 
 class OfflineProvider:
@@ -126,6 +130,10 @@ def test_fallback_nao_altera_status_nem_expoe_observacao_ou_traceback(
         and record["detalhes"].get("lote_id") == "L001"
     )
     assert audit["detalhes"]["resultado_aplicado"] == "REVISAO"
+    assert audit["detalhes"]["causa_provavel"] == "nao_classificado"
+    assert audit["detalhes"]["origem_decisao"] == "fallback"
+    assert audit["detalhes"]["confianca_ml"] is None
+    assert audit["detalhes"]["motivo_fallback"] == "timeout"
     assert "exception" not in audit["detalhes"]
     assert secret_observation not in content
 

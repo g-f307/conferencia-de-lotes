@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import time
 from collections import Counter
@@ -44,6 +45,7 @@ class ReportExecutionResult:
     registros_validados: list[dict[str, Any]]
     decisoes_ml: int = 0
     indicadores: OperationalIndicators | None = None
+    auditoria_ml: tuple[MLDecisionAudit, ...] = ()
 
     @property
     def total_classificacoes(self) -> int:
@@ -107,7 +109,7 @@ def gerar_relatorio_excel(
             serialized=serialized,
             indicators=indicators,
             duration=duration,
-            ml_decisions_count=len(decisions),
+            ml_decisions=decisions,
         )
         _write_log(result)
         return result
@@ -141,7 +143,7 @@ def _build_result(
     serialized: list[dict[str, Any]],
     indicators: OperationalIndicators,
     duration: float,
-    ml_decisions_count: int,
+    ml_decisions: tuple[MLDecisionAudit, ...],
 ) -> ReportExecutionResult:
     classifications = Counter(record.classificacao for record in validated)
     rules: Counter[str] = Counter()
@@ -160,8 +162,9 @@ def _build_result(
         regras=dict(sorted(rules.items())),
         duracao_segundos=duration,
         registros_validados=serialized,
-        decisoes_ml=ml_decisions_count,
+        decisoes_ml=len(ml_decisions),
         indicadores=indicators,
+        auditoria_ml=ml_decisions,
     )
 
 
@@ -195,4 +198,8 @@ def _write_log(result: ReportExecutionResult) -> None:
             f"ganho_estimado_tempo_minutos={result.indicadores.ganho_estimado_tempo_minutos}",
             f"ganho_estimado_tempo_horas={result.indicadores.ganho_estimado_tempo_horas}",
         ])
+    lines.extend(
+        "auditoria_ml=" + json.dumps(decision.to_dict(), ensure_ascii=False)
+        for decision in result.auditoria_ml
+    )
     result.log_path.write_text("\n".join(lines) + "\n", encoding="utf-8")

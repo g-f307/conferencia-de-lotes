@@ -4,20 +4,23 @@ from __future__ import annotations
 
 import json
 import os
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Protocol
+from typing import Any, Protocol
 
 from src.config import Settings
 from src.reporting import generate_evidence_pdf
 from src.validation import HumanReviewRequired
 
-
 DATAPOOL_OUTPUT_FIELDS = (
     "resultado_validacao",
     "evidencia",
     "mensagem_resultado",
+    "causa_provavel",
+    "origem_decisao",
+    "confianca_ml",
+    "motivo_fallback",
 )
 
 
@@ -191,7 +194,7 @@ class DataPoolWorkItem(Mapping[str, Any]):
     values: Mapping[str, Any]
 
     @classmethod
-    def from_entry(cls, entry: Any) -> "DataPoolWorkItem":
+    def from_entry(cls, entry: Any) -> DataPoolWorkItem:
         values = getattr(entry, "values", None)
         if values is None:
             raise TypeError("DataPoolEntry recebido sem atributo values")
@@ -230,7 +233,7 @@ class BotCityMaestroGateway:
         self.task_id = self._resolve_task_id(task_id if task_id is not None else getattr(sdk, "task_id", None))
 
     @classmethod
-    def from_settings(cls, settings: Settings) -> "BotCityMaestroGateway":
+    def from_settings(cls, settings: Settings) -> BotCityMaestroGateway:
         """Constrói o gateway real com as credenciais técnicas do Maestro."""
         try:
             from botcity.maestro import (
@@ -271,7 +274,7 @@ class BotCityMaestroGateway:
         if self._is_valid_task_id(configured_task_id):
             return configured_task_id
         if self._is_valid_task_id(getattr(self.sdk, "task_id", None)):
-            return getattr(self.sdk, "task_id")
+            return self.sdk.task_id
         return None
 
     def _require_task_id(self) -> str | int:

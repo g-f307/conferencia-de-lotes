@@ -1,0 +1,36 @@
+{
+  "ml_decisions": [
+    {
+      "timestamp": "2026-08-24T22:00:00+00:00",
+      "execution_id": "execucao-amostra-s10b",
+      "bot_id": "conferencia-de-lotes",
+      "lote_id": "LT-001",
+      "classe": "falha_de_calibracao",
+      "probabilidade": 0.93,
+      "nivel_confianca": null,
+      "acao": null,
+      "resultado_aplicado": "DIVERGENCIA",
+      "latencia_ms": 18.7,
+      "causa_provavel": "falha_de_calibracao",
+      "origem_decisao": "ml",
+      "confianca_ml": 0.93,
+      "motivo_fallback": null
+    },
+    {
+      "timestamp": "2026-08-24T22:00:01+00:00",
+      "execution_id": "execucao-amostra-s10b",
+      "bot_id": "conferencia-de-lotes",
+      "lote_id": "LT-002",
+      "classe": "nao_classificado",
+      "probabilidade": null,
+      "nivel_confianca": null,
+      "acao": null,
+      "resultado_aplicado": "REVISAO",
+      "latencia_ms": 1000.0,
+      "causa_provavel": "nao_classificado",
+      "origem_decisao": "fallback",
+      "confianca_ml": null,
+      "motivo_fallback": "timeout"
+    }
+  ]
+}

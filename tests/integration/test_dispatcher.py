@@ -11,12 +11,13 @@ from src.dispatcher import (
     DATAPOOL_OUTPUT_FIELDS,
     dispatch_csv,
     iter_csv_rows,
+)
+from src.dispatcher import (
     run as run_dispatcher,
 )
 from src.maestro_client import BotCityMaestroGateway, DataPoolWorkItem, MaestroClient
 from src.validation import HumanReviewRequired
 from src.vault_client import VaultClient
-
 
 pytestmark = pytest.mark.integration
 
@@ -112,6 +113,10 @@ def test_dispatcher_publica_uma_entrada_por_linha_no_datapool(tmp_path):
         "resultado_validacao": "",
         "evidencia": "",
         "mensagem_resultado": "",
+        "causa_provavel": "",
+        "origem_decisao": "",
+        "confianca_ml": "",
+        "motivo_fallback": "",
     }
 
 
@@ -156,6 +161,10 @@ def test_dispatcher_reserva_campos_de_saida_no_item_publicado(tmp_path):
         "resultado_validacao": "",
         "evidencia": "",
         "mensagem_resultado": "",
+        "causa_provavel": "",
+        "origem_decisao": "",
+        "confianca_ml": "",
+        "motivo_fallback": "",
     }
 
 
@@ -462,19 +471,25 @@ def test_gateway_real_finaliza_itens_com_done_e_erros():
         "evidencia": "artefatos/divergencia-LG-1.png",
         "mensagem_resultado": "API ML indisponivel",
     }
+    empty_audit = {
+        "causa_provavel": "",
+        "origem_decisao": "",
+        "confianca_ml": "",
+        "motivo_fallback": "",
+    }
 
     gateway.mark_done(item, approved)
-    assert item.values == {"lote_id": "LG-1", **approved}
+    assert item.values == {"lote_id": "LG-1", **approved, **empty_audit}
     gateway.mark_business_error(item, "campo obrigatorio vazio", divergence)
-    assert item.values == {"lote_id": "LG-1", **divergence}
+    assert item.values == {"lote_id": "LG-1", **divergence, **empty_audit}
     gateway.mark_system_error(item, "Maestro indisponivel", system_error)
-    assert item.values == {"lote_id": "LG-1", **system_error}
+    assert item.values == {"lote_id": "LG-1", **system_error, **empty_audit}
     gateway.mark_human_review(
         item,
         HumanReviewRequired(lote_id="LG-1", status_original="EM ANALISE"),
         review,
     )
-    assert item.values == {"lote_id": "LG-1", **review}
+    assert item.values == {"lote_id": "LG-1", **review, **empty_audit}
     gateway.mark_ml_offline_review(
         item,
         HumanReviewRequired(
@@ -484,7 +499,7 @@ def test_gateway_real_finaliza_itens_com_done_e_erros():
         ),
         offline_review,
     )
-    assert item.values == {"lote_id": "LG-1", **offline_review}
+    assert item.values == {"lote_id": "LG-1", **offline_review, **empty_audit}
 
     assert item.done_messages == [
         "Lote processado com sucesso",

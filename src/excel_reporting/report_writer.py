@@ -17,7 +17,6 @@ from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.table import Table, TableStyleInfo
 
 from src.excel_reporting.models import RegistroValidado
-from src.ml_audit import MLDecisionAudit
 from src.excel_reporting.validation_service import (
     CLASSIFICACAO_AMBIGUO,
     CLASSIFICACAO_DIVERGENCIA,
@@ -25,6 +24,7 @@ from src.excel_reporting.validation_service import (
     CLASSIFICACAO_VALIDO,
     MOTIVOS,
 )
+from src.ml_audit import MLDecisionAudit
 from src.operational_indicators import (
     OperationalIndicators,
     _percentual,
@@ -92,6 +92,10 @@ ML_DECISION_COLUMNS = (
     "Ação",
     "Resultado aplicado",
     "Latência (ms)",
+    "Causa provável",
+    "Origem da decisão",
+    "Confiança ML",
+    "Motivo do fallback",
 )
 
 HEADER_FILL = PatternFill(fill_type="solid", fgColor="1F4E78")
@@ -237,6 +241,10 @@ def _ml_decision_row(decision: MLDecisionAudit) -> dict[str, Any]:
                 decision.acao,
                 decision.resultado_aplicado,
                 decision.latencia_ms,
+                decision.causa_provavel,
+                decision.origem_decisao,
+                decision.confianca_ml,
+                decision.motivo_fallback,
             ),
             strict=True,
         )
@@ -249,6 +257,8 @@ def _format_ml_decisions_sheet(sheet: Any) -> None:
         cell.number_format = "0.0000"
     for cell in sheet["J"][1:]:
         cell.number_format = "0.000"
+    for cell in sheet["M"][1:]:
+        cell.number_format = "0.0000"
 
 
 def _ranking_rows(records: list[RegistroValidado]) -> list[dict[str, Any]]:
