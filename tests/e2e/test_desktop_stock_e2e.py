@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
-import time
 from pathlib import Path
 
 import pytest
@@ -29,7 +28,6 @@ def test_real_visual_driver_collects_stock_from_simulator(tmp_path: Path) -> Non
         [sys.executable, "-m", "src.desktop_stock.simulator"],
     )
     try:
-        time.sleep(1.0)
         collector = DesktopStockCollector(
             PyAutoGuiDesktopDriver(),
             LinearRetryPolicy(
