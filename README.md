@@ -558,6 +558,17 @@ motivo_fallback
 Os oito primeiros são entradas. Os sete últimos são inicializados vazios pelo
 Dispatcher e preenchidos pelo Performer antes da finalização individual.
 
+## Automação desktop do Capstone
+
+O papel `estoque-desktop-v1` possui um simulador Windows controlado e um
+coletor visual com driver injetável, timeout, retry, evidências e fallback
+seguro. A implementação, o contrato e a execução manual estão documentados em
+[`docs/AUTOMACAO_DESKTOP_CAPSTONE.md`](docs/AUTOMACAO_DESKTOP_CAPSTONE.md).
+
+O bot real exige uma sessão gráfica Windows dedicada. A suíte automatizada usa
+a mesma fronteira com um driver controlado e não consulta arquivo interno, banco
+ou API do simulador.
+
 ## Execução local
 
 Sem navegador:
