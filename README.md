@@ -590,6 +590,38 @@ relatorios/relatorio_evidencias.pdf
 artefatos/*.png
 ```
 
+### Bot independente de fornecedores
+
+O estado-alvo do Capstone inclui `fornecedores-web-v1`, que consulta somente a
+interface visível de `web/supplier-portal/`. O portal e as credenciais exibidas
+na própria tela são sintéticos e não representam acesso corporativo. Para uma
+execução local controlada:
+
+```bash
+SUPPLIER_PORTAL_USERNAME=fornecedor.demo \
+SUPPLIER_PORTAL_PASSWORD=demo-local \
+EXECUTION_ID=exec-local-001 \
+CORRELATION_ID=corr-local-001 \
+python -m src.supplier_portal_bot
+```
+
+O bot persiste `data/output/fornecedores.json` com o envelope `1.0` definido em
+[`docs/ARQUITETURA_CAPSTONE.md`](docs/ARQUITETURA_CAPSTONE.md). Início, fim,
+latência, tentativas, contagens e evidências acompanham o resultado. Timeout e
+indisponibilidade são retentados; autenticação recusada e dado inválido terminam
+imediatamente com motivos distintos. As variáveis aceitas são:
+
+| Variável | Uso | Padrão local |
+|---|---|---|
+| `SUPPLIER_PORTAL_URL` | Portal controlado ou URL do ambiente. | `web/supplier-portal/index.html` |
+| `SUPPLIER_PORTAL_USERNAME` | Usuário obtido de configuração protegida. | vazio |
+| `SUPPLIER_PORTAL_PASSWORD` | Senha obtida de configuração protegida. | vazio |
+| `SUPPLIER_TIMEOUT_SECONDS` | Limite de cada tentativa. | `15` |
+| `SUPPLIER_MAX_ATTEMPTS` | Total máximo de tentativas transitórias. | `3` |
+| `SUPPLIER_RETRY_INTERVAL_SECONDS` | Intervalo linear base. | `1` |
+| `SUPPLIER_ARTIFACT_DIR` | Evidências PNG da execução. | `artefatos/fornecedores` |
+| `SUPPLIER_RESULT_PATH` | Envelope entregue à consolidação. | `data/output/fornecedores.json` |
+
 ## Docker
 
 ```bash
