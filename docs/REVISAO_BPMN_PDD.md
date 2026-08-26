@@ -4,8 +4,8 @@
 
 | Item | Informação |
 |---|---|
-| Data | 18 de agosto de 2026 |
-| Escopo | BPMN, RN01–RN12, DataPool, Playwright, indicadores operacionais e saídas Excel/Markdown |
+| Data | 25 de agosto de 2026 |
+| Escopo | BPMN, RN01–RN12, DataPool, Playwright, arquitetura híbrida S10-B, três bots, resiliência, alertas e saídas analíticas |
 | BPMN | `docs/diagrama_pdd.bpmn` |
 | Visualização | `docs/diagrama_pdd.svg` |
 | Regras-base | `docs/Regras de validação a aplicar - Gabriel, Marcelo e Rebecca.docx.pdf` |
@@ -56,6 +56,139 @@ automação Playwright ao processamento individual do DataPool.
 8. A interface web é local, controlada e não representa um ERP produtivo.
 9. O resultado de negócio é calculado antes da apresentação na interface.
 10. Page Objects não contêm RN01–RN07.
+
+As demais seções do PDD aprovado permanecem válidas. A revisão S10-B abaixo
+reproduz explicitamente apenas as seções 6, 8, 9, 16 e 17, que receberam
+impacto funcional ou operacional.
+
+## 6. Arquitetura híbrida
+
+A solução combina cinco camadas com responsabilidades independentes:
+
+1. regras determinísticas definem o resultado do lote;
+2. o classificador de observações sugere uma causa somente para divergências;
+3. três bots encadeados no Maestro separam publicação, conferência e relatório;
+4. Playwright apresenta o resultado e captura a evidência em uma aplicação
+   local controlada;
+5. o fluxo analítico RN01–RN12 consolida Excel e Markdown sem interferir no
+   processamento individual do DataPool.
+
+Os identificadores dos bots apresentados nesta revisão são aliases neutros de
+documentação, não labels copiáveis do ambiente de produção.
+
+```mermaid
+flowchart LR
+    A[bot-dispatcher-v1] -->|FilaAuditoriaLotes2| B[bot-conferencia-v1]
+    B --> RULES[Decisão determinística]
+    RULES -->|caso ambíguo| ML[Classificação da observação]
+    ML --> AUDIT[Auditoria ML ou fallback]
+    B --> C[bot-relatorio-v1]
+    C --> OUTPUT[JSON, PDF, alertas e finish_task]
+```
+
+O serviço ML é opcional. Sua remoção não altera as regras nem impede que os
+itens alcancem um estado terminal. DataPool, Credentials Vault e Maestro são
+adaptações externas; os testes substituem essas fronteiras por implementações
+controladas.
+
+## 8. Divisão dos bots e dependências no Maestro
+
+| Etapa | Alias documental | Responsabilidade | Dependência |
+|---|---|---|---|
+| A | `bot-dispatcher-v1` | Validar o CSV, publicar os itens e criar a task B. | Não possui predecessor. |
+| B | `bot-conferencia-v1` | Aguardar A, consumir a fila, aplicar regras/Base/ML e criar a task C. | A deve terminar com sucesso operacional. |
+| C | `bot-relatorio-v1` | Aguardar B, publicar os artefatos, emitir alertas e finalizar a cadeia. | B deve terminar com sucesso operacional. |
+
+As tasks compartilham `correlation_id` e `root_task_id`; cada etapa registra
+`current_task_id`, `parent_task_id`, `trigger_bot` e `previous_result`. A task
+seguinte é criada antes de `finish_task()` e aguarda o predecessor com timeout
+e consultas periódicas. Predecessor `FAILED` ou `CANCELED`, timeout ou falha no
+trabalho impedem a criação da próxima etapa útil e produzem encerramento
+compreensível no Maestro.
+
+O mesmo pacote pode atender aos três registros. O estágio é identificado pelo
+`activity_label`, não por caminhos locais ou por um `BOT_ID` específico da
+máquina.
+
+## 9. Decisão determinística e classificação da observação
+
+RN01–RN07 continuam responsáveis pelo resultado operacional do Performer, e
+RN01–RN12 continuam responsáveis pelo relatório analítico. Essas regras são
+executadas antes de qualquer chamada ao ML e não consomem a resposta do modelo
+para aprovar, reprovar ou substituir uma violação.
+
+Somente resultados ambíguos elegíveis chegam ao `ClassificadorDivergencia`. A
+observação é enviada ao contrato `/predict-divergencia`, que devolve uma causa
+provável e uma confiança. A sugestão é aceita apenas quando a confiança atende
+`ML_CONFIANCA_MINIMA`; caso contrário, a causa é `nao_classificado` e a origem
+é `fallback`.
+
+| Situação | `origem_decisao` | `motivo_fallback` | Efeito sobre o status |
+|---|---|---|---|
+| Sugestão acima do limite | `ml` | vazio | Nenhum; apenas enriquece a causa. |
+| ML desabilitado | `fallback` | `ml_desabilitado` | Nenhum. |
+| Observação ausente | `fallback` | `observacao_ausente` | Nenhum. |
+| Timeout | `fallback` | `timeout` | Nenhum. |
+| Resposta inválida | `fallback` | `resposta_invalida` | Nenhum. |
+| Serviço indisponível | `fallback` | `indisponibilidade` | Nenhum. |
+| Confiança insuficiente | `fallback` | `baixa_confianca` | Nenhum. |
+
+Cada consulta ou fallback gera uma decisão auditável com timestamp,
+`execution_id`, `bot_id`, `lote_id`, resultado aplicado, origem, motivo e
+latência.
+
+## 16. Retry, fallback, dead letter e matriz de alertas
+
+Falhas de infraestrutura da Base de Referência usam retry com backoff linear e
+timeout por tentativa. Esgotado o limite, o item fica como
+`PENDENTE_REVISAO`, um alerta é solicitado e a fila continua. Falhas repetidas
+de dados usam o mesmo limite e geram uma entrada sanitizada e idempotente no
+dead letter. Itens ausentes na base continuam sendo tratados pela RN03, sem
+retry nem dead letter.
+
+O classificador textual usa timeout e fallback imediato, sem repetir a mesma
+observação. O cliente tabular `/predict` abre seu circuit breaker após cinco
+falhas consecutivas. Esses contratos são independentes; o fluxo principal usa
+`/predict-divergencia` e pode tentar uma chamada limitada por timeout para cada
+novo item elegível. O dead letter nunca recebe indisponibilidade de
+infraestrutura ou ML.
+
+| Severidade | Canal principal | Canais adicionais ou fallback |
+|---|---|---|
+| `INFO` | Telegram | Email se Telegram falhar; depois log local. |
+| `AVISO` | Telegram | Email se Telegram falhar; depois log local. |
+| `ERRO` | Telegram | Email também é solicitado; log local se Email falhar. |
+| `CRITICO` | Telegram | Email também é solicitado; log local se Email falhar. |
+
+Falha de notificação não altera a decisão do lote nem a finalização da task. O
+reprocessamento do dead letter é manual: corrige-se a fonte original,
+republica-se o item completo e relaciona-se a nova task à execução anterior.
+Não é seguro reconstruir um item apenas pelo arquivo sanitizado.
+
+## 17. Rastreabilidade, segurança e auditoria
+
+Os logs são JSON Lines e incluem `bot_id`, `execution_id`, evento, nível,
+ambiente e detalhes controlados. A cadeia acrescenta IDs de task e correlação;
+as decisões ML acrescentam lote, origem, confiança, motivo de fallback,
+resultado aplicado e latência. O resumo JSON, o PDF, o DataPool e as capturas
+por item permitem cruzar o estado final com a mesma execução.
+
+Controles obrigatórios:
+
+- a senha do ERP permanece no `credencial_erp2` do Credentials Vault;
+- token do Maestro, token do Telegram e senha SMTP existem somente no ambiente;
+- logs e dead letter sanitizam senha, token, chave, API key e observações;
+- o payload ML contém somente os campos previstos pelo contrato;
+- `.env`, logs de runtime, relatórios reais e capturas não são empacotados como
+  documentação nem reutilizados como fixtures; os testes geram artefatos
+  sintéticos próprios;
+- nenhuma aprovação é declarada sem estado terminal e evidência executável;
+- falhas técnicas são distinguíveis de erro de negócio e revisão humana.
+
+A Simulação de Crise cobre Base indisponível, ML fora do ar, timeout, baixa
+confiança e perda do Telegram. As evidências estão indexadas em
+`docs/evidencias/s10b/resumo-simulacao.md` e usam apenas IDs e valores
+sintéticos.
 
 ## Impacto da integração Playwright
 

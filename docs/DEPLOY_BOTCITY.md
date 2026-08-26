@@ -95,18 +95,23 @@ e Windows. Garanta permissão de escrita em `data/output/` no Runner.
 
 ## Orquestração com três bots
 
-Para a cadeia S10-B, registre o mesmo pacote em três automações e atividades:
+Para a cadeia S10-B, registre o mesmo pacote em três automações e atividades.
+Nesta documentação, elas são representadas pelos aliases neutros:
 
 ```text
-rebecca-dispatcher-v1
-gabriel-conferencia-v1
-marcelo-relatorio-v1
+bot-dispatcher-v1
+bot-conferencia-v1
+bot-relatorio-v1
 ```
+
+Os aliases não são valores para cópia direta. Use no Maestro os
+`activity_label` autorizados para o ambiente e preserve o mapeamento operacional
+em configuração de acesso restrito.
 
 Defina `ORCHESTRATION_ENABLED=true`. O estágio é identificado automaticamente
 pelo `activity_label` da task, portanto o mesmo pacote e o mesmo ambiente podem
-atender os três registros. Inicie manualmente somente
-`rebecca-dispatcher-v1`; as outras tasks são criadas em sequência por
+atender os três registros. Inicie manualmente somente a atividade Dispatcher
+autorizada; as outras tasks são criadas em sequência por
 `create_task()`. Consulte
 [`ORQUESTRACAO_MAESTRO.md`](ORQUESTRACAO_MAESTRO.md) para parâmetros, timeout,
 logs e coleta da evidência no painel.

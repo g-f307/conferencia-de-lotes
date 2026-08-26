@@ -23,10 +23,13 @@ O modo legado mantém uma única execução. No modo orquestrado, o mesmo pacote
 registrado em três atividades e `src/orchestrator.py` seleciona a etapa pelo
 `BOT_ID`:
 
+Os identificadores exibidos no diagrama são aliases documentais. O mapeamento
+de `activity_label` do ambiente de implantação permanece em acesso restrito.
+
 ```mermaid
 flowchart LR
-    A[rebecca-dispatcher-v1] -->|create_task + correlação| B[gabriel-conferencia-v1]
-    B -->|create_task + resultado| C[marcelo-relatorio-v1]
+    A[bot-dispatcher-v1] -->|create_task + correlação| B[bot-conferencia-v1]
+    B -->|create_task + resultado| C[bot-relatorio-v1]
     A --> DP[FilaAuditoriaLotes2]
     DP --> B
     B --> RESULT[ExecutionResult]

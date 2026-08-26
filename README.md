@@ -434,6 +434,80 @@ Caminhos relativos são resolvidos a partir da raiz do projeto. A senha do ERP
 não é uma variável de ambiente deste projeto. Tokens e senhas dos canais de
 alerta são carregados apenas do ambiente e nunca devem ser versionados.
 
+## Operação resiliente S10-B
+
+### Ligar e desligar o ML
+
+O ML é complementar e atua somente nos casos ambíguos elegíveis. A decisão de
+negócio continua sendo calculada pelas regras determinísticas mesmo quando a
+API está desabilitada ou indisponível.
+
+Para executar sem ML:
+
+```bash
+ML_ENABLED=false python bot.py
+```
+
+Para executar localmente com ML, inicie a API em um terminal:
+
+```bash
+uvicorn api_ml.main:app --host 127.0.0.1 --port 8000
+```
+
+Em outro terminal, configure o endpoint, o timeout e o limite de confiança:
+
+```bash
+ML_ENABLED=true \
+ML_API_URL=http://127.0.0.1:8000 \
+ML_TIMEOUT_SECONDS=3 \
+ML_CONFIANCA_MINIMA=0.85 \
+python bot.py
+```
+
+Uma predição abaixo de `ML_CONFIANCA_MINIMA`, uma resposta inválida, um timeout
+ou uma indisponibilidade produz `origem_decisao=fallback`. A causa passa a
+`nao_classificado`, o motivo é auditado e o status determinístico não é
+alterado. Após cinco falhas consecutivas, o circuit breaker interrompe novas
+chamadas do cliente tabular `/predict`. O classificador de observações usado no
+fluxo principal chama `/predict-divergencia`, não repete uma mesma observação e
+aplica fallback por item; o timeout limita cada chamada e evita uma espera sem
+limite.
+
+### Retry, backoff e fallbacks
+
+| Falha | Proteção | Resultado operacional |
+|---|---|---|
+| Base de Referência indisponível | Até `REFERENCE_MAX_ATTEMPTS`, com backoff linear calculado por `REFERENCE_RETRY_BASE_INTERVAL_SECONDS` e timeout individual. | `PENDENTE_REVISAO`, alerta e continuidade da fila. |
+| Classificador de observações indisponível ou acima do timeout | Timeout e fallback por item, sem retry da mesma observação. | `nao_classificado`, decisão determinística preservada e continuidade da fila. |
+| Cliente tabular `/predict` com falhas consecutivas | Circuit breaker após cinco falhas. | Novas chamadas são suspensas até reset ou reinício do processo. |
+| Confiança do ML abaixo do limite | A sugestão é descartada. | `origem_decisao=fallback` e `motivo_fallback=baixa_confianca`. |
+| Telegram indisponível | Tentativa automática pelo Email. | A notificação não bloqueia o pipeline. |
+| Telegram e Email indisponíveis | Registro destacado no log JSON Lines. | O pipeline permanece observável e continua. |
+
+Com os valores padrão da Base de Referência, as esperas entre as três
+tentativas são de um e dois segundos. Indisponibilidade da base é uma falha de
+infraestrutura e não gera dead letter.
+
+### Dead letter e reprocessamento
+
+Somente falhas repetidas de dados da Base de Referência são persistidas em
+`data/output/dead_letter.jsonl`. Cada linha contém os identificadores do item e
+da execução, o motivo, a quantidade de tentativas e o timestamp. Observação,
+senha, token e chave são removidos, e a chave idempotente evita duplicação.
+
+O reprocessamento é manual e controlado; não existe consumidor automático do
+dead letter nesta versão:
+
+1. preserve o arquivo original como evidência da execução;
+2. corrija a causa na Base de Referência ou na fonte original;
+3. localize o registro pelo `lote_id`, `execution_id` e `task_id`;
+4. republique o registro completo e corrigido no `FilaAuditoriaLotes2`;
+5. execute o bot de conferência e confirme o estado terminal no DataPool;
+6. relacione a nova task ao registro original antes de arquivá-lo.
+
+Não reconstrua o item somente a partir do dead letter, pois o registro é
+deliberadamente sanitizado e não contém todos os campos originais.
+
 ## Alertas multicanal
 
 Telegram é o canal principal. Eventos `ERRO` e `CRITICO` também seguem por
@@ -532,11 +606,13 @@ ML_ENABLED=true docker compose run --rm conferencia-de-lotes
 docker compose down
 ```
 
-O bot acessa `http://api-ml:8000` pelo nome do serviço. O circuit breaker abre
-após cinco falhas consecutivas; enquanto estiver aberto, não há novas chamadas
-de rede. Uma chamada bem-sucedida reinicia o contador, e o reinício do processo
-restaura o estado inicial. O método `reset_circuit_breaker()` permite um reset
-controlado em testes e operação.
+O bot acessa `http://api-ml:8000` pelo nome do serviço. O cliente tabular
+`MLClient`, que consome `/predict`, abre o circuit breaker após cinco falhas
+consecutivas; enquanto estiver aberto, não há novas chamadas desse contrato.
+Uma chamada bem-sucedida reinicia o contador, e o reinício do processo restaura
+o estado inicial. O método `reset_circuit_breaker()` permite um reset controlado
+em testes e operação. A classificação textual do fluxo principal consome
+`/predict-divergencia` e aplica timeout e fallback individual por observação.
 
 Não há dependência obrigatória entre os serviços no Compose: com
 `ML_ENABLED=false`, o bot inicia e conclui mesmo que a API esteja parada.
@@ -699,13 +775,30 @@ O procedimento completo está em
 
 ### Cadeia de três bots
 
-Quando a orquestração está habilitada, o mesmo pacote é registrado como:
+Quando a orquestração está habilitada, a documentação representa os três
+registros pelos aliases neutros:
 
 ```text
-rebecca-dispatcher-v1
-gabriel-conferencia-v1
-marcelo-relatorio-v1
+bot-dispatcher-v1
+bot-conferencia-v1
+bot-relatorio-v1
 ```
+
+Esses aliases identificam papéis e não devem ser copiados como configuração de
+produção. No Maestro, utilize os `activity_label` autorizados para o ambiente e
+mantenha o mapeamento operacional fora da documentação pública.
+
+| Ordem | Bot | Responsabilidade | Saída para a próxima etapa |
+|---|---|---|---|
+| A | `bot-dispatcher-v1` | Validar a entrada e publicar os itens no `FilaAuditoriaLotes2`. | IDs de correlação, contagem publicada e task de conferência. |
+| B | `bot-conferencia-v1` | Consumir a fila, aplicar as regras determinísticas, consultar Base/ML e finalizar cada item. | Contadores, decisões auditadas e task de relatório. |
+| C | `bot-relatorio-v1` | Consolidar e publicar JSON/PDF, emitir alertas e finalizar a cadeia. | Artefatos e estado terminal no Maestro. |
+
+Para iniciar o pipeline completo, configure os três registros conforme o guia,
+defina `MAESTRO_ENABLED=true`, `VAULT_ENABLED=true` e
+`ORCHESTRATION_ENABLED=true` e crie manualmente apenas uma task para a atividade
+Dispatcher autorizada. Os bots B e C são encadeados por `create_task()` e não
+devem ser disparados manualmente durante o ensaio.
 
 O Dispatcher cria a task de conferência, que cria a task de relatório. As três
 etapas compartilham `correlation_id`, `root_task_id`, `parent_task_id`,
@@ -748,14 +841,32 @@ timestamp, IDs da execução e do bot, lote, predição, confiança, ação, res
 aplicado e latência. O PDF e o JSON são publicados como artefatos da task.
 
 Os campos de ML são propriedades estruturadas dentro de `detalhes`, e não
-texto concatenado na mensagem. O payload enviado à API contém somente
-`lote_id`, `status_raw`, `turno` e o booleano `tem_obs`; o conteúdo da
-observação não é transmitido nem registrado.
+texto concatenado na mensagem. O contrato tabular `/predict` recebe somente
+`lote_id`, `status_raw`, `turno` e o booleano `tem_obs`. O contrato
+`/predict-divergencia` recebe apenas o texto da observação necessário para
+sugerir a causa. Em ambos os fluxos, a observação não é registrada nos logs,
+na auditoria ML nem no dead letter.
 
 O fluxo analítico grava `logs/execucao_relatorio.log` em formato `chave=valor`.
 Além das contagens e da duração, o arquivo registra percentuais, taxas, código,
 descrição e frequência da regra mais acionada e ganho estimado em minutos e
 horas. Ele não contém credenciais nem dados de autenticação.
+
+### Evidências da Simulação de Crise S10-B
+
+| Cenário | Evidência reproduzível |
+|---|---|
+| Base de Referência indisponível | [`01-base-referencia-indisponivel.md`](docs/evidencias/s10b/01-base-referencia-indisponivel.md) |
+| ML fora do ar durante o lote | [`02-ml-fora-do-ar.md`](docs/evidencias/s10b/02-ml-fora-do-ar.md) |
+| ML acima do timeout | [`03-ml-timeout.md`](docs/evidencias/s10b/03-ml-timeout.md) |
+| ML com baixa confiança | [`04-ml-baixa-confianca.md`](docs/evidencias/s10b/04-ml-baixa-confianca.md) |
+| Telegram inválido e fallback de canal | [`05-fallback-telegram-email.md`](docs/evidencias/s10b/05-fallback-telegram-email.md) |
+
+O [resumo consolidado](docs/evidencias/s10b/resumo-simulacao.md) registra a
+massa sintética de 30 itens. O
+[relatório de amostra](docs/amostras/decisoes_ml_s10b.json) demonstra decisões
+de origem `ml` e `fallback`, ambas com `origem_decisao`, IDs, resultado aplicado
+e latência, sem usar dados ou credenciais reais.
 
 ## Relatório executivo e indicadores operacionais (Aula 24)
 
@@ -1008,6 +1119,10 @@ finalizada no Maestro como sucesso operacional.
 | [`docs/EXECUCAO_E2E_DOCKER_CI.md`](docs/EXECUCAO_E2E_DOCKER_CI.md) | Instalação, testes E2E, Docker, pipeline e artefatos. |
 | [`docs/HOMOLOGACAO_TESTES_AULA23.md`](docs/HOMOLOGACAO_TESTES_AULA23.md) | Cobertura, camadas, limitações e respostas da Aula 23. |
 | [`docs/ROTEIRO_TORNEIO_CLASSIFICADORES.md`](docs/ROTEIRO_TORNEIO_CLASSIFICADORES.md) | Demonstração de até oito minutos, sabotagem e coleta das evidências de ML. |
+| [`docs/ROTEIRO_SIMULACAO_CRISE_S10B.md`](docs/ROTEIRO_SIMULACAO_CRISE_S10B.md) | Papéis, cronograma de oito minutos, cinco sabotagens e contingência offline. |
+| [`docs/PERGUNTAS_BANCA_S10B.md`](docs/PERGUNTAS_BANCA_S10B.md) | Respostas sobre decisão determinística, quedas e observabilidade. |
+| [`docs/CHECKLIST_REVISAO_PARES_S10B.md`](docs/CHECKLIST_REVISAO_PARES_S10B.md) | Formulário de 16 pontos para execução pelo grupo revisor. |
+| [`docs/VALIDACAO_S10B.md`](docs/VALIDACAO_S10B.md) | Comandos, resultados e limites da pré-validação técnica S10-B. |
 | [`docs/CHECKLIST_FINAL_ACEITE_AULA24.md`](docs/CHECKLIST_FINAL_ACEITE_AULA24.md) | Checklist A–H, evidências e respostas para o Demo Day. |
 | [`docs/REVISAO_BPMN_PDD.md`](docs/REVISAO_BPMN_PDD.md) | Aderência do processo e das regras. |
 | [`docs/ADERENCIA_PAGE_OBJECTS.md`](docs/ADERENCIA_PAGE_OBJECTS.md) | Matriz técnica da entrega. |

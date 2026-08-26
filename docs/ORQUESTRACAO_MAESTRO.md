@@ -8,24 +8,26 @@ o BotCity Maestro real.
 
 ## Bots e responsabilidades
 
-| Ordem | Label do bot e da atividade | Responsabilidade |
+| Ordem | Alias documental | Responsabilidade |
 |---|---|---|
-| A | `rebecca-dispatcher-v1` | Ler o CSV e publicar os itens no DataPool. |
-| B | `gabriel-conferencia-v1` | Consumir os itens, aplicar as regras e enriquecer divergências com ML. |
-| C | `marcelo-relatorio-v1` | Publicar JSON, PDF e notificar a conclusão da cadeia. |
+| A | `bot-dispatcher-v1` | Ler o CSV e publicar os itens no DataPool. |
+| B | `bot-conferencia-v1` | Consumir os itens, aplicar as regras e enriquecer divergências com ML. |
+| C | `bot-relatorio-v1` | Publicar JSON, PDF e notificar a conclusão da cadeia. |
 
 Os três registros podem receber o mesmo pacote ZIP. O estágio é selecionado
 pelo `activity_label` da task atual, mantendo uma única base de código. O
 `BOT_ID` fica disponível apenas como fallback para testes locais sem Maestro.
+Os aliases da tabela preservam os papéis sem publicar o mapeamento operacional;
+na implantação, use os labels autorizados para o ambiente.
 
 ## Encadeamento
 
 ```mermaid
 sequenceDiagram
-    participant A as rebecca-dispatcher-v1
+    participant A as bot-dispatcher-v1
     participant M as BotCity Maestro
-    participant B as gabriel-conferencia-v1
-    participant C as marcelo-relatorio-v1
+    participant B as bot-conferencia-v1
+    participant C as bot-relatorio-v1
 
     A->>M: publicar itens no DataPool
     A->>M: create_task(B, contexto + resultado A)
@@ -71,13 +73,16 @@ DATAPOOL_LABEL=FilaAuditoriaLotes2
 VAULT_LABEL=credencial_erp2
 ```
 
-Use estes labels nas atividades do Maestro:
+Os papéis são representados publicamente por estes aliases:
 
 ```text
-rebecca-dispatcher-v1
-gabriel-conferencia-v1
-marcelo-relatorio-v1
+bot-dispatcher-v1
+bot-conferencia-v1
+bot-relatorio-v1
 ```
+
+Não copie os aliases para produção. Associe cada papel ao `activity_label`
+autorizado no ambiente de implantação.
 
 O Bot B utiliza as configurações de Vault, Playwright e ML já documentadas. O
 Bot A precisa acessar o CSV empacotado e o Bot C precisa escrever no diretório
@@ -92,13 +97,13 @@ de relatórios.
    unzip -l dist/bot-conferencia-de-lotes-v2.zip
    ```
 
-2. Registre os três bots e as respectivas atividades com os labels da tabela.
+2. Registre os três bots com os labels autorizados correspondentes aos papéis.
 3. Envie o mesmo ZIP para os três registros.
 4. Configure as variáveis comuns; não é necessário injetar um `BOT_ID`
    diferente em cada execução.
 5. Mantenha a credencial ERP somente no Credentials Vault.
 6. Libere as versões e mantenha um Runner compatível disponível.
-7. Crie manualmente apenas uma task para `rebecca-dispatcher-v1`.
+7. Crie manualmente apenas uma task para a atividade Dispatcher autorizada.
 
 Bots B e C não devem ser iniciados manualmente durante o teste da cadeia. Eles
 são criados pelas chamadas de `create_task()`.
