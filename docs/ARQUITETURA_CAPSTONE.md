@@ -84,13 +84,16 @@ flowchart LR
     CONS -->|decisão determinística| ML
     CONS -->|item degradado| HUMAN
     ML -->|MLDecisionAudit ou fallback| REP
+    D -.->|terminalização se a consolidação não produzir snapshot| REP
     REP --> ART
 ```
 
 O Smart Office pode oferecer uma dependência múltipla nativa ou exigir que a
 consolidação consulte as duas tasks. Essa diferença pertence ao adaptador. Para
 o domínio, `consolidacao-v2` sempre recebe os dois resultados terminais e nunca
-faz espera infinita.
+faz espera infinita. Se a própria consolidação não produzir resultado, o papel
+de coordenação do Dispatcher cria um snapshot sintético de falha e dispara
+`relatorio-alertas-v2`; isso não cria um sétimo bot.
 
 ## Sequência nominal
 
@@ -133,9 +136,9 @@ ao fan-in sem quebrar a cadeia legada.
 | `execution_id` | string | sim | Identifica a execução de negócio ponta a ponta. |
 | `correlation_id` | string | sim | É criado uma vez pelo Dispatcher e nunca muda. |
 | `root_task_id` | string | sim | Task raiz da cadeia. |
-| `task_id` | string | sim | Task que produziu o envelope. |
+| `task_id` | string | sim | ID real da task que produziu o envelope; nunca é sintetizado. |
 | `parent_task_id` | string ou nulo | sim | Compatibilidade com o encadeamento atual. |
-| `predecessor_task_ids` | lista de strings | sim | Vazia na raiz; contém duas tasks no fan-in. |
+| `predecessor_task_ids` | lista de strings | sim | Contém somente IDs reais; pode ter zero, um ou dois elementos no fan-in. |
 | `bot_id` | string | sim | Alias do produtor. |
 | `trigger_bot` | string | sim | Alias que criou ou liberou a task. |
 | `timestamp` | string ISO 8601 UTC | sim | Nunca utiliza horário local sem fuso. |
@@ -170,6 +173,52 @@ Exemplo mínimo:
   "artifacts": []
 }
 ```
+
+### Resultado sintético quando uma task não é criada
+
+Não se fabrica `task_id` para uma task rejeitada pelo orquestrador. O Dispatcher
+registra um resultado sintético no manifesto do fan-out, usando a mesma
+`schema_version`, `execution_id` e `correlation_id` da execução:
+
+```json
+{
+  "source_alias": "estoque-desktop-v1",
+  "task_created": false,
+  "task_id": null,
+  "synthetic": true,
+  "status": "FAILED",
+  "source_status": "UNAVAILABLE",
+  "motivo_fallback": "task_creation_failed",
+  "attempts": 1,
+  "failure_type": "ORCHESTRATION",
+  "failure_message": "Não foi possível criar a task da coleta desktop"
+}
+```
+
+Esse objeto não é um envelope órfão. Ele fica em
+`payload.fanout_results[source_alias]` dentro do envelope real produzido pelo
+Dispatcher, cujo `task_id` continua sendo o ID verdadeiro da task raiz. O
+envelope do Dispatcher termina como `PARTIALLY_COMPLETED` quando qualquer
+criação falha de forma controlada, inclusive quando as duas coletas não são
+criadas, pois ainda precisa liberar a consolidação de contingência. O
+`status=FAILED` acima pertence exclusivamente à fonte que não pôde ser criada.
+Somente o campo aninhado `fanout_results[source_alias].task_id` recebe `null`.
+
+`failure_message` é sanitizada e não contém a mensagem bruta do SDK quando ela
+puder expor dados do ambiente. `task_creation_failed` é um motivo controlado e
+distinto de `timeout`, `canceled` e `source_unavailable`.
+
+O manifesto `payload.fanout_results` sempre possui as chaves
+`estoque-desktop-v1` e `fornecedores-web-v1`. `predecessor_task_ids`, por outro
+lado, lista apenas as tasks efetivamente criadas. Portanto:
+
+- duas criações bem-sucedidas produzem dois IDs reais;
+- uma falha de criação produz um ID real e um resultado sintético;
+- duas falhas de criação produzem lista vazia e dois resultados sintéticos.
+
+A consolidação aguarda somente os IDs reais e combina esses estados com os
+resultados sintéticos do manifesto. Assim, identifica a fonte ausente pelo
+`source_alias`, sem consultar um ID inexistente e sem aguardar indefinidamente.
 
 ### Estados técnicos e estados de negócio
 
@@ -291,7 +340,7 @@ HTTP e ainda produzem um resultado terminal compreensível para a task.
 Entrada:
 
 ```text
-consolidation_result, ml_result, source_statuses
+report_type, consolidation_result, ml_result, source_statuses
 ```
 
 Saída:
@@ -304,25 +353,75 @@ total_items, processed_items, failed_items, review_items
 Excel, Markdown, JSON, PDF, logs e notificações consomem o mesmo snapshot da
 execução. A etapa não relê a interface, não recalcula regras e não chama o ML.
 
+`consolidation_result` é sempre uma chave obrigatória, mas pode conter um
+snapshot real ou sintético. `report_type` diferencia os dois produtos:
+
+| `report_type` | Condição | Artefato |
+|---|---|---|
+| `BUSINESS` | A consolidação produziu registros, ainda que em modo degradado. | Relatórios operacionais existentes, com fontes e degradação explícitas. |
+| `OPERATIONAL_INCIDENT` | Não existe decisão consolidada utilizável. | Resumo de incidente JSON/Markdown/PDF e alerta; não publica indicadores como se fossem resultados de negócio. |
+
+### Snapshot mínimo de falha operacional
+
+Quando `consolidacao-v2` termina em erro, é cancelada, excede o timeout ou falha
+antes de serializar sua saída, o coordenador de orquestração pertencente ao
+papel `dispatcher-v2` cria `consolidation_result` sintético e agenda
+`relatorio-alertas-v2` em modo de incidente.
+
+O snapshot mínimo possui obrigatoriamente:
+
+```text
+schema_version, execution_id, correlation_id, root_task_id,
+snapshot_type, status, generated_at, expected_items,
+processed_items, failed_items, review_items, source_statuses,
+failure_stage, failure_type, failure_code, failure_message,
+failed_task_id, motivo_fallback, available_artifacts
+```
+
+Regras do snapshot:
+
+- `snapshot_type=OPERATIONAL_FAILURE`;
+- `status=FAILED`;
+- `processed_items=0` quando nenhuma decisão foi materializada;
+- `failed_items` e `review_items` usam `expected_items` quando conhecido;
+- `failed_task_id` contém o ID real da consolidação ou `null` quando nem essa
+  task pôde ser criada;
+- `failure_code` usa valor controlado, como `consolidation_failed`,
+  `consolidation_canceled`, `consolidation_timeout` ou
+  `consolidation_task_creation_failed`;
+- `failure_message` é curta e sanitizada;
+- `available_artifacts` preserva somente evidências já produzidas pelas fontes;
+- `ml_result` informa `not_executed_due_upstream_failure`, sem chamada ao modelo.
+
+O Dispatcher não calcula regras nem números de negócio nesse caminho. Ele
+apenas materializa os metadados mínimos que já conhece para permitir o
+encerramento, a auditoria e o alerta. Se o Dispatcher não conseguir criar a
+task de relatório, utiliza `SistemaAlertas` e o log local como terminalização
+de último recurso.
+
 ## Fan-out, fan-in e prioridade
 
 ### Fan-out
 
 Após validar o contexto, o Dispatcher cria as tasks desktop e web. Falha ao
-criar uma delas é registrada; a outra não é cancelada automaticamente se puder
-produzir evidência útil.
+criar uma delas produz o resultado sintético definido neste documento; a outra
+não é cancelada automaticamente se puder produzir evidência útil. Ao terminar
+as duas tentativas de criação, o Dispatcher persiste `fanout_results` e cria a
+task de consolidação mesmo que uma ou ambas as listas de coleta estejam vazias.
 
 ### Fan-in
 
-A consolidação recebe `predecessor_task_ids` com as duas tasks e um resultado
-por alias. Para cada dependência, registra:
+A consolidação recebe `predecessor_task_ids` somente com as tasks criadas e
+`fanout_results` com exatamente um resultado por alias. Para cada dependência
+real, registra:
 
 ```text
 task_id, status, finish_message, completed_at, payload_reference
 ```
 
 O timeout global e o timeout por dependência são configuráveis. A implementação
-deve esperar por condição e nunca usar repetição infinita.
+deve esperar por condição e nunca usar repetição infinita. Resultados sintéticos
+são terminais desde a origem e nunca entram no polling.
 
 ### Prioridade
 
@@ -335,8 +434,11 @@ Office pertence à configuração do ambiente, não ao domínio nem a este docum
 | Situação | Estado esperado | Continuidade |
 |---|---|---|
 | Desktop nominal e web nominal | `SUCCESS` | Consolidação completa. |
+| Criação de uma coleta rejeitada | Resultado sintético `FAILED` e fonte `UNAVAILABLE` | A outra coleta continua; consolidação usa o manifesto e encaminha o item para revisão. |
+| Criação das duas coletas rejeitada | Dois resultados sintéticos e nenhum predecessor real | Consolidação gera snapshot de falha; relatório de incidente é produzido. |
 | Uma fonte indisponível após retry | `PARTIALLY_COMPLETED` | Itens afetados vão para revisão; relatório e alerta explicitam degradação. |
-| As duas fontes indisponíveis | `FAILED` | Sem decisão de negócio; relatório de incidente e alerta ainda são produzidos. |
+| As duas fontes indisponíveis | `FAILED` | Consolidação materializa snapshot de falha; relatório de incidente e alerta são produzidos. |
+| Consolidação sem resultado serializável | Snapshot sintético `OPERATIONAL_FAILURE` | Dispatcher cria a task de relatório em modo de incidente. |
 | Item inválido irrecuperável | Item em erro/dead letter | Demais itens continuam. |
 | ML desabilitado | `SUCCESS` com `origem_decisao=fallback` | Resultado determinístico preservado. |
 | ML indisponível, timeout ou resposta inválida | `PARTIALLY_COMPLETED` ou sucesso operacional com aviso | Relatório recebe motivo específico; lote conclui. |
