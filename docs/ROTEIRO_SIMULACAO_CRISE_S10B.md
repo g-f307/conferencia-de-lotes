@@ -10,16 +10,16 @@ notificação são sabotados de forma controlada.
 
 | Responsável | Papel durante a apresentação |
 |---|---|
-| Marcelo Uchôa | Operar o pipeline, iniciar os testes e apresentar o relatório final. |
-| Rebecca Xavier | Provocar e identificar cada sabotagem controlada. |
-| Gabriel Fernandes | Explicar os logs, os fallbacks e a rastreabilidade entre as tasks. |
+| Operador do pipeline | Iniciar os testes, conduzir a execução e apresentar o relatório final. |
+| Responsável pela sabotagem | Provocar e identificar cada falha controlada. |
+| Analista de observabilidade | Explicar os logs, os fallbacks e a rastreabilidade entre as tasks. |
 
 Na ausência de um integrante, quem opera o pipeline também apresenta o
 relatório; quem explica os logs assume a narração da sabotagem.
 
 ## Preparação
 
-1. Usar a revisão aprovada da branch e um `.env` sem valores reais expostos.
+1. Usar a versão aprovada e um `.env` sem valores reais expostos.
 2. Deixar o ambiente virtual ativo e as dependências instaladas.
 3. Abrir previamente o painel do Maestro, os logs JSON Lines, o relatório de
    amostra e o resumo das evidências.
@@ -36,18 +36,18 @@ relatório; quem explica os logs assume a narração da sabotagem.
 
 | Tempo | Responsável | Ação e mensagem principal |
 |---|---|---|
-| `0:00-0:35` | Marcelo | Apresentar objetivo: três bots, decisão determinística e ML apenas consultivo. |
-| `0:35-1:05` | Gabriel | Mostrar a cadeia A -> B -> C e os IDs de correlação no Maestro. |
-| `1:05-1:35` | Marcelo | Iniciar a suíte de crise e mostrar a massa sintética de 30 itens. |
-| `1:35-2:10` | Rebecca | Sabotagem 1: tornar a Base de Referência indisponível. |
-| `2:10-2:45` | Rebecca | Sabotagem 2: derrubar o ML durante o lote. |
-| `2:45-3:20` | Rebecca | Sabotagem 3: exceder o timeout do ML. |
-| `3:20-3:55` | Rebecca | Sabotagem 4: devolver confiança abaixo do limite. |
-| `3:55-4:30` | Rebecca | Sabotagem 5: usar Telegram inválido e acionar Email/log local. |
-| `4:30-5:35` | Gabriel | Relacionar logs, fallback, dead letter e estados terminais. |
-| `5:35-6:35` | Marcelo | Mostrar resumo, amostra com `origem_decisao` e cinco evidências. |
-| `6:35-7:20` | Gabriel | Responder às quatro perguntas técnicas da banca. |
-| `7:20-7:40` | Marcelo | Encerrar com resultado, segurança e decisão solicitada ao grupo revisor. |
+| `0:00-0:35` | Operador | Apresentar objetivo: três bots, decisão determinística e ML apenas consultivo. |
+| `0:35-1:05` | Analista | Mostrar a cadeia A -> B -> C e os IDs de correlação no Maestro. |
+| `1:05-1:35` | Operador | Iniciar a suíte de crise e mostrar a massa sintética de 30 itens. |
+| `1:35-2:10` | Sabotagem | Tornar a Base de Referência indisponível. |
+| `2:10-2:45` | Sabotagem | Derrubar o ML durante o lote. |
+| `2:45-3:20` | Sabotagem | Exceder o timeout do ML. |
+| `3:20-3:55` | Sabotagem | Devolver confiança abaixo do limite. |
+| `3:55-4:30` | Sabotagem | Usar Telegram inválido e acionar Email/log local. |
+| `4:30-5:35` | Analista | Relacionar logs, fallback, dead letter e estados terminais. |
+| `5:35-6:35` | Operador | Mostrar resumo, amostra com `origem_decisao` e cinco evidências. |
+| `6:35-7:20` | Analista | Responder às quatro perguntas técnicas da banca. |
+| `7:20-7:40` | Operador | Encerrar com resultado, segurança e decisão solicitada ao grupo revisor. |
 
 O roteiro reserva 20 segundos antes do limite de oito minutos para troca de
 tela ou atraso de terminal.
@@ -56,40 +56,43 @@ tela ou atraso de terminal.
 
 ### 1. Base de Referência indisponível
 
-Rebecca identifica a injeção de `ReferenceInfrastructureError`. Gabriel aponta
-as três tentativas, o backoff linear, o alerta e o resultado
+O responsável pela sabotagem identifica a injeção de
+`ReferenceInfrastructureError`. O analista aponta as três tentativas, o backoff
+linear, o alerta e o resultado
 `PENDENTE_REVISAO`. Destacar que indisponibilidade não gera dead letter.
 
 Evidência: [Base de Referência indisponível](evidencias/s10b/01-base-referencia-indisponivel.md).
 
 ### 2. ML fora do ar durante o lote
 
-Rebecca mostra a sequência resposta válida, falha e nova resposta válida.
-Gabriel confirma `origem_decisao=fallback`, `motivo_fallback=indisponibilidade`
-e o processamento do item seguinte.
+O responsável pela sabotagem mostra a sequência resposta válida, falha e nova
+resposta válida. O analista confirma `origem_decisao=fallback`,
+`motivo_fallback=indisponibilidade` e o processamento do item seguinte.
 
 Evidência: [ML fora do ar](evidencias/s10b/02-ml-fora-do-ar.md).
 
 ### 3. ML acima do timeout
 
-Rebecca aponta o timeout controlado de `0.25` segundo. Gabriel confirma que o
-limite foi repassado ao provedor, a latência foi auditada e a chamada retornou
-fallback sem bloquear a suíte.
+O responsável pela sabotagem aponta o timeout controlado de `0.25` segundo. O
+analista confirma que o limite foi repassado ao provedor, a latência foi
+auditada e a chamada retornou fallback sem bloquear a suíte.
 
 Evidência: [Timeout do ML](evidencias/s10b/03-ml-timeout.md).
 
 ### 4. ML com baixa confiança
 
-Rebecca mostra confiança `0.49` diante do limite `0.80`. Gabriel destaca que a
-causa foi descartada e que `DIVERGENCIA` e RN02 permaneceram inalteradas.
+O responsável pela sabotagem mostra confiança `0.49` diante do limite `0.80`.
+O analista destaca que a causa foi descartada e que `DIVERGENCIA` e RN02
+permaneceram inalteradas.
 
 Evidência: [Baixa confiança](evidencias/s10b/04-ml-baixa-confianca.md).
 
 ### 5. Telegram inválido
 
-Rebecca identifica a falha do canal principal. Gabriel mostra a entrega por
-Email e, no segundo ensaio, o log local quando os dois canais externos falham.
-Marcelo confirma que o item chegou a um estado terminal.
+O responsável pela sabotagem identifica a falha do canal principal. O analista
+mostra a entrega por Email e, no segundo ensaio, o log local quando os dois
+canais externos falham. O operador confirma que o item chegou a um estado
+terminal.
 
 Evidência: [Fallback Telegram, Email e log](evidencias/s10b/05-fallback-telegram-email.md).
 

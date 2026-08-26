@@ -5,9 +5,8 @@
 | Campo | Valor |
 |---|---|
 | Data | 25 de agosto de 2026 |
-| Branch | `docs/99-s10b-simulacao-crise` |
-| Base | `main` em `cedbbd0` |
-| Issue | `#99` |
+| Entrega | S10-B |
+| Versão | Pré-validação documental |
 | Responsável | Autor da implementação documental |
 
 Esta pré-validação registra evidências reproduzíveis antes da revisão por pares.
@@ -51,16 +50,16 @@ capacidades são bloqueadas por permissão do sistema operacional.
 
 ## Baseline do Ruff
 
-O comando amplo escrito na Issue #99:
+O comando amplo sugerido para a validação:
 
 ```bash
 python -m ruff check src tests scripts api_ml
 ```
 
-encontra 51 avisos preexistentes na `main`. Eles abrangem ordenação de imports,
-modernização de tipos e regras adicionais que não fazem parte do gate atual do
-GitHub Actions. Esta branch não altera Python, e o fora do escopo da Issue #99
-proíbe usar a entrega documental para corrigir esses módulos.
+encontra 51 avisos preexistentes na versão-base. Eles abrangem ordenação de
+imports, modernização de tipos e regras adicionais que não fazem parte do gate
+atual do GitHub Actions. Esta revisão não altera Python, e o escopo documental
+proíbe usar a entrega para corrigir esses módulos.
 
 O critério "linter permanece aprovado" foi validado com o comando efetivamente
 configurado no job `Qualidade do código` de `.github/workflows/ci.yml`. O
@@ -78,9 +77,9 @@ decidir adotar todas as regras do Ruff como novo baseline.
 
 ## Pendências externas
 
-Antes de encerrar a Issue #99:
+Antes do aceite final:
 
 1. o grupo revisor deve conferir os 16 pontos contra o formulário oficial;
 2. o grupo revisor deve executar, preencher e assinar o checklist;
-3. o checklist preenchido deve ser anexado à PR final;
+3. o checklist preenchido deve acompanhar a revisão final;
 4. um administrador deve confirmar o acesso do instrutor e do mentor.

@@ -73,13 +73,16 @@ A solução combina cinco camadas com responsabilidades independentes:
 5. o fluxo analítico RN01–RN12 consolida Excel e Markdown sem interferir no
    processamento individual do DataPool.
 
+Os identificadores dos bots apresentados nesta revisão são aliases neutros de
+documentação, não labels copiáveis do ambiente de produção.
+
 ```mermaid
 flowchart LR
-    A[rebecca-dispatcher-v1] -->|FilaAuditoriaLotes2| B[gabriel-conferencia-v1]
+    A[bot-dispatcher-v1] -->|FilaAuditoriaLotes2| B[bot-conferencia-v1]
     B --> RULES[Decisão determinística]
     RULES -->|caso ambíguo| ML[Classificação da observação]
     ML --> AUDIT[Auditoria ML ou fallback]
-    B --> C[marcelo-relatorio-v1]
+    B --> C[bot-relatorio-v1]
     C --> OUTPUT[JSON, PDF, alertas e finish_task]
 ```
 
@@ -90,11 +93,11 @@ controladas.
 
 ## 8. Divisão dos bots e dependências no Maestro
 
-| Etapa | Atividade | Responsabilidade | Dependência |
+| Etapa | Alias documental | Responsabilidade | Dependência |
 |---|---|---|---|
-| A | `rebecca-dispatcher-v1` | Validar o CSV, publicar os itens e criar a task B. | Não possui predecessor. |
-| B | `gabriel-conferencia-v1` | Aguardar A, consumir a fila, aplicar regras/Base/ML e criar a task C. | A deve terminar com sucesso operacional. |
-| C | `marcelo-relatorio-v1` | Aguardar B, publicar os artefatos, emitir alertas e finalizar a cadeia. | B deve terminar com sucesso operacional. |
+| A | `bot-dispatcher-v1` | Validar o CSV, publicar os itens e criar a task B. | Não possui predecessor. |
+| B | `bot-conferencia-v1` | Aguardar A, consumir a fila, aplicar regras/Base/ML e criar a task C. | A deve terminar com sucesso operacional. |
+| C | `bot-relatorio-v1` | Aguardar B, publicar os artefatos, emitir alertas e finalizar a cadeia. | B deve terminar com sucesso operacional. |
 
 As tasks compartilham `correlation_id` e `root_task_id`; cada etapa registra
 `current_task_id`, `parent_task_id`, `trigger_bot` e `previous_result`. A task

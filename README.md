@@ -775,24 +775,29 @@ O procedimento completo está em
 
 ### Cadeia de três bots
 
-Quando a orquestração está habilitada, o mesmo pacote é registrado como:
+Quando a orquestração está habilitada, a documentação representa os três
+registros pelos aliases neutros:
 
 ```text
-rebecca-dispatcher-v1
-gabriel-conferencia-v1
-marcelo-relatorio-v1
+bot-dispatcher-v1
+bot-conferencia-v1
+bot-relatorio-v1
 ```
+
+Esses aliases identificam papéis e não devem ser copiados como configuração de
+produção. No Maestro, utilize os `activity_label` autorizados para o ambiente e
+mantenha o mapeamento operacional fora da documentação pública.
 
 | Ordem | Bot | Responsabilidade | Saída para a próxima etapa |
 |---|---|---|---|
-| A | `rebecca-dispatcher-v1` | Validar a entrada e publicar os itens no `FilaAuditoriaLotes2`. | IDs de correlação, contagem publicada e task de conferência. |
-| B | `gabriel-conferencia-v1` | Consumir a fila, aplicar as regras determinísticas, consultar Base/ML e finalizar cada item. | Contadores, decisões auditadas e task de relatório. |
-| C | `marcelo-relatorio-v1` | Consolidar e publicar JSON/PDF, emitir alertas e finalizar a cadeia. | Artefatos e estado terminal no Maestro. |
+| A | `bot-dispatcher-v1` | Validar a entrada e publicar os itens no `FilaAuditoriaLotes2`. | IDs de correlação, contagem publicada e task de conferência. |
+| B | `bot-conferencia-v1` | Consumir a fila, aplicar as regras determinísticas, consultar Base/ML e finalizar cada item. | Contadores, decisões auditadas e task de relatório. |
+| C | `bot-relatorio-v1` | Consolidar e publicar JSON/PDF, emitir alertas e finalizar a cadeia. | Artefatos e estado terminal no Maestro. |
 
 Para iniciar o pipeline completo, configure os três registros conforme o guia,
 defina `MAESTRO_ENABLED=true`, `VAULT_ENABLED=true` e
-`ORCHESTRATION_ENABLED=true` e crie manualmente apenas uma task para
-`rebecca-dispatcher-v1`. Os bots B e C são encadeados por `create_task()` e não
+`ORCHESTRATION_ENABLED=true` e crie manualmente apenas uma task para a atividade
+Dispatcher autorizada. Os bots B e C são encadeados por `create_task()` e não
 devem ser disparados manualmente durante o ensaio.
 
 O Dispatcher cria a task de conferência, que cria a task de relatório. As três
@@ -1117,7 +1122,7 @@ finalizada no Maestro como sucesso operacional.
 | [`docs/ROTEIRO_SIMULACAO_CRISE_S10B.md`](docs/ROTEIRO_SIMULACAO_CRISE_S10B.md) | Papéis, cronograma de oito minutos, cinco sabotagens e contingência offline. |
 | [`docs/PERGUNTAS_BANCA_S10B.md`](docs/PERGUNTAS_BANCA_S10B.md) | Respostas sobre decisão determinística, quedas e observabilidade. |
 | [`docs/CHECKLIST_REVISAO_PARES_S10B.md`](docs/CHECKLIST_REVISAO_PARES_S10B.md) | Formulário de 16 pontos para execução pelo grupo revisor. |
-| [`docs/VALIDACAO_S10B.md`](docs/VALIDACAO_S10B.md) | Comandos, resultados e limites da pré-validação técnica da Issue #99. |
+| [`docs/VALIDACAO_S10B.md`](docs/VALIDACAO_S10B.md) | Comandos, resultados e limites da pré-validação técnica S10-B. |
 | [`docs/CHECKLIST_FINAL_ACEITE_AULA24.md`](docs/CHECKLIST_FINAL_ACEITE_AULA24.md) | Checklist A–H, evidências e respostas para o Demo Day. |
 | [`docs/REVISAO_BPMN_PDD.md`](docs/REVISAO_BPMN_PDD.md) | Aderência do processo e das regras. |
 | [`docs/ADERENCIA_PAGE_OBJECTS.md`](docs/ADERENCIA_PAGE_OBJECTS.md) | Matriz técnica da entrega. |

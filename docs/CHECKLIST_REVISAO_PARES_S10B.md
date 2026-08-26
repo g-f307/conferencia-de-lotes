@@ -8,7 +8,7 @@
 | Integrantes |  |
 | Data e hora |  |
 | Repositório | `https://github.com/g-f307/conferencia-de-lotes` |
-| Branch ou commit avaliado |  |
+| Versão avaliada |  |
 | Ambiente utilizado |  |
 | IDs das tasks no Maestro |  |
 
@@ -20,7 +20,7 @@ comando, task, log ou artefato que sustente a decisão. Item não executado não
 pode ser considerado aprovado.
 
 Os 16 pontos abaixo foram consolidados a partir do escopo, dos critérios de
-aceite e das dependências da Issue #99. Como o formulário oficial não está
+aceite e das dependências da entrega S10-B. Como o formulário oficial não está
 versionado no repositório, o grupo revisor deve compará-los com o formulário
 recebido antes de iniciar. Qualquer diferença deve ser corrigida nesta tabela e
 registrada na PR, sem alterar o resultado de uma verificação já executada.
@@ -47,7 +47,7 @@ a decisão independente do grupo revisor.
 | 12 | Logs JSON Lines e decisões ML contêm `bot_id`, `execution_id`, lote, origem, resultado e latência. |  |  |
 | 13 | O resumo JSON, o PDF, as evidências web e o relatório de amostra com `origem_decisao` foram inspecionados. |  |  |
 | 14 | As cinco sabotagens e a massa sintética de 30 casos foram executadas sem interrupção do pipeline. |  |  |
-| 15 | Linter, suíte automatizada e cobertura mínima de 80% foram aprovados no commit revisado. |  |  |
+| 15 | Linter, suíte automatizada e cobertura mínima de 80% foram aprovados na versão revisada. |  |  |
 | 16 | Nenhuma senha, token, chave, observação sensível ou credencial real aparece no código, logs, relatórios ou evidências. |  |  |
 
 ## Acesso ao repositório privado
@@ -84,7 +84,7 @@ Quando não houver correções obrigatórias, escrever explicitamente `Nenhuma`.
 
 **Data:** _Preencher._
 
-**Link do checklist preenchido anexado à PR final:** _Preencher._
+**Local do checklist preenchido:** _Preencher._
 
 O autor da implementação não deve preencher ou marcar esta decisão em nome do
 grupo revisor.
