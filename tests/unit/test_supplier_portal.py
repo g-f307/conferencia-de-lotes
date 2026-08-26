@@ -40,6 +40,14 @@ class FakeSession:
         return self.outcome
 
 
+class FakeLogger:
+    def __init__(self) -> None:
+        self.events = []
+
+    def info(self, message, *, extra) -> None:
+        self.events.append((message, extra))
+
+
 def config(tmp_path: Path, **overrides) -> SupplierPortalConfig:
     values = {
         "url": "web/supplier-portal/index.html",
@@ -118,6 +126,32 @@ def test_timeout_e_retentado_antes_do_sucesso(tmp_path: Path) -> None:
     assert result["status"] == "SUCCESS"
     assert result["attempts"] == 2
     assert sleeps == [0.1]
+
+
+def test_eventos_estruturados_registram_ciclo_sem_credenciais(tmp_path: Path) -> None:
+    logger = FakeLogger()
+    result = SupplierPortalCollector(
+        config(tmp_path),
+        session_factory=lambda _attempt: FakeSession(success_result(tmp_path)),
+        sleep=lambda _seconds: None,
+        clock=FakeClock(),
+        logger=logger,
+    ).collect()
+
+    assert result["status"] == "SUCCESS"
+    assert [message for message, _extra in logger.events] == [
+        "supplier_collection_started",
+        "supplier_collection_attempt_started",
+        "supplier_collection_succeeded",
+    ]
+    final_event = logger.events[-1][1]
+    assert final_event["execution_id"] == "exec-unit-001"
+    assert final_event["attempts"] == 1
+    assert final_event["collected_items"] == 1
+    assert final_event["failed_items"] == 0
+    assert final_event["latency_ms"] >= 0
+    assert "username" not in final_event
+    assert "password" not in final_event
 
 
 @pytest.mark.parametrize(

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import math
 import re
 import time
@@ -35,6 +36,7 @@ from src.web_automation import resolve_chromium_binary
 BOT_ID = "fornecedores-web-v1"
 TRIGGER_BOT = "dispatcher-v2"
 SCHEMA_VERSION = "1.0"
+LOGGER = logging.getLogger(__name__)
 
 
 class SupplierPortalError(RuntimeError):
@@ -167,6 +169,10 @@ class SupplierPortalSession(Protocol):
     def collect(self) -> SupplierSessionResult: ...
 
 
+class SupplierEventLogger(Protocol):
+    def info(self, message: str, *, extra: Mapping[str, object]) -> None: ...
+
+
 def resolve_supplier_url(configured_url: str, base_dir: Path | None = None) -> str:
     """Transforma caminho local ou URL em destino navegável."""
     value = configured_url.strip()
@@ -255,7 +261,8 @@ class PlaywrightSupplierPortalSession:
             )
             return SupplierSessionResult(orders=orders, evidence_path=evidence)
         except PageAuthenticationError as exc:
-            raise SupplierPortalAuthenticationError(str(exc)) from exc
+            evidence = self._capture_failure(page)
+            raise SupplierPortalAuthenticationError(str(exc), evidence) from exc
         except PageDataError as exc:
             evidence = self._capture_failure(page)
             raise SupplierPortalDataError(str(exc), evidence) from exc
@@ -310,6 +317,7 @@ class SupplierPortalCollector:
         sleep: Callable[[float], None] = time.sleep,
         clock: Callable[[], float] = time.monotonic,
         now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
+        logger: SupplierEventLogger = LOGGER,
     ) -> None:
         self.config = config
         self.session_factory = session_factory or (
@@ -318,21 +326,44 @@ class SupplierPortalCollector:
         self.sleep = sleep
         self.clock = clock
         self.now = now
+        self.logger = logger
 
     def collect(self) -> dict[str, object]:
         started = self.clock()
         started_at = self.now().astimezone(timezone.utc)
         attempt_counter = 0
         evidence_paths: list[Path] = []
+        self._log_event(
+            "supplier_collection_started",
+            attempts=0,
+            latency_ms=0,
+            collected_items=0,
+            failed_items=0,
+        )
 
         def operation(_timeout_seconds: float) -> SupplierSessionResult:
             nonlocal attempt_counter
             attempt_counter += 1
+            self._log_event(
+                "supplier_collection_attempt_started",
+                attempts=attempt_counter,
+                latency_ms=self._latency_ms(started),
+                collected_items=0,
+                failed_items=0,
+            )
             try:
                 result = self.session_factory(attempt_counter).collect()
             except SupplierPortalError as exc:
                 if exc.evidence_path is not None:
                     evidence_paths.append(exc.evidence_path)
+                self._log_event(
+                    "supplier_collection_attempt_failed",
+                    attempts=attempt_counter,
+                    latency_ms=self._latency_ms(started),
+                    collected_items=0,
+                    failed_items=1,
+                    failure_type=type(exc).__name__,
+                )
                 raise
             evidence_paths.append(result.evidence_path)
             return result
@@ -438,6 +469,20 @@ class SupplierPortalCollector:
         if failure_type is not None:
             payload["failure_type"] = failure_type
             payload["failure_message"] = failure_message
+        self._log_event(
+            (
+                "supplier_collection_succeeded"
+                if status == "SUCCESS"
+                else "supplier_collection_fallback"
+            ),
+            attempts=attempts,
+            latency_ms=latency_ms,
+            collected_items=len(orders),
+            failed_items=payload["failed_items"],
+            status=status,
+            source_status=source_status,
+            motivo_fallback=motivo_fallback,
+        )
         return {
             "schema_version": SCHEMA_VERSION,
             "execution_id": self.config.execution_id,
@@ -471,6 +516,21 @@ class SupplierPortalCollector:
 
     def _latency_ms(self, started: float) -> int:
         return max(0, round((self.clock() - started) * 1_000))
+
+    def _log_event(self, event: str, **details: object) -> None:
+        self.logger.info(
+            event,
+            extra={
+                "evento": event,
+                "execution_id": self.config.execution_id,
+                "correlation_id": self.config.correlation_id,
+                "root_task_id": self.config.root_task_id,
+                "parent_task_id": self.config.parent_task_id,
+                "current_task_id": self.config.task_id,
+                "bot_id": BOT_ID,
+                **details,
+            },
+        )
 
 
 def write_collection_result(result: Mapping[str, object], path: Path) -> Path:

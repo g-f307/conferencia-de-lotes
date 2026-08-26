@@ -36,13 +36,19 @@ def test_page_object_autentica_e_coleta_pedidos_em_navegador_real(
     assert evidence.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
 
 
-def test_page_object_diferencia_falha_de_autenticacao(page) -> None:
+def test_page_object_diferencia_falha_de_autenticacao(
+    page, tmp_path: Path
+) -> None:
     page.goto((PORTAL_PATH / "login.html").as_uri(), wait_until="domcontentloaded")
 
     with pytest.raises(SupplierPortalAuthenticationError, match="recusou"):
         SupplierPortalPage(page, timeout_seconds=5).autenticar(
             "fornecedor.demo", "credencial-invalida"
         )
+
+    evidence = tmp_path / "autenticacao-recusada.png"
+    page.screenshot(path=str(evidence), full_page=True)
+    assert evidence.is_file()
 
 
 def test_coletor_independente_executa_portal_completo(tmp_path: Path) -> None:
