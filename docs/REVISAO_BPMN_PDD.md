@@ -61,6 +61,20 @@ As demais seções do PDD aprovado permanecem válidas. A revisão S10-B abaixo
 reproduz explicitamente apenas as seções 6, 8, 9, 16 e 17, que receberam
 impacto funcional ou operacional.
 
+## Evolução planejada para o Projeto Final
+
+A implementação descrita nas seções seguintes continua representando o estado
+operacional da S10-B. O estado-alvo do Capstone expande a cadeia para seis bots:
+Dispatcher, estoque desktop, fornecedores web, consolidação determinística,
+classificador ML e relatório/alertas.
+
+Os contratos, o fan-out das coletas, o fan-in da consolidação, a prioridade da
+sessão gráfica e o modelo de falhas estão definidos em
+[`ARQUITETURA_CAPSTONE.md`](ARQUITETURA_CAPSTONE.md). Essa referência separa
+claramente arquitetura aprovada de funcionalidade já homologada: até a
+conclusão das issues de implementação, a cadeia oficial permanece com três
+bots no Maestro.
+
 ## 6. Arquitetura híbrida
 
 A solução combina cinco camadas com responsabilidades independentes:

@@ -1,5 +1,9 @@
 # Arquitetura da automação
 
+> Este documento descreve a implementação atual. A arquitetura-alvo de seis
+> bots do Projeto Final, seus contratos e a preparação para o Smart Office estão
+> em [`ARQUITETURA_CAPSTONE.md`](ARQUITETURA_CAPSTONE.md).
+
 ## Finalidade
 
 Este documento descreve a solução que executa a conferência de lotes nos modos

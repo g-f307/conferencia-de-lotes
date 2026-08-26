@@ -1116,6 +1116,7 @@ finalizada no Maestro como sucesso operacional.
 | Documento | Finalidade |
 |---|---|
 | [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md) | Componentes, sequência e limites. |
+| [`docs/ARQUITETURA_CAPSTONE.md`](docs/ARQUITETURA_CAPSTONE.md) | Estado-alvo de seis bots, contratos, fan-out, fan-in, prioridade e falhas. |
 | [`docs/EXECUCAO_E2E_DOCKER_CI.md`](docs/EXECUCAO_E2E_DOCKER_CI.md) | Instalação, testes E2E, Docker, pipeline e artefatos. |
 | [`docs/HOMOLOGACAO_TESTES_AULA23.md`](docs/HOMOLOGACAO_TESTES_AULA23.md) | Cobertura, camadas, limitações e respostas da Aula 23. |
 | [`docs/ROTEIRO_TORNEIO_CLASSIFICADORES.md`](docs/ROTEIRO_TORNEIO_CLASSIFICADORES.md) | Demonstração de até oito minutos, sabotagem e coleta das evidências de ML. |
