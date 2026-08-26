@@ -6,6 +6,12 @@ from src.pages.form_page import (
     FormPageTimeoutError,
 )
 from src.pages.login_page import LoginPage, LoginPageTimeoutError
+from src.pages.supplier_portal_page import (
+    SupplierPortalAuthenticationError,
+    SupplierPortalDataError,
+    SupplierPortalPage,
+    SupplierPortalPageTimeoutError,
+)
 
 __all__ = [
     "FormPage",
@@ -13,4 +19,8 @@ __all__ = [
     "FormPageTimeoutError",
     "LoginPage",
     "LoginPageTimeoutError",
+    "SupplierPortalAuthenticationError",
+    "SupplierPortalDataError",
+    "SupplierPortalPage",
+    "SupplierPortalPageTimeoutError",
 ]
