@@ -37,6 +37,11 @@ STRUCTURED_DETAIL_FIELDS = (
     "orchestration_stage",
     "next_task_id",
     "reference_attempts",
+    "attempts",
+    "latency_ms",
+    "collected_items",
+    "failed_items",
+    "source_status",
 )
 
 
