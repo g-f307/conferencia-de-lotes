@@ -103,6 +103,7 @@ class DesktopStockCollector:
                     self.evidence_dir
                     / f"{context.execution_id}-desktop-attempt-{attempt_number}.png"
                 )
+                evidence = self._validate_evidence(evidence)
             except DesktopAutomationError:
                 self._capture_attempt_evidence(
                     context,
@@ -229,6 +230,7 @@ class DesktopStockCollector:
             evidence = self.driver.capture_evidence(
                 self.evidence_dir / f"{context.execution_id}-desktop-failure.png"
             )
+            evidence = self._validate_evidence(evidence)
         except (DesktopAutomationError, OSError):
             self.logger.warning(
                 "Falha ao capturar evidência visual da indisponibilidade desktop",
@@ -248,6 +250,7 @@ class DesktopStockCollector:
                 self.evidence_dir
                 / f"{context.execution_id}-desktop-attempt-{attempt}-failed.png"
             )
+            evidence = self._validate_evidence(evidence)
         except (DesktopAutomationError, OSError):
             return
         evidence_paths.append(str(evidence))
@@ -289,3 +292,12 @@ class DesktopStockCollector:
     @staticmethod
     def _checksum(path: Path) -> str:
         return hashlib.sha256(path.read_bytes()).hexdigest()
+
+    @staticmethod
+    def _validate_evidence(path: Path) -> Path:
+        """Aceita somente a evidência que foi realmente persistida pelo driver."""
+        if not path.is_file() or path.stat().st_size == 0:
+            raise DesktopAutomationError(
+                "capture_evidence não persistiu uma evidência PNG válida"
+            )
+        return path

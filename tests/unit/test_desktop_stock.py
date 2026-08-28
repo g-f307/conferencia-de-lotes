@@ -19,9 +19,16 @@ L002\tTeclado\t4\tA-02\tBAIXO\t2026-08-26T12:02:00+00:00"""
 
 
 class FakeDesktopDriver:
-    def __init__(self, *, failures: int = 0, visible_text: str = VISIBLE_STOCK):
+    def __init__(
+        self,
+        *,
+        failures: int = 0,
+        visible_text: str = VISIBLE_STOCK,
+        persist_evidence: bool = True,
+    ):
         self.failures = failures
         self.visible_text = visible_text
+        self.persist_evidence = persist_evidence
         self.searches: list[str] = []
         self.wait_calls = 0
         self.closed = False
@@ -38,8 +45,9 @@ class FakeDesktopDriver:
         return self.visible_text
 
     def capture_evidence(self, destination: Path) -> Path:
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        destination.write_bytes(b"fake-png")
+        if self.persist_evidence:
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(b"fake-png")
         return destination
 
     def close(self) -> None:
@@ -157,6 +165,28 @@ def test_collection_retries_and_returns_safe_fallback(
     assert fallback_record.latency_ms == 0
     assert fallback_record.failed_items == 5
     assert fallback_record.source_status == "UNAVAILABLE"
+
+
+@pytest.mark.unit
+def test_collection_rejects_evidence_path_not_persisted_by_driver(
+    tmp_path: Path,
+) -> None:
+    driver = FakeDesktopDriver(persist_evidence=False)
+    collector = DesktopStockCollector(
+        driver,
+        make_policy(max_attempts=1),
+        evidence_dir=tmp_path,
+        clock=lambda: 10.0,
+    )
+
+    result = collector.collect(make_context(expected_items=2))
+
+    assert result["status"] == "PARTIALLY_COMPLETED"
+    assert result["payload"]["source_status"] == "UNAVAILABLE"
+    assert result["payload"]["evidence_paths"] == []
+    assert result["artifacts"] == []
+    assert "não persistiu" in result["payload"]["failure_message"]
+    assert driver.closed is True
 
 
 @pytest.mark.unit

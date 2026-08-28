@@ -24,6 +24,12 @@ from src.retry_policy import LinearRetryPolicy
     ),
 )
 def test_real_visual_driver_collects_stock_from_simulator(tmp_path: Path) -> None:
+    configured_evidence_dir = os.getenv("DESKTOP_E2E_EVIDENCE_DIR", "").strip()
+    evidence_dir = (
+        Path(configured_evidence_dir).resolve()
+        if configured_evidence_dir
+        else tmp_path
+    )
     simulator = subprocess.Popen(
         [sys.executable, "-m", "src.desktop_stock.simulator"],
     )
@@ -35,7 +41,7 @@ def test_real_visual_driver_collects_stock_from_simulator(tmp_path: Path) -> Non
                 base_interval_seconds=0.5,
                 timeout_seconds=5.0,
             ),
-            evidence_dir=tmp_path,
+            evidence_dir=evidence_dir,
         )
         result = collector.collect(
             DesktopCollectionContext(
@@ -54,3 +60,6 @@ def test_real_visual_driver_collects_stock_from_simulator(tmp_path: Path) -> Non
     assert result["status"] == "SUCCESS", result["payload"]
     assert result["payload"]["collected_items"] == 5
     assert result["artifacts"]
+    evidence_path = Path(result["artifacts"][0]["path"])
+    assert evidence_path.is_file()
+    assert evidence_path.stat().st_size > 0

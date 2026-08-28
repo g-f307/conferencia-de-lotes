@@ -5,6 +5,7 @@ from __future__ import annotations
 import ctypes
 import sys
 import time
+from ctypes import wintypes
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
@@ -39,6 +40,7 @@ class PyAutoGuiDesktopDriver:
     READY_COLOR = (30, 136, 229)
     SEARCH_COLOR = (194, 24, 91)
     RESULTS_COLOR = (0, 137, 123)
+    SIMULATOR_WINDOW_TITLE = "Sistema Legado de Estoque - Capstone"
 
     def __init__(self, *, poll_interval_seconds: float = 0.1) -> None:
         if sys.platform != "win32":
@@ -88,12 +90,40 @@ class PyAutoGuiDesktopDriver:
     def capture_evidence(self, destination: Path) -> Path:
         destination.parent.mkdir(parents=True, exist_ok=True)
         try:
-            self._gui.screenshot().save(destination)
+            self._gui.screenshot(region=self._simulator_window_region()).save(
+                destination
+            )
         except (OSError, self._gui.PyAutoGUIException) as exc:
             raise DesktopAutomationError(
                 "não foi possível capturar a evidência visual"
             ) from exc
         return destination
+
+    def _simulator_window_region(self) -> tuple[int, int, int, int]:
+        """Restringe a evidência à janela controlada, sem expor o desktop."""
+        user32 = ctypes.windll.user32
+        window = user32.GetForegroundWindow()
+        if not window:
+            raise DesktopAutomationError("nenhuma janela ativa para evidência")
+
+        title_length = user32.GetWindowTextLengthW(window)
+        title_buffer = ctypes.create_unicode_buffer(title_length + 1)
+        user32.GetWindowTextW(window, title_buffer, title_length + 1)
+        if title_buffer.value != self.SIMULATOR_WINDOW_TITLE:
+            raise DesktopAutomationError(
+                "a janela ativa não é o simulador de estoque controlado"
+            )
+
+        rect = wintypes.RECT()
+        if not user32.GetWindowRect(window, ctypes.byref(rect)):
+            raise DesktopAutomationError(
+                "não foi possível obter a área da janela do simulador"
+            )
+        width = rect.right - rect.left
+        height = rect.bottom - rect.top
+        if width <= 0 or height <= 0:
+            raise DesktopAutomationError("área da janela do simulador é inválida")
+        return rect.left, rect.top, width, height
 
     def close(self) -> None:
         """Libera teclas preventivamente sem encerrar o sistema consultado."""
