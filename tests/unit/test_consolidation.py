@@ -131,7 +131,11 @@ def test_divergencias_entre_fontes_nao_reutilizam_codigo_rn(
 
 def test_classificacao_e_regra_aplicada_mantem_precedencia_rn01_rn12():
     validation = validated(produto="", lote_id="L999", data="fora-do-formato")
-    result = ConsolidationService().consolidate([], [], [validation])
+    result = ConsolidationService().consolidate(
+        [stock(lote_id="L999")],
+        [order(lote_id="L999")],
+        [validation],
+    )
 
     item = result.registros[0]
     assert item.status_operacional == STATUS_ERRO_ITEM
@@ -168,6 +172,62 @@ def test_objetos_invalidos_e_booleano_sao_isolados_como_falha_de_item():
         "INVALID_SUPPLIER_ITEM",
     ]
     assert result.registros[0].status_operacional == STATUS_REVISAO
+
+
+@pytest.mark.parametrize(
+    "invalid_stock",
+    [
+        stock(quantidade_disponivel=True),
+        stock(quantidade_disponivel=-1),
+        stock(produto=""),
+    ],
+    ids=["quantidade-booleana", "quantidade-negativa", "campo-vazio"],
+)
+def test_stock_record_tipado_respeita_a_validacao_de_fronteira(invalid_stock):
+    result = ConsolidationService().consolidate(
+        [invalid_stock],
+        [order()],
+        [validated()],
+    )
+
+    assert result.status == "PARTIALLY_COMPLETED"
+    assert result.falhas_itens[0].codigo == "INVALID_STOCK_ITEM"
+    assert result.registros[0].status_operacional == STATUS_REVISAO
+
+
+@pytest.mark.parametrize(
+    "invalid_order",
+    [
+        order(quantidade_solicitada=True),
+        order(quantidade_solicitada=-1),
+        order(fornecedor=""),
+    ],
+    ids=["quantidade-booleana", "quantidade-negativa", "campo-vazio"],
+)
+def test_supplier_order_tipado_respeita_a_validacao_de_fronteira(invalid_order):
+    result = ConsolidationService().consolidate(
+        [stock()],
+        [invalid_order],
+        [validated()],
+    )
+
+    assert result.status == "PARTIALLY_COMPLETED"
+    assert result.falhas_itens[0].codigo == "INVALID_SUPPLIER_ITEM"
+    assert result.registros[0].status_operacional == STATUS_REVISAO
+
+
+def test_fonte_ausente_prioriza_revisao_sem_apagar_auditoria_rn10():
+    validation = validated(status="REPROVADO", observacao="")
+
+    result = ConsolidationService().consolidate([], [order()], [validation])
+
+    item = result.registros[0]
+    assert result.status == "PARTIALLY_COMPLETED"
+    assert item.status_operacional == STATUS_REVISAO
+    assert item.classificacao == "Divergência"
+    assert item.regras_violadas == ("RN10",)
+    assert item.regra_aplicada == "RN10"
+    assert item.verificacoes_consolidacao == ("CONS01",)
 
 
 def test_duas_fontes_indisponiveis_produzem_falha_geral_sem_chamar_ml():

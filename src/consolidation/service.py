@@ -12,7 +12,7 @@ from src.excel_reporting import (
     CLASSIFICACAO_ERRO_ENTRADA,
     RegistroValidado,
 )
-from src.supplier_portal import SupplierOrder
+from src.supplier_portal import SupplierOrder, SupplierPortalDataError
 
 from .models import (
     STATUS_APROVADO,
@@ -221,9 +221,8 @@ class ConsolidationService:
             try:
                 if not isinstance(record, (StockRecord, Mapping)):
                     raise TypeError("item de estoque deve ser um objeto ou mapeamento")
-                parsed.append(
-                    record if isinstance(record, StockRecord) else _stock_from_mapping(record)
-                )
+                data = record.to_dict() if isinstance(record, StockRecord) else record
+                parsed.append(_stock_from_mapping(data))
             except (AttributeError, TypeError, ValueError) as exc:
                 lote_id = _text(record.get("lote_id")) if isinstance(record, Mapping) else ""
                 failures.append(
@@ -247,10 +246,9 @@ class ConsolidationService:
             try:
                 if not isinstance(record, (SupplierOrder, Mapping)):
                     raise TypeError("pedido deve ser um objeto ou mapeamento")
-                parsed.append(
-                    record if isinstance(record, SupplierOrder) else SupplierOrder.from_mapping(record)
-                )
-            except (AttributeError, TypeError, ValueError) as exc:
+                data = record.to_dict() if isinstance(record, SupplierOrder) else record
+                parsed.append(SupplierOrder.from_mapping(data))
+            except (AttributeError, SupplierPortalDataError, TypeError, ValueError) as exc:
                 lote_id = _text(record.get("lote_id")) if isinstance(record, Mapping) else ""
                 failures.append(
                     FalhaItemConsolidacao(
@@ -408,6 +406,8 @@ class ConsolidationService:
         validation: RegistroValidado | None,
         checks: list[str],
     ) -> str:
+        if _VERIFICACOES_DEGRADADAS.intersection(checks):
+            return STATUS_REVISAO
         if validation and validation.classificacao == CLASSIFICACAO_ERRO_ENTRADA:
             return STATUS_ERRO_ITEM
         if validation and validation.classificacao == CLASSIFICACAO_DIVERGENCIA:
