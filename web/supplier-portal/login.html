@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Portal controlado para testes do Capstone." />
+    <title>Acesso | Portal de fornecedores</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="login.js" defer></script>
+  </head>
+  <body>
+    <main class="shell shell--login">
+      <section class="panel" aria-label="Autenticação de fornecedores">
+        <span class="eyebrow">AMBIENTE CONTROLADO</span>
+        <h1>Portal de fornecedores</h1>
+        <p>Consulte os pedidos programados para conferência.</p>
+        <form id="login-form" novalidate>
+          <label for="usuario">Usuário</label>
+          <input id="usuario" name="usuario" autocomplete="username" required />
+          <label for="senha">Senha</label>
+          <input id="senha" name="senha" type="password" autocomplete="current-password" required />
+          <button type="submit">Entrar</button>
+          <p id="auth-status" role="status" aria-label="Resultado da autenticação" hidden></p>
+        </form>
+        <small>Credenciais exclusivas do simulador: fornecedor.demo / demo-local</small>
+      </section>
+    </main>
+  </body>
+</html>
