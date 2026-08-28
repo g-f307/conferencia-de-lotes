@@ -192,6 +192,7 @@ def test_stock_record_tipado_respeita_a_validacao_de_fronteira(invalid_stock):
 
     assert result.status == "PARTIALLY_COMPLETED"
     assert result.falhas_itens[0].codigo == "INVALID_STOCK_ITEM"
+    assert result.falhas_itens[0].lote_id == "L001"
     assert result.registros[0].status_operacional == STATUS_REVISAO
 
 
@@ -213,6 +214,7 @@ def test_supplier_order_tipado_respeita_a_validacao_de_fronteira(invalid_order):
 
     assert result.status == "PARTIALLY_COMPLETED"
     assert result.falhas_itens[0].codigo == "INVALID_SUPPLIER_ITEM"
+    assert result.falhas_itens[0].lote_id == "L001"
     assert result.registros[0].status_operacional == STATUS_REVISAO
 
 

@@ -57,6 +57,15 @@ def _text(value: object) -> str:
     return str(value or "").strip()
 
 
+def _record_lote_id(record: object) -> str | None:
+    value = (
+        record.get("lote_id")
+        if isinstance(record, Mapping)
+        else getattr(record, "lote_id", None)
+    )
+    return _text(value) or None
+
+
 def _stock_from_mapping(data: Mapping[str, object]) -> StockRecord:
     required = (
         "lote_id",
@@ -224,12 +233,11 @@ class ConsolidationService:
                 data = record.to_dict() if isinstance(record, StockRecord) else record
                 parsed.append(_stock_from_mapping(data))
             except (AttributeError, TypeError, ValueError) as exc:
-                lote_id = _text(record.get("lote_id")) if isinstance(record, Mapping) else ""
                 failures.append(
                     FalhaItemConsolidacao(
                         fonte=FONTE_ESTOQUE,
                         indice=index,
-                        lote_id=lote_id or None,
+                        lote_id=_record_lote_id(record),
                         codigo="INVALID_STOCK_ITEM",
                         mensagem=str(exc),
                     )
@@ -249,12 +257,11 @@ class ConsolidationService:
                 data = record.to_dict() if isinstance(record, SupplierOrder) else record
                 parsed.append(SupplierOrder.from_mapping(data))
             except (AttributeError, SupplierPortalDataError, TypeError, ValueError) as exc:
-                lote_id = _text(record.get("lote_id")) if isinstance(record, Mapping) else ""
                 failures.append(
                     FalhaItemConsolidacao(
                         fonte=FONTE_PEDIDOS,
                         indice=index,
-                        lote_id=lote_id or None,
+                        lote_id=_record_lote_id(record),
                         codigo="INVALID_SUPPLIER_ITEM",
                         mensagem=str(exc),
                     )
