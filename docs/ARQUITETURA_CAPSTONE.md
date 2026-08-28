@@ -234,6 +234,33 @@ Os dois conjuntos não podem ocupar o mesmo campo:
 continuar convertendo exceções de espera em um `StageResult` terminal, desde
 que não confunda esses estados com uma divergência de negócio.
 
+### Consolidação determinística das fontes
+
+`ConsolidationService` correlaciona estoque, pedidos e o resultado prévio de
+`RegistroValidado` pelo `lote_id`. A etapa preserva `classificacao`,
+`regras_violadas` e `regra_aplicada`, inclusive a precedência RN01–RN12, e não
+consulta o serviço de ML. O envelope resultante pode ser consumido pelo
+classificador, pelos relatórios e pelos alertas sem nova leitura das interfaces.
+
+As verificações exclusivas do cruzamento usam um namespace próprio:
+
+| Código | Verificação |
+|---|---|
+| `CONS01` | Estoque ausente para o lote. |
+| `CONS02` | Pedido ausente para o lote. |
+| `CONS03` | Produto divergente entre estoque e pedido. |
+| `CONS04` | Quantidade disponível inferior à solicitada. |
+| `CONS05` | Resultado RN01–RN12 ausente. |
+| `CONS06` | Mais de um registro de estoque para o lote. |
+| `CONS07` | Mais de um resultado de validação para o lote. |
+
+`CONS03` e `CONS04` representam decisões de negócio e, isoladamente, não
+rebaixam o resultado técnico da consolidação. Fontes ausentes ou degradadas,
+entradas inválidas e ausência/duplicidade de dados são explicitadas como modo
+degradado. Uma falha de item é registrada separadamente e não interrompe os
+demais lotes; a etapa só termina como `FAILED` quando as duas fontes de coleta
+estão indisponíveis.
+
 ## Contratos específicos
 
 ### 1. Dispatcher
