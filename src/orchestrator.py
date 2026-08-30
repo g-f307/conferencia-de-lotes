@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from enum import Enum
 from typing import Protocol
@@ -45,6 +45,10 @@ class OrchestrationGateway(Protocol):
         self,
         activity_label: str,
         parameters: dict[str, object],
+        *,
+        priority: int | None = None,
+        predecessor_task_ids: Sequence[str] = (),
+        timeout_seconds: float | None = None,
     ) -> MaestroTask: ...
 
     def get_task(self, task_id: str) -> MaestroTask: ...
