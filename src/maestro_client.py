@@ -34,6 +34,9 @@ class MaestroTask:
     finish_status: str | None = None
     finish_message: str = ""
     activity_label: str = ""
+    priority: int | None = None
+    predecessor_task_ids: tuple[str, ...] = ()
+    timeout_seconds: float | None = None
 
 
 class MaestroGateway(Protocol):
@@ -110,6 +113,10 @@ class MaestroGateway(Protocol):
         self,
         activity_label: str,
         parameters: dict[str, object],
+        *,
+        priority: int | None = None,
+        predecessor_task_ids: tuple[str, ...] = (),
+        timeout_seconds: float | None = None,
     ) -> MaestroTask:
         ...
 
@@ -237,6 +244,10 @@ class InMemoryMaestroGateway:
         self,
         activity_label: str,
         parameters: dict[str, object],
+        *,
+        priority: int | None = None,
+        predecessor_task_ids: tuple[str, ...] = (),
+        timeout_seconds: float | None = None,
     ) -> MaestroTask:
         self._task_sequence += 1
         task_id = f"local-child-{self._task_sequence}"
@@ -245,6 +256,9 @@ class InMemoryMaestroGateway:
             state="START",
             parameters=dict(parameters),
             activity_label=activity_label,
+            priority=priority,
+            predecessor_task_ids=tuple(predecessor_task_ids),
+            timeout_seconds=timeout_seconds,
         )
         self.tasks[task_id] = task
         self.orchestration_events.append(("create_task", task_id))
@@ -492,9 +506,25 @@ class BotCityMaestroGateway:
         self,
         activity_label: str,
         parameters: dict[str, object],
+        *,
+        priority: int | None = None,
+        predecessor_task_ids: tuple[str, ...] = (),
+        timeout_seconds: float | None = None,
     ) -> MaestroTask:
-        task = self.sdk.create_task(activity_label, parameters)
-        return self._to_task(task)
+        legacy_parameters = dict(parameters)
+        if priority is not None or predecessor_task_ids or timeout_seconds is not None:
+            legacy_parameters["scheduling"] = {
+                "priority": priority,
+                "predecessor_task_ids": list(predecessor_task_ids),
+                "timeout_seconds": timeout_seconds,
+            }
+        task = self.sdk.create_task(activity_label, legacy_parameters)
+        return replace(
+            self._to_task(task),
+            priority=priority,
+            predecessor_task_ids=tuple(predecessor_task_ids),
+            timeout_seconds=timeout_seconds,
+        )
 
     def get_task(self, task_id: str) -> MaestroTask:
         return self._to_task(self.sdk.get_task(str(task_id)))
@@ -513,6 +543,11 @@ class BotCityMaestroGateway:
             finish_status=enum_value(getattr(task, "finish_status", None)),
             finish_message=str(getattr(task, "finish_message", "") or ""),
             activity_label=str(getattr(task, "activity_label", "") or ""),
+            priority=getattr(task, "priority", None),
+            predecessor_task_ids=tuple(
+                getattr(task, "predecessor_task_ids", None) or ()
+            ),
+            timeout_seconds=getattr(task, "timeout_seconds", None),
         )
 
 
@@ -550,9 +585,19 @@ class MaestroClient:
         self,
         activity_label: str,
         parameters: dict[str, object],
+        *,
+        priority: int | None = None,
+        predecessor_task_ids: tuple[str, ...] = (),
+        timeout_seconds: float | None = None,
     ) -> MaestroTask:
         """Agenda a próxima atividade preservando os parâmetros de correlação."""
-        return self.gateway.create_task(activity_label, parameters)
+        return self.gateway.create_task(
+            activity_label,
+            parameters,
+            priority=priority,
+            predecessor_task_ids=predecessor_task_ids,
+            timeout_seconds=timeout_seconds,
+        )
 
     def get_task(self, task_id: str) -> MaestroTask:
         """Consulta uma task sem expor o modelo específico do SDK."""

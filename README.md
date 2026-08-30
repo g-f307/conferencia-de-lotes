@@ -6,6 +6,11 @@ Automação corporativa para conferência de registros de inspeção, com
 processamento resiliente por item, integração com BotCity Maestro e automação
 web controlada por Playwright.
 
+O desenho do Capstone acrescenta uma cadeia de seis bots com fan-out/fan-in,
+prioridade e timeout preparada para o Smart Office, preservando temporariamente
+o fluxo legado. Consulte
+[`docs/ORQUESTRACAO_SMART_OFFICE_CAPSTONE.md`](docs/ORQUESTRACAO_SMART_OFFICE_CAPSTONE.md).
+
 ## Visão geral
 
 O fluxo combina Dispatcher, DataPool, Performer, Credentials Vault, Page
