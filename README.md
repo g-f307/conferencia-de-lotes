@@ -633,6 +633,42 @@ imediatamente com motivos distintos. As variáveis aceitas são:
 | `SUPPLIER_ARTIFACT_DIR` | Evidências PNG da execução. | `artefatos/fornecedores` |
 | `SUPPLIER_RESULT_PATH` | Envelope entregue à consolidação. | `data/output/fornecedores.json` |
 
+### Bot independente de classificação ML
+
+O papel `classificador-ml-v1` executa depois de `consolidacao-v2` e consulta
+somente registros cujo `status_operacional` seja `DIVERGENCIA`. A decisão
+determinística nunca é recalculada: ela é copiada para `resultado_aplicado`,
+enquanto o modelo acrescenta apenas a causa provável e sua auditoria.
+
+```bash
+ML_INPUT_PATH=data/output/consolidacao.json \
+ML_RESULT_PATH=data/output/classificacao-ml.json \
+EXECUTION_ID=exec-local-001 \
+CORRELATION_ID=corr-local-001 \
+ROOT_TASK_ID=task-dispatcher-001 \
+TASK_ID=task-ml-001 \
+PARENT_TASK_ID=task-consolidacao-001 \
+PREDECESSOR_TASK_IDS=task-consolidacao-001 \
+ML_ENABLED=false \
+python -m src.ml_bot.main
+```
+
+Com `ML_ENABLED=false`, o bot não realiza chamada HTTP e registra
+`motivo_fallback=ml_desabilitado`. Indisponibilidade, timeout, baixa confiança,
+observação ausente e resposta inválida produzem fallback específico; a task
+termina como `PARTIALLY_COMPLETED`, mas cada `resultado_aplicado` permanece
+idêntico ao status recebido. Uma entrada sem divergências termina como `SUCCESS`
+com listas de decisões vazias.
+
+| Variável | Uso | Padrão local |
+|---|---|---|
+| `ML_INPUT_PATH` | Envelope produzido pela consolidação. | `data/output/consolidacao.json` |
+| `ML_RESULT_PATH` | Envelope entregue ao relatório e aos alertas. | `data/output/classificacao-ml.json` |
+| `ML_ENABLED` | Habilita a chamada ao serviço de ML. | `false` |
+| `ML_API_URL` | Endereço da API quando habilitada. | `http://127.0.0.1:8000` |
+| `ML_TIMEOUT_SECONDS` | Timeout individual por observação. | `3` |
+| `ML_CONFIANCA_MINIMA` | Limiar para aceitar a causa sugerida. | `0.85` |
+
 ## Docker
 
 ```bash
