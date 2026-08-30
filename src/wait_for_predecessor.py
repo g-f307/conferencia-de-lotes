@@ -23,6 +23,10 @@ class PredecessorFailedError(PredecessorError):
     pass
 
 
+class PredecessorCanceledError(PredecessorFailedError):
+    """A predecessora foi cancelada, em vez de terminar com erro."""
+
+
 class PredecessorTimeoutError(PredecessorError):
     pass
 
@@ -59,7 +63,7 @@ def wait_for_predecessor(
                 f"Task predecessora {task_id} terminou sem sucesso: {detail}"
             )
         if state == "CANCELED":
-            raise PredecessorFailedError(
+            raise PredecessorCanceledError(
                 f"Task predecessora {task_id} foi cancelada"
             )
 
