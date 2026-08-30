@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import json
 import logging
+import mimetypes
 import smtplib
 from collections import Counter
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from email.message import EmailMessage
 from enum import StrEnum
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 from urllib import request
 
@@ -35,6 +37,7 @@ class Alerta:
     motivo_predominante: str
     estado_pipeline: str
     evento: str = "alerta_operacional"
+    anexo: Path | None = None
 
     def texto(self) -> str:
         return (
@@ -130,6 +133,23 @@ class CanalEmail:
         message["From"] = self._remetente
         message["To"] = ", ".join(self._destinatarios)
         message.set_content(alerta.texto())
+
+        if alerta.anexo is not None:
+            attachment = Path(alerta.anexo)
+            if not attachment.is_file():
+                raise FileNotFoundError("Anexo do alerta não foi encontrado")
+            mime_type, _ = mimetypes.guess_type(attachment.name)
+            main_type, sub_type = (
+                mime_type.split("/", maxsplit=1)
+                if mime_type
+                else ("application", "octet-stream")
+            )
+            message.add_attachment(
+                attachment.read_bytes(),
+                maintype=main_type,
+                subtype=sub_type,
+                filename=attachment.name,
+            )
 
         with self._smtp_factory(
             self._host,
@@ -254,6 +274,16 @@ class SistemaAlertas:
                 },
             )
             return False
+        self._logger.info(
+            "Alerta entregue pelo canal %s",
+            canal.nome,
+            extra={
+                "evento": "ENTREGA_CANAL_ALERTA",
+                "formulario": "SistemaAlertas",
+                "status": "SUCCESS",
+                "usuario": "sistema",
+            },
+        )
         return True
 
 

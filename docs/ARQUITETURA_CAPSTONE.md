@@ -399,6 +399,25 @@ total_items, processed_items, failed_items, review_items
 Excel, Markdown, JSON, PDF, logs e notificações consomem o mesmo snapshot da
 execução. A etapa não relê a interface, não recalcula regras e não chama o ML.
 
+O ponto de entrada independente é executado com:
+
+```text
+python -m src.capstone_reporting.main
+```
+
+Ele lê o envelope indicado por `CAPSTONE_REPORT_INPUT_PATH`, grava os artefatos
+em `CAPSTONE_REPORT_DIR` e considera degradação prolongada após o limite de
+`CAPSTONE_DEGRADED_ALERT_SECONDS`. No relatório de negócio, as nove abas
+existentes são preservadas e a aba `Pipeline Híbrido` concentra origem dos
+dados, situação das coletas, decisão, confiança, fallback e identificadores.
+No incidente operacional, somente JSON, Markdown e PDF são publicados, sem
+indicadores de negócio artificiais.
+
+Os códigos de fallback pertencem a um catálogo fechado e são acompanhados por
+descrições legíveis nos quatro artefatos. A produção de dead letter é detectada
+pelos metadados `artifacts` ou `available_artifacts`, sem abrir o conteúdo do
+arquivo nem transportar a causa livre registrada no item.
+
 `consolidation_result` é sempre uma chave obrigatória, mas pode conter um
 snapshot real ou sintético. `report_type` diferencia os dois produtos:
 

@@ -674,6 +674,38 @@ com listas de decisões vazias.
 | `ML_TIMEOUT_SECONDS` | Timeout individual por observação. | `3` |
 | `ML_CONFIANCA_MINIMA` | Limiar para aceitar a causa sugerida. | `0.85` |
 
+### Bot de relatório e alertas do Capstone
+
+O papel `relatorio-alertas-v2` recebe o resultado da consolidação e a saída do
+bot de ML em um único envelope. Ele não relê as interfaces, não reaplica regras
+e não chama o modelo. Excel, Markdown, PDF e resumo JSON são derivados do mesmo
+snapshot, com situação das coletas, origem da decisão, confiança, fallback,
+modo degradado e identificadores de execução.
+
+```bash
+CAPSTONE_REPORT_INPUT_PATH=data/output/pipeline-capstone.json \
+CAPSTONE_REPORT_DIR=relatorios/capstone \
+python -m src.capstone_reporting.main
+```
+
+No fluxo de negócio, as nove abas existentes são mantidas e a aba
+`Pipeline Híbrido` acrescenta o contexto do Capstone. Incidentes operacionais
+geram JSON, Markdown e PDF sem publicar indicadores de negócio artificiais.
+Quando os alertas estão habilitados, Telegram permanece como canal principal,
+Email recebe o relatório como anexo nos eventos críticos ou no fallback, e o
+log local é o último recurso. Falhas de notificação não alteram o resultado do
+pipeline.
+
+Fallbacks desconhecidos são rejeitados antes da publicação. Os códigos aceitos
+recebem descrição legível, e um artefato identificado como `dead_letter` gera
+o alerta operacional correspondente sem expor seu conteúdo.
+
+| Variável | Uso | Padrão local |
+|---|---|---|
+| `CAPSTONE_REPORT_INPUT_PATH` | Envelope final da consolidação e do ML. | `data/output/pipeline-capstone.json` |
+| `CAPSTONE_REPORT_DIR` | Diretório dos quatro artefatos. | `relatorios/capstone` |
+| `CAPSTONE_DEGRADED_ALERT_SECONDS` | Tempo para alertar degradação prolongada. | `300` |
+
 ## Docker
 
 ```bash
