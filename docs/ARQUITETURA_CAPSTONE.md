@@ -362,6 +362,25 @@ motivo_fallback, latencia_ms, resultado_aplicado
 modelo não promove nem rebaixa um item. Itens não elegíveis não provocam chamada
 HTTP e ainda produzem um resultado terminal compreensível para a task.
 
+O ponto de entrada independente é executado com:
+
+```text
+python -m src.ml_bot.main
+```
+
+Ele lê o envelope indicado por `ML_INPUT_PATH`, processa somente registros com
+`status_operacional=DIVERGENCIA` e persiste o resultado em `ML_RESULT_PATH`.
+`execution_id`, `correlation_id`, `root_task_id`, `task_id`,
+`parent_task_id` e `predecessor_task_ids` são propagados no envelope de saída.
+
+Cada item elegível produz exatamente um `MLDecisionAudit`. `ML_ENABLED=false`
+gera `ml_desabilitado` sem chamada HTTP e continua sendo uma execução nominal.
+Timeout, indisponibilidade, baixa confiança, observação ausente ou resposta
+inválida geram `PARTIALLY_COMPLETED`, com `modo_degradado=true` e motivo
+específico. Sem itens elegíveis, a task termina como `SUCCESS`, com zero decisões.
+Em todos os casos, `resultado_aplicado` permanece igual ao
+`status_operacional` recebido da consolidação.
+
 ### 6. Relatório e alertas
 
 Entrada:
