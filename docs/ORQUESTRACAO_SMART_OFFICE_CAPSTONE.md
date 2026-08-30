@@ -49,6 +49,12 @@ registrados separadamente nos logs.
   `PARTIALLY_COMPLETED` nesse caso.
 - Falhas na criação de tasks são registradas em `creation_failures` e propagadas
   como `upstream_creation_failures` às tasks que ainda puderem ser criadas.
+  Cada falha direta é materializada no contexto como dependência sintética com
+  `task_id=null`, `status=FAILED`, `source_status=UNAVAILABLE` e
+  `motivo_fallback=task_creation_failed`, sem entrar no polling.
+- Se uma coleta não for criada, a consolidação termina como
+  `PARTIALLY_COMPLETED`; se as duas não forem criadas, termina como `FAILED`
+  com snapshot `OPERATIONAL_FAILURE` e `report_type=OPERATIONAL_INCIDENT`.
 
 Essa política mantém as regras determinísticas e a emissão de relatório como
 fontes operacionais obrigatórias; o enriquecimento por ML permanece opcional.

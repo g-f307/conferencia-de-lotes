@@ -167,3 +167,67 @@ def test_adapter_smart_office_encaminha_metadados_de_agendamento() -> None:
     assert task.priority == 80
     assert task.predecessor_task_ids == ("a", "b")
     assert client.received["timeout_seconds"] == 30
+
+
+class _RejectingGateway(InMemoryMaestroGateway):
+    def __init__(self, rejected_labels: set[str]) -> None:
+        super().__init__("root")
+        self.rejected_labels = rejected_labels
+
+    def create_task(self, activity_label, parameters, **kwargs):
+        if activity_label in self.rejected_labels:
+            raise RuntimeError("rejeicao controlada")
+        return super().create_task(activity_label, parameters, **kwargs)
+
+
+def test_falha_de_criacao_de_uma_coleta_vira_dependencia_sintetica() -> None:
+    desktop_label = CAPSTONE_BOT_LABELS[CapstoneStage.DESKTOP]
+    gateway = _RejectingGateway({desktop_label})
+    manifest = CapstoneOrchestrator(gateway, settings=_settings()).schedule()
+    web_id = manifest.task_ids[CapstoneStage.WEB]
+    gateway.activate_task(web_id)
+    gateway.finish_task("SUCCESS", "coleta web concluida", 1, 1, 0)
+    gateway.activate_task(manifest.task_ids[CapstoneStage.CONSOLIDATION])
+
+    outcome = CapstoneOrchestrator(gateway, settings=_settings()).execute_current(
+        CapstoneStage.CONSOLIDATION,
+        lambda context: StageResult("SUCCESS", "consolidacao degradada"),
+    )
+
+    assert outcome.result.status == "PARTIALLY_COMPLETED"
+    assert len(outcome.context.dependency_results) == 2
+    synthetic = next(
+        result for result in outcome.context.dependency_results if result.synthetic
+    )
+    assert synthetic.task_id is None
+    assert synthetic.status == "FAILED"
+    assert synthetic.source_alias == desktop_label
+    assert synthetic.source_status == "UNAVAILABLE"
+    assert synthetic.motivo_fallback == "task_creation_failed"
+
+
+def test_falha_de_criacao_das_duas_coletas_gera_incidente() -> None:
+    collector_labels = {
+        CAPSTONE_BOT_LABELS[CapstoneStage.DESKTOP],
+        CAPSTONE_BOT_LABELS[CapstoneStage.WEB],
+    }
+    gateway = _RejectingGateway(collector_labels)
+    manifest = CapstoneOrchestrator(gateway, settings=_settings()).schedule()
+    consolidation_id = manifest.task_ids[CapstoneStage.CONSOLIDATION]
+    assert gateway.get_task(consolidation_id).predecessor_task_ids == ()
+    gateway.activate_task(consolidation_id)
+
+    outcome = CapstoneOrchestrator(gateway, settings=_settings()).execute_current(
+        CapstoneStage.CONSOLIDATION,
+        lambda context: StageResult("SUCCESS", "snapshot sintetico"),
+    )
+
+    assert len(outcome.context.dependency_results) == 2
+    assert all(result.synthetic for result in outcome.context.dependency_results)
+    assert all(
+        result.source_status == "UNAVAILABLE"
+        for result in outcome.context.dependency_results
+    )
+    assert outcome.result.status == "FAILED"
+    assert outcome.result.payload["report_type"] == "OPERATIONAL_INCIDENT"
+    assert outcome.result.payload["snapshot_type"] == "OPERATIONAL_FAILURE"

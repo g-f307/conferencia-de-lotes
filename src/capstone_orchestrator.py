@@ -111,9 +111,13 @@ class PipelineManifest:
 
 @dataclass(frozen=True)
 class DependencyResult:
-    task_id: str
+    task_id: str | None
     status: str
     message: str
+    source_alias: str = ""
+    source_status: str | None = None
+    synthetic: bool = False
+    motivo_fallback: str = ""
 
     @property
     def successful(self) -> bool:
@@ -272,7 +276,9 @@ class CapstoneOrchestrator:
             current.predecessor_task_ids
             or tuple(parameters.get("predecessor_task_ids", ()))
         )
-        results = tuple(self._wait(task_id) for task_id in predecessors)
+        polled_results = tuple(self._wait(task_id) for task_id in predecessors)
+        synthetic_results = self._creation_failure_results(stage, parameters)
+        results = polled_results + synthetic_results
         context = CapstoneContext(
             stage=stage,
             current_task_id=current.task_id,
@@ -285,6 +291,19 @@ class CapstoneOrchestrator:
             parameters=parameters,
         )
         degraded = any(not result.successful for result in results)
+        all_sources_unavailable = (
+            stage is CapstoneStage.CONSOLIDATION
+            and sum(
+                result.source_status == "UNAVAILABLE"
+                for result in results
+                if result.source_alias
+                in {
+                    CAPSTONE_BOT_LABELS[CapstoneStage.DESKTOP],
+                    CAPSTONE_BOT_LABELS[CapstoneStage.WEB],
+                }
+            )
+            == 2
+        )
         if degraded and stage not in self._DEGRADED_STAGES:
             result = StageResult(
                 "FAILED",
@@ -294,7 +313,24 @@ class CapstoneOrchestrator:
             )
         else:
             result = handler(context)
-            if degraded and result.status == "SUCCESS":
+            if all_sources_unavailable:
+                result = replace(
+                    result,
+                    status="FAILED",
+                    message="Consolidacao indisponivel; relatorio de incidente requerido",
+                    payload={
+                        **result.payload,
+                        "report_type": "OPERATIONAL_INCIDENT",
+                        "snapshot_type": "OPERATIONAL_FAILURE",
+                        "source_statuses": {
+                            dependency.source_alias: dependency.source_status
+                            for dependency in results
+                            if dependency.source_alias
+                        },
+                    },
+                    failed_items=max(1, result.failed_items),
+                )
+            elif degraded and result.status == "SUCCESS":
                 result = replace(
                     result,
                     status="PARTIALLY_COMPLETED",
@@ -316,6 +352,45 @@ class CapstoneOrchestrator:
             result.status,
         )
         return CapstoneOutcome(context, result)
+
+    @staticmethod
+    def _creation_failure_results(
+        stage: CapstoneStage,
+        parameters: Mapping[str, object],
+    ) -> tuple[DependencyResult, ...]:
+        expected_failures = {
+            CapstoneStage.CONSOLIDATION: {
+                CapstoneStage.DESKTOP,
+                CapstoneStage.WEB,
+            },
+            CapstoneStage.ML: {CapstoneStage.CONSOLIDATION},
+            CapstoneStage.REPORT: {CapstoneStage.ML},
+        }.get(stage, set())
+        raw_failures = parameters.get("upstream_creation_failures", {})
+        if not isinstance(raw_failures, Mapping):
+            return ()
+
+        results: list[DependencyResult] = []
+        for raw_stage in raw_failures:
+            try:
+                failed_stage = CapstoneStage(str(raw_stage))
+            except ValueError:
+                continue
+            if failed_stage not in expected_failures:
+                continue
+            source_alias = CAPSTONE_BOT_LABELS[failed_stage]
+            results.append(
+                DependencyResult(
+                    task_id=None,
+                    status="FAILED",
+                    message=f"Task da fonte {source_alias} nao foi criada",
+                    source_alias=source_alias,
+                    source_status="UNAVAILABLE",
+                    synthetic=True,
+                    motivo_fallback="task_creation_failed",
+                )
+            )
+        return tuple(results)
 
     def _create(
         self,
