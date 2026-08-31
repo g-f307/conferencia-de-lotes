@@ -1,0 +1,83 @@
+{
+  "schema_version": "1.0",
+  "packages": [
+    {
+      "bot_id": "dispatcher-v2",
+      "version": "2.0.0",
+      "entrypoint": "src.dispatcher:main",
+      "priority_local": 50,
+      "priority_smart_office": 3,
+      "predecessors": [],
+      "timeout_seconds": 300,
+      "runner_capability": "python",
+      "artifacts": ["data/output/dispatcher.json"],
+      "environment": ["EXECUTION_ID", "CORRELATION_ID", "INPUT_CSV"],
+      "requirements": ["python-dotenv>=1.0,<2.0", "botcity-maestro-sdk>=0.9,<1.0"]
+    },
+    {
+      "bot_id": "estoque-desktop-v1",
+      "version": "1.0.0",
+      "entrypoint": "src.desktop_stock.main:main",
+      "priority_local": 100,
+      "priority_smart_office": 1,
+      "predecessors": ["dispatcher-v2"],
+      "timeout_seconds": 300,
+      "runner_capability": "windows-graphical-session",
+      "artifacts": ["data/output/desktop-stock.json", "data/output/evidencias-desktop"],
+      "environment": ["EXECUTION_ID", "CORRELATION_ID", "ROOT_TASK_ID", "TASK_ID", "PARENT_TASK_ID"],
+      "requirements": ["python-dotenv>=1.0,<2.0", "pyautogui>=0.9.54,<1.0"]
+    },
+    {
+      "bot_id": "fornecedores-web-v1",
+      "version": "1.0.0",
+      "entrypoint": "src.supplier_portal_bot:main",
+      "priority_local": 50,
+      "priority_smart_office": 3,
+      "predecessors": ["dispatcher-v2"],
+      "timeout_seconds": 300,
+      "runner_capability": "python-playwright-chromium",
+      "artifacts": ["data/output/fornecedores.json", "artefatos/fornecedores"],
+      "environment": ["EXECUTION_ID", "CORRELATION_ID", "ROOT_TASK_ID", "TASK_ID", "PARENT_TASK_ID", "SUPPLIER_PORTAL_URL", "SUPPLIER_PORTAL_USERNAME", "SUPPLIER_PORTAL_PASSWORD"],
+      "requirements": ["python-dotenv>=1.0,<2.0", "playwright>=1.40,<2.0"]
+    },
+    {
+      "bot_id": "consolidacao-v2",
+      "version": "2.0.0",
+      "entrypoint": "src.consolidation.main:main",
+      "priority_local": 50,
+      "priority_smart_office": 3,
+      "predecessors": ["estoque-desktop-v1", "fornecedores-web-v1"],
+      "timeout_seconds": 300,
+      "runner_capability": "python",
+      "artifacts": ["data/output/consolidacao.json"],
+      "environment": ["DESKTOP_RESULT_PATH", "SUPPLIER_RESULT_PATH", "VALIDATION_RESULT_PATH", "CONSOLIDATION_RESULT_PATH"],
+      "requirements": ["python-dotenv>=1.0,<2.0"]
+    },
+    {
+      "bot_id": "classificador-ml-v1",
+      "version": "1.0.0",
+      "entrypoint": "src.ml_bot.main:main",
+      "priority_local": 50,
+      "priority_smart_office": 3,
+      "predecessors": ["consolidacao-v2"],
+      "timeout_seconds": 300,
+      "runner_capability": "python-http-client",
+      "artifacts": ["data/output/classificacao-ml.json"],
+      "environment": ["EXECUTION_ID", "CORRELATION_ID", "ML_ENABLED", "ML_API_URL", "ML_TIMEOUT_SECONDS", "ML_CONFIANCA_MINIMA", "ML_INPUT_PATH", "ML_RESULT_PATH"],
+      "requirements": ["python-dotenv>=1.0,<2.0"]
+    },
+    {
+      "bot_id": "relatorio-alertas-v2",
+      "version": "2.0.0",
+      "entrypoint": "src.capstone_reporting.main:main",
+      "priority_local": 50,
+      "priority_smart_office": 3,
+      "predecessors": ["classificador-ml-v1"],
+      "timeout_seconds": 300,
+      "runner_capability": "python",
+      "artifacts": ["relatorios/capstone", "logs/execucao.log"],
+      "environment": ["CAPSTONE_REPORT_INPUT_PATH", "CAPSTONE_REPORT_DIR", "ALERTS_ENABLED", "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "SMTP_HOST", "SMTP_USERNAME", "SMTP_PASSWORD", "SMTP_FROM", "SMTP_TO"],
+      "requirements": ["python-dotenv>=1.0,<2.0", "reportlab>=4.0,<5.0", "openpyxl>=3.1,<4.0"]
+    }
+  ]
+}

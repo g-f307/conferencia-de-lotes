@@ -570,6 +570,22 @@ motivo_fallback
 Os oito primeiros são entradas. Os sete últimos são inicializados vazios pelo
 Dispatcher e preenchidos pelo Performer antes da finalização individual.
 
+## Pacotes locais dos seis bots do Capstone
+
+Os seis bots podem ser compilados como ZIPs independentes, cada um com
+`bot.py`, `requirements.txt` e seu manifesto na raiz:
+
+```bash
+python scripts/build_smart_office_packages.py
+python scripts/validate_smart_office_packages.py
+```
+
+O manifesto central fica em `deployment/capstone_bots.json`; os ZIPs e seus
+hashes são produzidos em `dist/capstone/`. O processo não inclui `.env`, testes,
+logs, caches ou evidências. A validação e o limite da demonstração sem acesso
+ao Smart Office estão detalhados em
+[`docs/HOMOLOGACAO_LOCAL_CAPSTONE.md`](docs/HOMOLOGACAO_LOCAL_CAPSTONE.md).
+
 ## Automação desktop do Capstone
 
 O papel `estoque-desktop-v1` possui um simulador Windows controlado e um
