@@ -19,4 +19,7 @@ test-results/
 e2e-artifacts/
 artefatos/*.pdf
 data/output/*.jsonl
+data/output/*.sqlite3
+data/output/*.sqlite3-shm
+data/output/*.sqlite3-wal
 !data/output/.gitkeep

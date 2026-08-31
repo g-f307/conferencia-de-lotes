@@ -69,3 +69,22 @@ python -m pytest -m e2e -k "pipeline" -v
 
 Os testes utilizam `InMemoryMaestroGateway` como gateway compatível, sem Smart
 Office, Maestro, internet ou credenciais reais.
+
+## Coexistência temporária com o Maestro
+
+Enquanto os dois orquestradores estiverem ativos, o Dispatcher e o bot de
+relatório podem receber um `CoexistenceCoordinator`. O contexto propagado para
+as tasks inclui chave idempotente, orquestrador solicitante, proprietário,
+modo de publicação e fencing token. A coleta desktop adquire também a lease da
+sessão gráfica configurada.
+
+Somente o orquestrador definido por `MIGRATION_OFFICIAL_PUBLISHER` publica
+efeitos. O outro executa em `shadow`, podendo calcular e comparar resultados
+sem gravar relatórios, enviar alertas ou alterar o estado oficial. Detalhes de
+configuração, expiração e recuperação estão em
+[`CONTROLE_COEXISTENCIA.md`](CONTROLE_COEXISTENCIA.md).
+
+Os handlers dos estágios são funções de cálculo. Persistência ou publicação é
+fornecida separadamente pelo argumento `publisher` de `execute_current()`, que
+é protegido pela chave `stage_output:<stage>`. Execuções `shadow` calculam o
+mesmo `StageResult`, mas não chamam esse publisher.
