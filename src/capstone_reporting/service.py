@@ -11,6 +11,7 @@ from typing import Any
 
 from src.alerts import Alerta, Severidade, SistemaAlertas
 from src.logging_config import LOGGER_NAME
+from src.migration_control import CoexistenceCoordinator, ExecutionPermit
 
 from .models import (
     REPORT_TYPE_BUSINESS,
@@ -66,6 +67,8 @@ class CapstoneReportResult:
     snapshot: HybridReportSnapshot
     paths: CapstoneReportPaths
     notification_results: tuple[NotificationAttempt, ...]
+    published: bool = True
+    publication_reason: str = "uncontrolled"
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -75,6 +78,8 @@ class CapstoneReportResult:
             "notification_results": [
                 result.to_dict() for result in self.notification_results
             ],
+            "published": self.published,
+            "publication_reason": self.publication_reason,
         }
 
 
@@ -88,6 +93,8 @@ class CapstoneReportService:
         alerts: SistemaAlertas | None = None,
         degraded_alert_seconds: float = 300.0,
         logger: logging.Logger | None = None,
+        coexistence: CoexistenceCoordinator | None = None,
+        migration_permit: ExecutionPermit | None = None,
     ) -> None:
         if degraded_alert_seconds < 0:
             raise ValueError("degraded_alert_seconds não pode ser negativo")
@@ -95,10 +102,15 @@ class CapstoneReportService:
         self.alerts = alerts
         self.degraded_alert_seconds = degraded_alert_seconds
         self.logger = logger or logging.getLogger(LOGGER_NAME)
+        if (coexistence is None) != (migration_permit is None):
+            raise ValueError(
+                "coexistence e migration_permit devem ser informados juntos"
+            )
+        self.coexistence = coexistence
+        self.migration_permit = migration_permit
 
     def generate(self, payload: Mapping[str, Any]) -> CapstoneReportResult:
         snapshot = build_report_snapshot(payload)
-        self.output_dir.mkdir(parents=True, exist_ok=True)
         paths = CapstoneReportPaths(
             summary=self.output_dir / "resumo_pipeline_hibrido.json",
             markdown=self.output_dir / "resumo_pipeline_hibrido.md",
@@ -110,20 +122,130 @@ class CapstoneReportService:
             ),
         )
 
+        attachment = paths.excel or paths.pdf
+        pending_alerts = build_capstone_alerts(
+            snapshot,
+            attachment,
+            degraded_alert_seconds=self.degraded_alert_seconds,
+        )
+        if self.coexistence is not None and self.migration_permit is not None:
+            artifacts = self.coexistence.run_effect_once(
+                self.migration_permit,
+                "capstone_report_artifacts",
+                lambda: self._write_artifacts(snapshot, paths),
+            )
+            if artifacts.reason == "shadow_mode":
+                notification_results = tuple(
+                    NotificationAttempt(alert.evento, (), (), "SKIPPED_SHADOW")
+                    for alert in pending_alerts
+                )
+                return CapstoneReportResult(
+                    snapshot,
+                    paths,
+                    notification_results,
+                    published=False,
+                    publication_reason="shadow_mode",
+                )
+
+            notification_results, notifications_executed = self._notify_controlled(
+                pending_alerts
+            )
+            resumed = not artifacts.executed
+            publication_reason = "resumed" if resumed else "official"
+            candidate = CapstoneReportResult(
+                snapshot,
+                paths,
+                notification_results,
+                published=True,
+                publication_reason=publication_reason,
+            )
+            summary = self.coexistence.run_effect_once(
+                self.migration_permit,
+                "capstone_report_summary",
+                lambda: _write_json_atomic(paths.summary, candidate.to_dict()),
+            )
+            any_executed = (
+                artifacts.executed or notifications_executed or summary.executed
+            )
+            if not any_executed:
+                return CapstoneReportResult(
+                    snapshot,
+                    paths,
+                    notification_results,
+                    published=False,
+                    publication_reason="already_completed",
+                )
+            self._log_completed(snapshot)
+            return candidate
+
+        result = self._publish(snapshot, paths, pending_alerts)
+        return result
+
+    def _publish(
+        self,
+        snapshot: HybridReportSnapshot,
+        paths: CapstoneReportPaths,
+        alerts: tuple[Alerta, ...],
+    ) -> CapstoneReportResult:
+        self._write_artifacts(snapshot, paths)
+        notification_results = self._notify(alerts)
+        result = CapstoneReportResult(
+            snapshot,
+            paths,
+            notification_results,
+            published=True,
+            publication_reason=(
+                "official"
+                if self.migration_permit is not None
+                else "uncontrolled"
+            ),
+        )
+        _write_json_atomic(paths.summary, result.to_dict())
+        self._log_completed(snapshot)
+        return result
+
+    def _write_artifacts(
+        self,
+        snapshot: HybridReportSnapshot,
+        paths: CapstoneReportPaths,
+    ) -> None:
+        self.output_dir.mkdir(parents=True, exist_ok=True)
         write_capstone_markdown(snapshot, paths.markdown)
         write_capstone_pdf(snapshot, paths.pdf)
         if paths.excel is not None:
             write_capstone_excel(snapshot, paths.excel)
 
-        attachment = paths.excel or paths.pdf
-        alerts = build_capstone_alerts(
-            snapshot,
-            attachment,
-            degraded_alert_seconds=self.degraded_alert_seconds,
-        )
-        notification_results = self._notify(alerts)
-        result = CapstoneReportResult(snapshot, paths, notification_results)
-        _write_json_atomic(paths.summary, result.to_dict())
+    def _notify_controlled(
+        self,
+        alerts: tuple[Alerta, ...],
+    ) -> tuple[tuple[NotificationAttempt, ...], bool]:
+        if self.coexistence is None or self.migration_permit is None:
+            raise RuntimeError("controle de coexistência ausente")
+        results: list[NotificationAttempt] = []
+        any_executed = False
+        for alert in alerts:
+            delivery = self.coexistence.run_effect_once(
+                self.migration_permit,
+                f"capstone_notification:{alert.evento}",
+                lambda current=alert: self._notify((current,))[0],
+            )
+            any_executed = any_executed or delivery.executed
+            if delivery.executed:
+                if delivery.value is None:
+                    raise RuntimeError("notificação concluída sem resultado")
+                results.append(delivery.value)
+            else:
+                results.append(
+                    NotificationAttempt(
+                        alert.evento,
+                        (),
+                        (),
+                        "SKIPPED_DUPLICATE",
+                    )
+                )
+        return tuple(results), any_executed
+
+    def _log_completed(self, snapshot: HybridReportSnapshot) -> None:
         self.logger.info(
             "Relatório Capstone concluído execution_id=%s report_type=%s status=%s",
             snapshot.execution_id,
@@ -136,7 +258,6 @@ class CapstoneReportService:
                 "usuario": "sistema",
             },
         )
-        return result
 
     def _notify(self, alerts: tuple[Alerta, ...]) -> tuple[NotificationAttempt, ...]:
         if self.alerts is None:

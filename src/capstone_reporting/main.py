@@ -14,8 +14,13 @@ from dotenv import load_dotenv
 from src.alerts import construir_sistema_alertas
 from src.config import Settings
 from src.logging_config import configure_logging
+from src.migration_control import (
+    CoexistenceCoordinator,
+    MigrationControlSettings,
+    SQLiteLeaseStore,
+)
 
-from .models import CapstoneReportInputError
+from .models import CapstoneReportInputError, build_report_snapshot
 from .service import CapstoneReportService
 
 
@@ -61,13 +66,42 @@ def run(settings: CapstoneReportSettings | None = None) -> dict[str, Any]:
         application_settings,
     )
     alerts = construir_sistema_alertas(application_settings, logger)
-    result = CapstoneReportService(
-        current.output_dir,
-        alerts=alerts,
-        degraded_alert_seconds=current.degraded_alert_seconds,
-        logger=logger,
-    ).generate(payload)
-    return result.to_dict()
+    coexistence = None
+    permit = None
+    if os.getenv("MIGRATION_CONTROL_ENABLED", "false").strip().casefold() in {
+        "1",
+        "true",
+        "yes",
+        "sim",
+        "on",
+    }:
+        migration_snapshot = build_report_snapshot(payload)
+        migration_settings = MigrationControlSettings.from_env(
+            application_settings.base_dir
+        )
+        coexistence = CoexistenceCoordinator(
+            SQLiteLeaseStore(migration_settings.database_path),
+            migration_settings,
+            logger=logger,
+        )
+        permit = coexistence.begin_execution(
+            migration_snapshot.execution_id,
+            owner_id=migration_snapshot.root_task_id,
+        )
+
+    try:
+        result = CapstoneReportService(
+            current.output_dir,
+            alerts=alerts,
+            degraded_alert_seconds=current.degraded_alert_seconds,
+            logger=logger,
+            coexistence=coexistence,
+            migration_permit=permit,
+        ).generate(payload)
+        return result.to_dict()
+    finally:
+        if coexistence is not None and permit is not None:
+            coexistence.release(permit)
 
 
 def main() -> int:

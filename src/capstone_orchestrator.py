@@ -12,6 +12,12 @@ from typing import Protocol
 
 from src.logging_config import LOGGER_NAME
 from src.maestro_client import MaestroTask
+from src.migration_control import (
+    CoexistenceCoordinator,
+    EffectResult,
+    ExecutionPermit,
+    build_idempotency_key,
+)
 from src.orchestrator import StageResult
 from src.wait_for_predecessor import (
     PredecessorCanceledError,
@@ -104,6 +110,7 @@ class PipelineManifest:
     root_task_id: str
     task_ids: Mapping[CapstoneStage, str]
     creation_failures: Mapping[CapstoneStage, str] = field(default_factory=dict)
+    migration_permit: ExecutionPermit | None = None
 
     def task_id(self, stage: CapstoneStage) -> str | None:
         return self.task_ids.get(stage)
@@ -135,6 +142,26 @@ class CapstoneContext:
     predecessor_task_ids: tuple[str, ...]
     dependency_results: tuple[DependencyResult, ...]
     parameters: Mapping[str, object]
+    migration_permit: ExecutionPermit | None = None
+    coexistence: CoexistenceCoordinator | None = field(
+        default=None,
+        repr=False,
+        compare=False,
+    )
+
+    def publish_once(
+        self,
+        effect_name: str,
+        action: Callable[[], object],
+    ) -> EffectResult[object]:
+        """Executa um efeito oficial ou o bloqueia no modo shadow."""
+        if self.coexistence is None or self.migration_permit is None:
+            return EffectResult(True, action(), "uncontrolled")
+        return self.coexistence.run_effect_once(
+            self.migration_permit,
+            effect_name,
+            action,
+        )
 
 
 @dataclass(frozen=True)
@@ -145,6 +172,7 @@ class CapstoneOutcome:
 
 WaitFunction = Callable[..., MaestroTask]
 StageHandler = Callable[[CapstoneContext], StageResult]
+StagePublisher = Callable[[CapstoneContext, StageResult], object]
 
 
 class CapstoneOrchestrator:
@@ -161,11 +189,13 @@ class CapstoneOrchestrator:
         settings: CapstoneOrchestrationSettings | None = None,
         wait_function: WaitFunction = wait_for_predecessor,
         logger: logging.Logger = LOGGER,
+        coexistence: CoexistenceCoordinator | None = None,
     ) -> None:
         self.gateway = gateway
         self.settings = settings or CapstoneOrchestrationSettings.from_env()
         self.wait_function = wait_function
         self.logger = logger
+        self.coexistence = coexistence
 
     def schedule(
         self,
@@ -174,8 +204,17 @@ class CapstoneOrchestrator:
         correlation_id: str | None = None,
     ) -> PipelineManifest:
         root_task_id = self.gateway.current_task_id
+        if self.coexistence is not None and not str(execution_id or "").strip():
+            raise ValueError(
+                "execution_id compartilhado deve ser informado durante a coexistência"
+            )
         execution = execution_id or str(uuid.uuid4())
         correlation = correlation_id or str(uuid.uuid4())
+        migration_permit = (
+            self.coexistence.begin_execution(execution, owner_id=root_task_id)
+            if self.coexistence is not None
+            else None
+        )
         task_ids: dict[CapstoneStage, str] = {
             CapstoneStage.DISPATCHER: root_task_id
         }
@@ -189,6 +228,7 @@ class CapstoneOrchestrator:
             root_task_id,
             self.settings.desktop_priority,
             failures,
+            migration_permit,
         )
         web = self._create(
             CapstoneStage.WEB,
@@ -198,6 +238,7 @@ class CapstoneOrchestrator:
             root_task_id,
             self.settings.default_priority,
             failures,
+            migration_permit,
         )
         source_ids = tuple(task.task_id for task in (desktop, web) if task is not None)
         consolidation = self._create(
@@ -208,6 +249,7 @@ class CapstoneOrchestrator:
             root_task_id,
             self.settings.default_priority,
             failures,
+            migration_permit,
         )
         ml_predecessors = (consolidation.task_id,) if consolidation else ()
         ml = self._create(
@@ -218,6 +260,7 @@ class CapstoneOrchestrator:
             root_task_id,
             self.settings.default_priority,
             failures,
+            migration_permit,
         )
         if ml is not None:
             report_predecessors = (ml.task_id,)
@@ -233,6 +276,7 @@ class CapstoneOrchestrator:
             root_task_id,
             self.settings.default_priority,
             failures,
+            migration_permit,
         )
 
         for stage, task in (
@@ -261,17 +305,27 @@ class CapstoneOrchestrator:
             root_task_id,
             status,
         )
-        return PipelineManifest(execution, correlation, root_task_id, task_ids, failures)
+        return PipelineManifest(
+            execution,
+            correlation,
+            root_task_id,
+            task_ids,
+            failures,
+            migration_permit,
+        )
 
     def execute_current(
         self,
         stage: CapstoneStage,
         handler: StageHandler,
+        *,
+        publisher: StagePublisher | None = None,
     ) -> CapstoneOutcome:
         if stage is CapstoneStage.DISPATCHER:
             raise ValueError("Use schedule() para executar o dispatcher")
         current = self.gateway.get_task(self.gateway.current_task_id)
         parameters = current.parameters
+        migration_permit = self._resume_migration(parameters)
         predecessors = tuple(
             current.predecessor_task_ids
             or tuple(parameters.get("predecessor_task_ids", ()))
@@ -289,6 +343,8 @@ class CapstoneOrchestrator:
             predecessor_task_ids=predecessors,
             dependency_results=results,
             parameters=parameters,
+            migration_permit=migration_permit,
+            coexistence=self.coexistence,
         )
         degraded = any(not result.successful for result in results)
         all_sources_unavailable = (
@@ -312,7 +368,15 @@ class CapstoneOrchestrator:
                 failed_items=1,
             )
         else:
-            result = handler(context)
+            if (
+                stage is CapstoneStage.DESKTOP
+                and self.coexistence is not None
+                and migration_permit is not None
+            ):
+                with self.coexistence.desktop_session(migration_permit):
+                    result = handler(context)
+            else:
+                result = handler(context)
             if all_sources_unavailable:
                 result = replace(
                     result,
@@ -336,6 +400,11 @@ class CapstoneOrchestrator:
                     status="PARTIALLY_COMPLETED",
                     message=f"{result.message} (execucao degradada)",
                 )
+        if publisher is not None:
+            context.publish_once(
+                f"stage_output:{stage.value}",
+                lambda: publisher(context, result),
+            )
         self.gateway.finish_task(
             result.status,
             result.message,
@@ -401,6 +470,7 @@ class CapstoneOrchestrator:
         root_task_id: str,
         priority: int,
         failures: dict[CapstoneStage, str],
+        migration_permit: ExecutionPermit | None,
     ) -> MaestroTask | None:
         parameters: dict[str, object] = {
             "schema_version": "1.0",
@@ -414,6 +484,14 @@ class CapstoneOrchestrator:
                 failed_stage.value: reason for failed_stage, reason in failures.items()
             },
         }
+        if migration_permit is not None:
+            parameters["migration_control"] = {
+                "idempotency_key": migration_permit.idempotency_key,
+                "requesting_orchestrator": migration_permit.requesting_orchestrator,
+                "owner_id": migration_permit.owner_id,
+                "publication_mode": migration_permit.publication_mode.value,
+                "fencing_token": migration_permit.fencing_token,
+            }
         try:
             task = self.gateway.create_task(
                 CAPSTONE_BOT_LABELS[stage],
@@ -444,6 +522,31 @@ class CapstoneOrchestrator:
             self.settings.dependency_timeout_seconds,
         )
         return task
+
+    def _resume_migration(
+        self, parameters: Mapping[str, object]
+    ) -> ExecutionPermit | None:
+        if self.coexistence is None:
+            return None
+        raw_context = parameters.get("migration_control")
+        if raw_context is None:
+            raise ValueError("contexto migration_control ausente na task")
+        if not isinstance(raw_context, Mapping):
+            raise TypeError("contexto migration_control deve ser um objeto")
+        owner_id = str(raw_context.get("owner_id", "")).strip()
+        execution_id = str(parameters.get("execution_id", "")).strip()
+        propagated_key = str(raw_context.get("idempotency_key", "")).strip()
+        if propagated_key != build_idempotency_key(execution_id):
+            raise ValueError("chave idempotente divergente do execution_id")
+        propagated_orchestrator = str(
+            raw_context.get("requesting_orchestrator", "")
+        ).strip().casefold()
+        if propagated_orchestrator != self.coexistence.settings.orchestrator.casefold():
+            raise ValueError("orquestrador da task diverge da configuração local")
+        propagated_mode = str(raw_context.get("publication_mode", "")).strip()
+        if propagated_mode != self.coexistence.settings.publication_mode.value:
+            raise ValueError("modo de publicação diverge da configuração local")
+        return self.coexistence.begin_execution(execution_id, owner_id=owner_id)
 
     def _wait(self, task_id: str) -> DependencyResult:
         self.logger.info("aguardando predecessor task_id=%s", task_id)
@@ -477,4 +580,5 @@ __all__ = [
     "CapstoneStage",
     "DependencyResult",
     "PipelineManifest",
+    "StagePublisher",
 ]

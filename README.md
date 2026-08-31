@@ -10,6 +10,9 @@ O desenho do Capstone acrescenta uma cadeia de seis bots com fan-out/fan-in,
 prioridade e timeout preparada para o Smart Office, preservando temporariamente
 o fluxo legado. Consulte
 [`docs/ORQUESTRACAO_SMART_OFFICE_CAPSTONE.md`](docs/ORQUESTRACAO_SMART_OFFICE_CAPSTONE.md).
+Durante a coexistência com o Maestro, leases com TTL, fencing token e modo
+`shadow` evitam efeitos e uso de desktop duplicados; consulte
+[`docs/CONTROLE_COEXISTENCIA.md`](docs/CONTROLE_COEXISTENCIA.md).
 
 ## Visão geral
 
@@ -63,7 +66,8 @@ Estão implementados:
 - pacote ZIP para o BotCity Runner;
 - Docker e integração contínua;
 - relatório executivo Excel com dashboard, gráficos nativos e validação
-  RN01–RN12.
+  RN01–RN12;
+- controle idempotente da coexistência entre Maestro e Smart Office.
 
 ## Fora do escopo
 
@@ -148,6 +152,7 @@ As responsabilidades principais são:
 | `src/alerts.py` | Entregar alertas por Telegram, Email e log local sem bloquear o pipeline. |
 | `src/ml_client.py` | Consumir a API com timeout, validação de contrato, fallback e circuit breaker. |
 | `src/ml_audit.py` | Criar a fonte tipada compartilhada pelo log, resumo JSON e aba `Decisões de ML`. |
+| `src/migration_control.py` | Manter leases de execução e desktop, modo shadow, heartbeat e efeitos idempotentes durante a migração de orquestrador. |
 
 Detalhes e diagramas de sequência estão em
 [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md).
