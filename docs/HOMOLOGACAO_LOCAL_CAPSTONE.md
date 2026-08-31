@@ -59,6 +59,10 @@ degradada. O controle de coexistência testa idempotência e impede publicação
 duplicada. Telegram e SMTP reais são opcionais; seus segredos ficam somente no
 `.env` local e os testes automatizados usam adaptadores controlados.
 
+Os seis cenários de sabotagem, os resultados esperados e a geração dos resumos
+JSON estão descritos em
+[`VALIDACAO_CRISE_CAPSTONE.md`](VALIDACAO_CRISE_CAPSTONE.md).
+
 ## Evidências permitidas
 
 Podem ser anexados ao PR os hashes impressos pelo build, a listagem interna dos

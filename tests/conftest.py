@@ -13,6 +13,32 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 FORM_PAGE_PATH = PROJECT_ROOT / "web" / "index-lotes" / "index.html"
 
 
+def pytest_addoption(parser: pytest.Parser) -> None:
+    parser.addoption(
+        "--capstone-evidence-dir",
+        action="store",
+        default="",
+        help="Persiste evidências locais sanitizadas dos cenários do Capstone.",
+    )
+
+
+@pytest.fixture(scope="session")
+def capstone_evidence_dir(
+    request: pytest.FixtureRequest,
+    tmp_path_factory: pytest.TempPathFactory,
+) -> Path:
+    configured = str(request.config.getoption("--capstone-evidence-dir") or "").strip()
+    destination = (
+        Path(configured).expanduser()
+        if configured
+        else tmp_path_factory.mktemp("capstone-evidencias")
+    )
+    if not destination.is_absolute():
+        destination = PROJECT_ROOT / destination
+    destination.mkdir(parents=True, exist_ok=True)
+    return destination.resolve()
+
+
 @pytest.fixture
 def registros_validos() -> list[dict[str, object]]:
     """Fornece registros validos sem depender da massa oficial do projeto."""

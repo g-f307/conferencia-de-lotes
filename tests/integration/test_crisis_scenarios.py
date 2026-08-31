@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import json
+import struct
+import zlib
 
 import pytest
 
 from src.alerts import Alerta, CanalLogLocal, Severidade, SistemaAlertas
 from src.bot import LotePerformer
+from src.capstone_orchestrator import CapstoneStage
 from src.classificador_divergencia import (
     ClassificadorDivergencia,
     PredicaoCausa,
@@ -24,6 +27,16 @@ from src.reference_base import (
 )
 from src.retry_policy import LinearRetryPolicy
 from src.vault_client import VaultClient
+from scripts.validate_capstone_crisis_evidence import validate_evidence_directory
+from tests.capstone_crisis_support import (
+    ControlledDesktopDriver,
+    ControlledSupplierSession,
+    CrisisEvidenceWriter,
+    CrisisScenario,
+    LocalCapstonePipeline,
+    SIX_REQUIRED_SCENARIOS,
+    assert_sanitized_evidence,
+)
 
 pytestmark = pytest.mark.integration
 
@@ -460,3 +473,121 @@ def test_crise_cadeia_de_task_id_permanece_reconstruivel():
         "local-child-1",
     ]
     assert {context.correlation_id for context in contexts} == {"corr-crise"}
+
+
+def test_pipeline_capstone_controlado_encadeia_seis_bots_e_preserva_contexto(
+    tmp_path,
+):
+    result = LocalCapstonePipeline(
+        tmp_path / "pipeline-capstone",
+        CrisisScenario.ML_UNAVAILABLE,
+    ).run()
+
+    assert len(result.manifest.task_ids) == 6
+    assert result.web_result["status"] == "SUCCESS"
+    assert result.ml_result["status"] == "PARTIALLY_COMPLETED"
+    assert result.ml_result["motivo_fallback"] == "indisponibilidade"
+    assert result.report_result.snapshot.processed_items == 4
+    assert len(result.artifact_names) == 4
+    assert all(
+        state not in {"START", "RUNNING"}
+        for state in result.local_task_states.values()
+    )
+    child_tasks = [
+        task for task in result.gateway.tasks.values() if task.activity_label
+    ]
+    assert {
+        task.parameters["execution_id"] for task in child_tasks
+    } == {result.manifest.execution_id}
+    assert {
+        task.parameters["correlation_id"] for task in child_tasks
+    } == {result.manifest.correlation_id}
+    task_ids = result.manifest.task_ids
+    desktop = result.gateway.get_task(task_ids[CapstoneStage.DESKTOP])
+    web = result.gateway.get_task(task_ids[CapstoneStage.WEB])
+    consolidation = result.gateway.get_task(task_ids[CapstoneStage.CONSOLIDATION])
+    ml = result.gateway.get_task(task_ids[CapstoneStage.ML])
+    report = result.gateway.get_task(task_ids[CapstoneStage.REPORT])
+
+    assert desktop.predecessor_task_ids == (result.manifest.root_task_id,)
+    assert web.predecessor_task_ids == (result.manifest.root_task_id,)
+    assert set(consolidation.predecessor_task_ids) == {
+        desktop.task_id,
+        web.task_id,
+    }
+    assert ml.predecessor_task_ids == (consolidation.task_id,)
+    assert report.predecessor_task_ids == (ml.task_id,)
+
+
+def test_evidencia_capstone_remove_segredos_observacoes_e_caminhos_pessoais(
+    tmp_path,
+):
+    result = LocalCapstonePipeline(
+        tmp_path / "pipeline-evidencia",
+        CrisisScenario.ML_UNAVAILABLE,
+    ).run()
+    evidence = result.evidence()
+    evidence["diagnostico_controlado"] = {
+        "password": "segredo-controlado",
+        "observacao": "conteudo pessoal",
+        "path": "/home/usuario/projeto/resultado.json",
+    }
+
+    destination = CrisisEvidenceWriter(tmp_path / "evidencias").write(evidence)
+    sanitized = assert_sanitized_evidence(destination)
+    diagnostics = sanitized["diagnostico_controlado"]
+
+    assert diagnostics["password"] == "[REDACTED]"
+    assert diagnostics["observacao"] == "[REDACTED]"
+    assert diagnostics["path"] == "[LOCAL_PATH]/projeto/resultado.json"
+
+
+def test_capturas_controladas_possuem_estrutura_png_valida(tmp_path):
+    desktop_path = ControlledDesktopDriver().capture_evidence(
+        tmp_path / "desktop.png"
+    )
+    web_path = ControlledSupplierSession(tmp_path / "web.png").collect().evidence_path
+
+    for path in (desktop_path, web_path):
+        data = path.read_bytes()
+        assert data.startswith(b"\x89PNG\r\n\x1a\n")
+        offset = 8
+        chunk_types = []
+        compressed = bytearray()
+        while offset < len(data):
+            length = struct.unpack(">I", data[offset : offset + 4])[0]
+            chunk_type = data[offset + 4 : offset + 8]
+            chunk_data = data[offset + 8 : offset + 8 + length]
+            expected_crc = struct.unpack(
+                ">I", data[offset + 8 + length : offset + 12 + length]
+            )[0]
+            assert zlib.crc32(chunk_type + chunk_data) & 0xFFFFFFFF == expected_crc
+            chunk_types.append(chunk_type)
+            if chunk_type == b"IDAT":
+                compressed.extend(chunk_data)
+            offset += 12 + length
+        assert chunk_types[0] == b"IHDR"
+        assert chunk_types[-1] == b"IEND"
+        assert zlib.decompress(compressed)
+
+
+def test_validador_exige_e_aceita_as_seis_evidencias_capstone(tmp_path):
+    result = LocalCapstonePipeline(
+        tmp_path / "pipeline-validador",
+        CrisisScenario.ML_UNAVAILABLE,
+    ).run()
+    evidence_dir = tmp_path / "evidencias-completas"
+    writer = CrisisEvidenceWriter(evidence_dir)
+    base = result.evidence()
+    for scenario in SIX_REQUIRED_SCENARIOS:
+        writer.write(
+            {
+                **base,
+                "scenario": scenario.value,
+                "sabotage": scenario.value,
+            }
+        )
+
+    validated = validate_evidence_directory(evidence_dir)
+
+    assert len(validated["scenarios"]) == 6
