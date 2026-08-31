@@ -1,12 +1,19 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from pathlib import Path
 from zipfile import ZipFile
 
 import pytest
 
-from scripts.build_smart_office_packages import build_packages, load_manifest, sha256
+from scripts.build_smart_office_packages import (
+    build_packages,
+    display_path,
+    load_manifest,
+    sha256,
+)
 from scripts.validate_smart_office_packages import validate_packages
 
 pytestmark = pytest.mark.unit
@@ -51,6 +58,13 @@ def test_manifesto_traduz_prioridade_e_define_fan_in() -> None:
     assert all(item["timeout_seconds"] > 0 for item in packages)
 
 
+def test_apresentacao_preserva_caminho_absoluto_fora_do_repositorio() -> None:
+    base_dir = Path(__file__).resolve().parents[2]
+    external = (base_dir.parent / "pacotes-capstone-externos").resolve()
+
+    assert display_path(external, base_dir) == str(external)
+
+
 def test_manifestos_embutidos_nao_contem_valores_do_env_local(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -65,3 +79,48 @@ def test_manifestos_embutidos_nao_contem_valores_do_env_local(
             manifest = package.read("package-manifest.json").decode("utf-8")
             assert json.loads(manifest)["bot_id"] in artifact.name
             assert sentinel not in manifest
+
+
+def test_cli_build_aceita_diretorio_absoluto(tmp_path: Path) -> None:
+    base_dir = Path(__file__).resolve().parents[2]
+    destination = (tmp_path / "pacotes-build").resolve()
+
+    process = subprocess.run(
+        [
+            sys.executable,
+            "scripts/build_smart_office_packages.py",
+            "--output-dir",
+            str(destination),
+        ],
+        cwd=base_dir,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert process.returncode == 0, process.stderr
+    assert display_path(destination, base_dir) in process.stdout
+    assert len(list(destination.glob("*.zip"))) == 6
+
+
+def test_cli_validate_aceita_diretorio_absoluto(tmp_path: Path) -> None:
+    base_dir = Path(__file__).resolve().parents[2]
+    destination = (tmp_path / "pacotes-validate").resolve()
+    build_packages(base_dir, destination)
+
+    process = subprocess.run(
+        [
+            sys.executable,
+            "scripts/validate_smart_office_packages.py",
+            "--package-dir",
+            str(destination),
+        ],
+        cwd=base_dir,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert process.returncode == 0, process.stderr
+    assert display_path(destination, base_dir) in process.stdout
+    assert "6 pacotes" in process.stdout

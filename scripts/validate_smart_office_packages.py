@@ -8,9 +8,9 @@ from pathlib import Path, PurePosixPath
 from zipfile import ZipFile
 
 try:
-    from scripts.build_smart_office_packages import load_manifest
+    from scripts.build_smart_office_packages import display_path, load_manifest
 except ModuleNotFoundError:  # execução direta a partir da pasta scripts
-    from build_smart_office_packages import load_manifest
+    from build_smart_office_packages import display_path, load_manifest
 
 REQUIRED_ROOT_FILES = {"bot.py", "requirements.txt", "package-manifest.json"}
 FORBIDDEN_NAMES = {".env", "debug.log"}
@@ -76,7 +76,7 @@ def main() -> int:
     if not package_dir.is_absolute():
         package_dir = base_dir / package_dir
     validated = validate_packages(base_dir, package_dir)
-    print(f"{len(validated)} pacotes válidos em {package_dir.relative_to(base_dir)}")
+    print(f"{len(validated)} pacotes válidos em {display_path(package_dir, base_dir)}")
     return 0
 
 

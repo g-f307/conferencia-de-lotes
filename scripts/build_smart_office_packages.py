@@ -102,6 +102,14 @@ def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def display_path(path: Path, base_dir: Path) -> str:
+    """Exibe caminho relativo ao projeto ou absoluto quando estiver fora dele."""
+    try:
+        return str(path.relative_to(base_dir))
+    except ValueError:
+        return str(path)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-dir", type=Path, default=Path("dist/capstone"))
@@ -111,7 +119,7 @@ def main() -> int:
     if not output_dir.is_absolute():
         output_dir = base_dir / output_dir
     for artifact in build_packages(base_dir, output_dir):
-        print(f"{artifact.relative_to(base_dir)} sha256={sha256(artifact)}")
+        print(f"{display_path(artifact, base_dir)} sha256={sha256(artifact)}")
     return 0
 
 
