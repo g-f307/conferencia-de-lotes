@@ -1,19 +1,20 @@
-# Arquitetura-alvo do Capstone de hiperautomação
+# Arquitetura final do Capstone de hiperautomação
 
 ## Status do documento
 
 | Item | Valor |
 |---|---|
-| Issue | `#109` |
-| Natureza | Arquitetura-alvo; não representa seis bots já implantados |
-| Estado atual | Três estágios no BotCity Maestro |
-| Estado-alvo | Seis bots híbridos preparados para o Smart Office |
+| Issues | `#109` (desenho) e `#120` (consolidação final) |
+| Natureza | Arquitetura implementada e homologada localmente |
+| Estado local | Seis bots independentes, empacotados e validados pelo gateway em memória |
+| Estado externo | Pacotes preparados; sem cadastro, deploy ou homologação no Smart Office real |
 | Regra central | A decisão operacional é determinística; o ML apenas enriquece divergências |
 
-Este documento estabelece os limites e os contratos que as próximas entregas
-devem implementar. A arquitetura atual continua descrita em
-[`ARQUITETURA.md`](ARQUITETURA.md), e a operação legada de três bots permanece
-válida durante a migração.
+Este documento consolida os limites e contratos implementados no Capstone. A
+arquitetura anterior continua descrita em [`ARQUITETURA.md`](ARQUITETURA.md), e
+a operação legada de três bots permanece válida durante a migração. Os diagramas
+finais, com distinção visual entre execução local e integração externa futura,
+estão em [`DIAGRAMAS_CAPSTONE.md`](DIAGRAMAS_CAPSTONE.md).
 
 ## Decisões arquiteturais
 
