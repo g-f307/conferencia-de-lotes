@@ -88,3 +88,7 @@ Os handlers dos estágios são funções de cálculo. Persistência ou publicaç
 fornecida separadamente pelo argumento `publisher` de `execute_current()`, que
 é protegido pela chave `stage_output:<stage>`. Execuções `shadow` calculam o
 mesmo `StageResult`, mas não chamam esse publisher.
+
+O procedimento para conduzir a coexistência, separar os Runners, executar o
+smoke test e decidir cutover ou rollback está em
+[`PLANO_MIGRACAO_SMART_OFFICE.md`](PLANO_MIGRACAO_SMART_OFFICE.md).

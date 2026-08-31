@@ -88,3 +88,10 @@ python -m pytest -m e2e -k "duplicate or coexist" -v
 
 Os testes usam dois coordenadores e um SQLite temporário. Nenhum SDK, serviço
 externo ou credencial é necessário.
+
+## Operação da migração
+
+O mecanismo deste documento não substitui o controle operacional da janela.
+Fases, matriz de Runners, smoke test, critérios de cutover, gatilhos de rollback
+e evidências estão definidos em
+[`PLANO_MIGRACAO_SMART_OFFICE.md`](PLANO_MIGRACAO_SMART_OFFICE.md).

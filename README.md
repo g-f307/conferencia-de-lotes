@@ -13,6 +13,8 @@ o fluxo legado. Consulte
 Durante a coexistência com o Maestro, leases com TTL, fencing token e modo
 `shadow` evitam efeitos e uso de desktop duplicados; consulte
 [`docs/CONTROLE_COEXISTENCIA.md`](docs/CONTROLE_COEXISTENCIA.md).
+O runbook de migração, com fases, Runners, smoke test, cutover e rollback, está
+em [`docs/PLANO_MIGRACAO_SMART_OFFICE.md`](docs/PLANO_MIGRACAO_SMART_OFFICE.md).
 
 ## Visão geral
 
@@ -1250,6 +1252,9 @@ finalizada no Maestro como sucesso operacional.
 | [`docs/ADERENCIA_PAGE_OBJECTS.md`](docs/ADERENCIA_PAGE_OBJECTS.md) | Matriz técnica da entrega. |
 | [`docs/DEPLOY_BOTCITY.md`](docs/DEPLOY_BOTCITY.md) | Implantação, smoke test e rollback. |
 | [`docs/ORQUESTRACAO_MAESTRO.md`](docs/ORQUESTRACAO_MAESTRO.md) | Registro, encadeamento, timeout e evidências dos três bots. |
+| [`docs/CONTROLE_COEXISTENCIA.md`](docs/CONTROLE_COEXISTENCIA.md) | Idempotência, leases, fencing token e modo shadow entre orquestradores. |
+| [`docs/PLANO_MIGRACAO_SMART_OFFICE.md`](docs/PLANO_MIGRACAO_SMART_OFFICE.md) | Coexistência, matriz de Runners, smoke test, cutover, rollback e evidências. |
+| [`docs/VALIDACAO_MIGRACAO_SMART_OFFICE.md`](docs/VALIDACAO_MIGRACAO_SMART_OFFICE.md) | Pré-validação técnica e roteiro de simulação de mesa da migração. |
 | [`docs/ALERTAS_MULTICANAL.md`](docs/ALERTAS_MULTICANAL.md) | Configuração, fallback de canal e evidências de Telegram e Email. |
 | [`docs/evidencias/s10b/resumo-simulacao.md`](docs/evidencias/s10b/resumo-simulacao.md) | Cinco sabotagens reproduzíveis, massa sintética de 30 casos e evidências sanitizadas. |
 | [`docs/ROTEIRO_DEMONSTRACAO.md`](docs/ROTEIRO_DEMONSTRACAO.md) | Roteiro objetivo da demonstração. |
