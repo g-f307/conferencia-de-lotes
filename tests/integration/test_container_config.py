@@ -152,6 +152,10 @@ def test_ci_executa_e_publica_evidencias_e2e():
     assert "name: screenshots-e2e" in content
     assert "--basetemp=e2e-artifacts" in content
     assert "e2e-artifacts/**/*.png" in content
+    assert "--capstone-evidence-dir=dist/evidencias-capstone" in content
+    assert "scripts/validate_capstone_crisis_evidence.py" in content
+    assert "name: evidencias-crise-capstone" in content
+    assert "dist/evidencias-capstone/*.json" in content
 
 
 def test_ci_valida_e_publica_artefatos_docker():
@@ -167,7 +171,6 @@ def test_ci_valida_e_publica_artefatos_docker():
     assert all(f"test -s {path}" in content for path in expected_outputs)
     assert "ci-output/artefatos" in content
     assert "-size +0c" in content
-    assert content.count("actions/upload-artifact@v4") == 4
     assert "name: relatorios-docker" in content
     assert "name: screenshots-docker" in content
     assert "MAESTRO_ENABLED=false" in content

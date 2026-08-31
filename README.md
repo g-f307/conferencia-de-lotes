@@ -586,6 +586,11 @@ logs, caches ou evidências. A validação e o limite da demonstração sem aces
 ao Smart Office estão detalhados em
 [`docs/HOMOLOGACAO_LOCAL_CAPSTONE.md`](docs/HOMOLOGACAO_LOCAL_CAPSTONE.md).
 
+O pipeline completo também possui um ensaio de crise com seis sabotagens,
+Chromium real no E2E e resumos JSON sanitizados. O procedimento reproduzível
+está em
+[`docs/VALIDACAO_CRISE_CAPSTONE.md`](docs/VALIDACAO_CRISE_CAPSTONE.md).
+
 ## Automação desktop do Capstone
 
 O papel `estoque-desktop-v1` possui um simulador Windows controlado e um
@@ -1206,6 +1211,10 @@ efêmera controladas, verifica log, resumo JSON, relatório PDF e screenshots e
 publica `screenshots-e2e`, `relatorios-docker` e `screenshots-docker` por sete
 dias.
 
+O job E2E também executa as seis sabotagens do Capstone e publica o artefato
+`evidencias-crise-capstone`, com um resumo JSON por cenário e um índice
+consolidado.
+
 Para baixá-los, abra **Actions**, selecione a execução do workflow **CI** e use
 a seção **Artifacts** ao final da página. O pacote `coverage-report` contém
 `coverage.xml` e o relatório navegável em `htmlcov/index.html`. Esses arquivos
@@ -1258,6 +1267,7 @@ finalizada no Maestro como sucesso operacional.
 | [`docs/ARQUITETURA_CAPSTONE.md`](docs/ARQUITETURA_CAPSTONE.md) | Estado-alvo de seis bots, contratos, fan-out, fan-in, prioridade e falhas. |
 | [`docs/EXECUCAO_E2E_DOCKER_CI.md`](docs/EXECUCAO_E2E_DOCKER_CI.md) | Instalação, testes E2E, Docker, pipeline e artefatos. |
 | [`docs/HOMOLOGACAO_TESTES_AULA23.md`](docs/HOMOLOGACAO_TESTES_AULA23.md) | Cobertura, camadas, limitações e respostas da Aula 23. |
+| [`docs/VALIDACAO_CRISE_CAPSTONE.md`](docs/VALIDACAO_CRISE_CAPSTONE.md) | Pipeline local de seis bots, sabotagens, oráculos e evidências sanitizadas. |
 | [`docs/ROTEIRO_TORNEIO_CLASSIFICADORES.md`](docs/ROTEIRO_TORNEIO_CLASSIFICADORES.md) | Demonstração de até oito minutos, sabotagem e coleta das evidências de ML. |
 | [`docs/ROTEIRO_SIMULACAO_CRISE_S10B.md`](docs/ROTEIRO_SIMULACAO_CRISE_S10B.md) | Papéis, cronograma de oito minutos, cinco sabotagens e contingência offline. |
 | [`docs/PERGUNTAS_BANCA_S10B.md`](docs/PERGUNTAS_BANCA_S10B.md) | Respostas sobre decisão determinística, quedas e observabilidade. |
