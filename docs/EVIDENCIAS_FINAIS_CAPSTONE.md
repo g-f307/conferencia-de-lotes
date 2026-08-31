@@ -23,11 +23,11 @@ fora do Git; o workflow de CI os publica com retenção temporária.
 | 6 | Feature flag desliga o ML sem chamada | `src/ml_bot/service.py` | `python -m pytest tests/unit/test_ml_bot.py -v` | fallback determinístico — `ATENDIDO LOCALMENTE` |
 | 7 | ML não altera o status determinístico | `src/consolidation/service.py` e `src/ml_bot/service.py` | `python -m pytest tests/integration/test_ml_bot_pipeline.py -v` | decisão e enriquecimento separados — `ATENDIDO LOCALMENTE` |
 | 8 | Origem, confiança e fallback por item | `src/capstone_reporting/service.py` | `python -m pytest tests/integration/test_capstone_report_pipeline.py -v` | Excel/Markdown/JSON/PDF — `ATENDIDO LOCALMENTE` |
-| 9 | Queda do desktop não encerra o pipeline | `src/capstone_orchestrator.py` | cenário `desktop_timeout` em `tests/e2e/test_crisis_pipeline_e2e.py` | resumo de crise — `ATENDIDO LOCALMENTE` |
+| 9 | Queda do desktop não encerra o pipeline | `src/capstone_orchestrator.py` | `test_pipeline_continua_ate_relatorio_quando_desktop_cai` em `tests/e2e/test_capstone_orchestration_pipeline_e2e.py` | desktop `FAILED`, consolidação e relatório `PARTIALLY_COMPLETED` — `ATENDIDO LOCALMENTE` |
 | 10 | Retry, fallback e dead letter | `src/retry_policy.py`, `src/dead_letter.py` | `python -m pytest tests/integration/test_crisis_scenarios.py tests/integration/test_dead_letter.py -v` | dead letter sanitizado e idempotente — `ATENDIDO LOCALMENTE` |
-| 11 | ML ou auxiliar fora do ar não bloqueia | `src/ml_bot/service.py` | cenário `ml_unavailable` em `tests/e2e/test_crisis_pipeline_e2e.py` | término degradado — `ATENDIDO LOCALMENTE` |
+| 11 | ML ou auxiliar fora do ar não bloqueia | `src/ml_bot/service.py` | cenário `servico_ml_indisponivel` em `tests/e2e/test_crisis_pipeline_e2e.py` | término degradado — `ATENDIDO LOCALMENTE` |
 | 12 | Dois canais de notificação | `src/alerts.py` | `python -m pytest tests/integration/test_alertas_multicanal.py -v` | adaptadores Telegram/SMTP testados; envio real — `OPCIONAL EXTERNO` |
-| 13 | Falha do canal primário usa alternativa | `src/alerts.py` | cenário `notification_channels_unavailable` | fallback para SMTP/log — `ATENDIDO LOCALMENTE` |
+| 13 | Falha do canal primário usa alternativa | `src/alerts.py` | cenário `falha_canal_notificacao` em `tests/e2e/test_crisis_pipeline_e2e.py` | fallback para SMTP/log — `ATENDIDO LOCALMENTE` |
 | 14 | Coexistência, cutover e rollback | `docs/PLANO_MIGRACAO_SMART_OFFICE.md` | `python -m pytest tests/e2e/test_migration_coexistence_e2e.py -v` | coexistência simulada; cutover real — `NÃO EXECUTADO — SEM ACESSO` |
 | 15 | Prevenção de execução duplicada | `src/migration_control.py` | `python -m pytest tests/integration/test_coexistence_pipeline.py -v` | lease, fencing token e modo shadow — `ATENDIDO LOCALMENTE` |
 | 16 | Smoke test no Smart Office | `docs/PLANO_MIGRACAO_SMART_OFFICE.md` | procedimento manual documentado | `NÃO EXECUTADO — SEM ACESSO` |
@@ -45,19 +45,9 @@ sha256sum dist/capstone/*.zip
 ```
 
 O build determinístico e o comando `sha256sum` registram o SHA-256 dos seis
-pacotes. Os valores reproduzidos na revisão desta issue foram:
-
-| Pacote | SHA-256 |
-|---|---|
-| `dispatcher-v2-v2.0.0.zip` | `714f81f3adfd03c96858c2b33f5e6db41e4f24c1c9cf7151299e740abe725025` |
-| `estoque-desktop-v1-v1.0.0.zip` | `936b8c4f072cb4ef394469e47f23a6f760e22a79a36ee9396f0f7cac89925e0c` |
-| `fornecedores-web-v1-v1.0.0.zip` | `3413aca892cf9859f8a70aaac7aae26e48678e3578dfa65387e93c66494319ac` |
-| `consolidacao-v2-v2.0.0.zip` | `b9fd81d0858b13897101ab78bf60a14a853e7d1d1c7a461c09a4c08d253c3f30` |
-| `classificador-ml-v1-v1.0.0.zip` | `6fff85e496e11e1f25732b10888a930563b797e9f8f7253b5deca09defbffbaa` |
-| `relatorio-alertas-v2-v2.0.0.zip` | `7da43e29dcf1f50f4891396c3c1687e086f5ec4377e411cabcf94cc3ae432019` |
-
-Os hashes pertencem ao conteúdo empacotável do commit revisado e devem ser
-regenerados sempre que código, manifesto ou dependências dos bots mudar.
+pacotes. Os hashes não são fixados neste documento: devem ser regenerados a
+partir do commit efetivamente apresentado sempre que código, manifesto ou
+dependências dos bots mudar.
 
 ## Evidências das seis sabotagens
 
