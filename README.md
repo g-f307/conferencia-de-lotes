@@ -591,6 +591,30 @@ Chromium real no E2E e resumos JSON sanitizados. O procedimento reproduzível
 está em
 [`docs/VALIDACAO_CRISE_CAPSTONE.md`](docs/VALIDACAO_CRISE_CAPSTONE.md).
 
+### Entrega final e reprodução
+
+O fluxo completo executado localmente é:
+
+```text
+dispatcher-v2
+├── estoque-desktop-v1
+└── fornecedores-web-v1
+        ↓ fan-in
+consolidacao-v2 → classificador-ml-v1 → relatorio-alertas-v2
+```
+
+As duas coletas são independentes, a consolidação aplica RN01–RN12 antes de
+qualquer enriquecimento e o ML não altera o status operacional. Timeout, retry,
+fallback, dead letter e execução `shadow` permitem continuidade e evitam
+efeitos duplicados. Para reproduzir a entrega final, use os comandos do
+[`CHECKLIST_FINAL_CAPSTONE.md`](docs/CHECKLIST_FINAL_CAPSTONE.md) e confira cada
+critério no
+[`EVIDENCIAS_FINAIS_CAPSTONE.md`](docs/EVIDENCIAS_FINAIS_CAPSTONE.md).
+
+Telegram e SMTP podem ser habilitados exclusivamente por variáveis em `.env`
+local. Sem credenciais autorizadas, nenhum envio externo é tentado e o alerta
+sanitizado em log permanece como fallback verificável.
+
 ## Automação desktop do Capstone
 
 O papel `estoque-desktop-v1` possui um simulador Windows controlado e um
@@ -1226,6 +1250,10 @@ camada e as perguntas da banca estão em
 
 - os testes web usam a aplicação local controlada, não um ERP real;
 - a CI valida o gateway em memória e não acessa BotCity Maestro ou Vault;
+- os seis pacotes foram homologados localmente, sem cadastro, deploy ou smoke
+  test no Smart Office real por falta de acesso operacional;
+- Telegram e SMTP são opcionais; sem credenciais autorizadas, o fallback
+  reproduzível é o log local sanitizado;
 - os artefatos do GitHub Actions possuem retenção temporária de sete dias.
 - o ganho de tempo usa premissas fixas e ainda não representa uma medição
   cronometrada de produção;
@@ -1264,7 +1292,11 @@ finalizada no Maestro como sucesso operacional.
 | Documento | Finalidade |
 |---|---|
 | [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md) | Componentes, sequência e limites. |
-| [`docs/ARQUITETURA_CAPSTONE.md`](docs/ARQUITETURA_CAPSTONE.md) | Estado-alvo de seis bots, contratos, fan-out, fan-in, prioridade e falhas. |
+| [`docs/ARQUITETURA_CAPSTONE.md`](docs/ARQUITETURA_CAPSTONE.md) | Arquitetura final de seis bots, contratos, fan-out, fan-in, prioridade e falhas. |
+| [`docs/DIAGRAMAS_CAPSTONE.md`](docs/DIAGRAMAS_CAPSTONE.md) | Diagramas finais e distinção entre execução local e integração externa futura. |
+| [`docs/EVIDENCIAS_FINAIS_CAPSTONE.md`](docs/EVIDENCIAS_FINAIS_CAPSTONE.md) | Matriz de revisão por pares, comandos, artefatos e estado de cada critério. |
+| [`docs/ROTEIRO_PITCH_CAPSTONE.md`](docs/ROTEIRO_PITCH_CAPSTONE.md) | Pitch de 9 min 30 s para três apresentadores e contingência offline. |
+| [`docs/CHECKLIST_FINAL_CAPSTONE.md`](docs/CHECKLIST_FINAL_CAPSTONE.md) | Aceite técnico, estado de homologação, riscos e próximos passos. |
 | [`docs/EXECUCAO_E2E_DOCKER_CI.md`](docs/EXECUCAO_E2E_DOCKER_CI.md) | Instalação, testes E2E, Docker, pipeline e artefatos. |
 | [`docs/HOMOLOGACAO_TESTES_AULA23.md`](docs/HOMOLOGACAO_TESTES_AULA23.md) | Cobertura, camadas, limitações e respostas da Aula 23. |
 | [`docs/VALIDACAO_CRISE_CAPSTONE.md`](docs/VALIDACAO_CRISE_CAPSTONE.md) | Pipeline local de seis bots, sabotagens, oráculos e evidências sanitizadas. |

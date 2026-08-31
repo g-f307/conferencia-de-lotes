@@ -4,8 +4,8 @@
 
 | Item | Informação |
 |---|---|
-| Data | 25 de agosto de 2026 |
-| Escopo | BPMN, RN01–RN12, DataPool, Playwright, arquitetura híbrida S10-B, três bots, resiliência, alertas e saídas analíticas |
+| Data | 31 de agosto de 2026 |
+| Escopo | BPMN, RN01–RN12, pipeline híbrido de seis bots, resiliência, migração, alertas e saídas analíticas |
 | BPMN | `docs/diagrama_pdd.bpmn` |
 | Visualização | `docs/diagrama_pdd.svg` |
 | Regras-base | `docs/Regras de validação a aplicar - Gabriel, Marcelo e Rebecca.docx.pdf` |
@@ -61,19 +61,20 @@ As demais seções do PDD aprovado permanecem válidas. A revisão S10-B abaixo
 reproduz explicitamente apenas as seções 6, 8, 9, 16 e 17, que receberam
 impacto funcional ou operacional.
 
-## Evolução planejada para o Projeto Final
+## Consolidação do Projeto Final
 
-A implementação descrita nas seções seguintes continua representando o estado
-operacional da S10-B. O estado-alvo do Capstone expande a cadeia para seis bots:
+A implementação descrita nas seções seguintes preserva o estado operacional da
+S10-B. O Capstone expande localmente a cadeia para seis bots:
 Dispatcher, estoque desktop, fornecedores web, consolidação determinística,
 classificador ML e relatório/alertas.
 
 Os contratos, o fan-out das coletas, o fan-in da consolidação, a prioridade da
 sessão gráfica e o modelo de falhas estão definidos em
 [`ARQUITETURA_CAPSTONE.md`](ARQUITETURA_CAPSTONE.md). Essa referência separa
-claramente arquitetura aprovada de funcionalidade já homologada: até a
-conclusão das issues de implementação, a cadeia oficial permanece com três
-bots no Maestro.
+claramente a implementação homologada localmente do estado externo ainda não
+executado. Os seis pacotes são compatíveis com o contrato do Smart Office, mas
+não foram cadastrados, implantados nem homologados nessa plataforma. A cadeia
+oficial do Maestro só pode ser substituída após cutover autorizado.
 
 ## 6. Arquitetura híbrida
 
@@ -353,3 +354,29 @@ histórica e tratamento estatístico das execuções.
 Com classificação existente, mudam dois módulos de produção: o motor de
 validação e o intervalo do Dicionário. Ranking, indicador 6 e Markdown já são
 genéricos. Uma nova classificação exige também mudanças estruturais no Excel.
+
+## 18. Fechamento do PDD do Capstone
+
+O processo final local usa seis bots independentes. O Dispatcher abre a
+correlação e realiza o *fan-out* para as coletas desktop e web. O bot de
+consolidação realiza o *fan-in*, recebe sucesso ou falha terminal de ambas as
+fontes e aplica as regras determinísticas. O classificador ML é opcional e
+enriquece somente a causa provável; o bot de relatório e alertas publica as
+saídas sem recalcular a decisão.
+
+Os limites de timeout são definidos por dependência e nunca produzem espera
+infinita. Após retry limitado, a indisponibilidade é convertida em fallback
+sanitizado, revisão humana e, para falha irrecuperável, dead letter idempotente.
+Falha de Telegram ou SMTP recorre ao outro canal e por fim ao log local.
+
+A coexistência usa lease, heartbeat e fencing token para eleger uma execução
+oficial. O modo `shadow` processa para comparação sem publicar efeitos de
+negócio. Cutover, smoke test e rollback estão documentados, porém não foram
+executados no Smart Office real. A prioridade local `100` do desktop é traduzida
+para a prioridade-alvo `1`, pois no Smart Office `1` é a maior prioridade e `5`
+a menor.
+
+Os diagramas finais estão em
+[`DIAGRAMAS_CAPSTONE.md`](DIAGRAMAS_CAPSTONE.md), e a rastreabilidade entre
+critérios, código, testes e artefatos está em
+[`EVIDENCIAS_FINAIS_CAPSTONE.md`](EVIDENCIAS_FINAIS_CAPSTONE.md).
